@@ -1,0 +1,5 @@
+- remove no necessary packages (DiffererntialEquations.jl and so on, which are
+reexported by GasChromatographySimulator)
+- repair the Pluto-notebook, which was copied from VGGC, and does not relate the
+functions of the GasChromatographySystems package correctly and uses obsolete
+functions from GasChromatographySimulator (gf_exp() for example)

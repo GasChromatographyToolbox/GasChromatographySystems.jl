@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.16.4
+# v0.17.5
 
 using Markdown
 using InteractiveUtils
@@ -7,8 +7,9 @@ using InteractiveUtils
 # This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
 macro bind(def, element)
     quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
         local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : missing
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
 end
@@ -18,8 +19,8 @@ begin
 	import Pkg
     # activate the shared project environment
     Pkg.activate(Base.current_project())
-	using DataFrames, CSV, Interpolations, Plots, QuadGK, DifferentialEquations, ForwardDiff, Intervals
-	#include(srcdir("VGGC2.jl"))
+	#using DataFrames, CSV, Interpolations, Plots, QuadGK, DifferentialEquations, ForwardDiff, Intervals
+	using Plots
 	using GasChromatographySystems, GasChromatographyTools
 	using PlutoUI
 	TableOfContents()
@@ -69,23 +70,23 @@ solve for ODE-system: $(@bind odesys CheckBox(default=true))
 """
 
 # ╔═╡ 6137bf71-6663-49fe-baa5-a2618061a6db
-Option = Options(gas, alg, 10.0^abs, 10.0.^rel, Tcontrol, odesys);
+Option = GasChromatographySystems.Options(gas, alg, 10.0^abs, 10.0.^rel, Tcontrol, odesys);
 
 # ╔═╡ 531977ba-c3d7-49ed-ab64-05b04c8895a2
 md"""
 ### GC-system
 
-$(LocalResource(string(projectdir(),"/notebooks/pic/PressurePoint.png")))
-$(LocalResource(string(projectdir(),"/notebooks/pic/Transferline.png")))
-$(LocalResource(string(projectdir(),"/notebooks/pic/Column.png")))
-$(LocalResource(string(projectdir(),"/notebooks/pic/PressurePoint.png")))
-$(LocalResource(string(projectdir(),"/notebooks/pic/Transferline.png")))
-$(LocalResource(string(projectdir(),"/notebooks/pic/PressurePoint.png")))
+$(LocalResource(string(pwd(),"/pic/PressurePoint.png")))
+$(LocalResource(string(pwd(),"/pic/Transferline.png")))
+$(LocalResource(string(pwd(),"/pic/Column.png")))
+$(LocalResource(string(pwd(),"/pic/PressurePoint.png")))
+$(LocalResource(string(pwd(),"/pic/Transferline.png")))
+$(LocalResource(string(pwd(),"/pic/PressurePoint.png")))
 
 stat. Phase:
-$(@bind sp1 Select(["", "Rxi17SilMS", "SLB5ms", "SPB50", "Wax", "FS5ms", "DB5ms", "Rxi5MS", "ZB-PAH-CT"]; default="ZB-PAH-CT"))
-$(@bind sp2 Select(["", "Rxi17SilMS", "SLB5ms", "SPB50", "Wax", "FS5ms", "DB5ms", "Rxi5MS", "ZB-PAH-CT"]; default="ZB-PAH-CT"))
-$(@bind sp3 Select(["", "Rxi17SilMS", "SLB5ms", "SPB50", "Wax", "FS5ms", "DB5ms", "Rxi5MS", "ZB-PAH-CT"]; default=""))
+$(@bind sp1 Select(["", "Rxi17SilMS", "SLB5ms", "SPB50", "Wax", "FS5ms", "DB5ms", "Rxi5MS"]; default="Rxi17SilMS"))
+$(@bind sp2 Select(["", "Rxi17SilMS", "SLB5ms", "SPB50", "Wax", "FS5ms", "DB5ms", "Rxi5MS"]; default="Rxi17SilMS"))
+$(@bind sp3 Select(["", "Rxi17SilMS", "SLB5ms", "SPB50", "Wax", "FS5ms", "DB5ms", "Rxi5MS"]; default=""))
 
 L [m]:
 $(@bind L1 NumberField(0.10:0.01:10.00; default=0.16))
@@ -175,7 +176,7 @@ begin
 		L₀ = L2.*ones(length(ΔT))
 		α = zeros(length(ΔT))
 		a = [ΔT x₀ L₀ α]
-		grad_func(x) = gf_exp(x, a, Option.Tcontrol)
+		grad_func(x) = GasChromatographySimulator.gradient(x, a; Tcontrol=Option.Tcontrol)
 	elseif gf=="exponential"
 		tsteps = parse.(Float64,split(tsteps_str))
 		Tsteps = parse.(Float64,split(Tsteps_str))
@@ -184,24 +185,21 @@ begin
 		L₀ = L2.*ones(length(ΔT))
 		α = parse.(Float64,split(α_str))
 		a = [ΔT x₀ L₀ α]
-		grad_func(x) = gf_exp(x, a, Option.Tcontrol)
+		grad_func(x) = GasChromatographySimulator.gradient(x, a; Tcontrol=Option.Tcontrol)
 	end
-	TP = Temperature_Program(tsteps, Tsteps, grad_func, a)
+	TP = GasChromatographySystems.Temperature_Program(tsteps, Tsteps, grad_func, a)
 end;
 
 # ╔═╡ f041e68e-d629-4f36-902c-7b77be067b1f
 begin
-	TL1 = Transferline(L1, d1*1e-3, df1*1e-6, sp1, T1)
+	TL1 = GasChromatographySystems.Transferline(L1, d1*1e-3, df1*1e-6, sp1, T1)
 	a_d_2 = [d2*1e-3]
-	d_2(x) = gf_const(x, a_d_2)
+	d_2(x) = GasChromatographySimulator.gradient(x, a_d_2)
 	a_df_2 = [df2*1e-6]
-	df_2(x) = gf_const(x, a_df_2)
-	GC  = Column(L2, d_2, a_d_2, df_2, a_df_2, sp2, TP)
-	TL2 = Transferline(L3, d3*1e-3, df3*1e-6, sp3, T3)
+	df_2(x) = GasChromatographySimulator.gradient(x, a_df_2)
+	GC  = GasChromatographySystems.Column(L2, d_2, a_d_2, df_2, a_df_2, sp2, TP)
+	TL2 = GasChromatographySystems.Transferline(L3, d3*1e-3, df3*1e-6, sp3, T3)
 end;
-
-# ╔═╡ b86cc20b-e511-4041-af97-647eb4271b80
-
 
 # ╔═╡ 87ce0821-e017-4600-8e3e-b24759482a15
 begin
@@ -209,9 +207,9 @@ begin
 	pin_steps = parse.(Float64,split(pin_str))
 	pcon_steps = parse.(Float64,split(pcon_str))
 	pout_steps = parse.(Float64,split(pout_str))
-	PPin = Pressure_Point(p_tsteps, pin_steps.*1000.0.+101300.0)
-	PPcon = Pressure_Point(p_tsteps, pcon_steps.*1000.0.+101300.0)
-	PPout = Pressure_Point(p_tsteps, pout_steps.*1000.0)
+	PPin = GasChromatographySystems.Pressure_Point(p_tsteps, pin_steps.*1000.0.+101300.0)
+	PPcon = GasChromatographySystems.Pressure_Point(p_tsteps, pcon_steps.*1000.0.+101300.0)
+	PPout = GasChromatographySystems.Pressure_Point(p_tsteps, pout_steps.*1000.0)
 end;
 
 # ╔═╡ 08142bda-450f-42fe-aece-6f0bd5e28717
@@ -450,7 +448,7 @@ begin
 end
 
 # ╔═╡ bb5c36f1-5b47-4055-b10c-0b1873c4a5c8
-test_of_GCsys(GCsys)
+GasChromatographySystems.test_of_GCsys(GCsys)
 
 # ╔═╡ 0cac5ac9-31f7-4bf0-b71b-b8e691e8d5ea
 md"""
@@ -461,8 +459,8 @@ Selection of solutes: $(@bind selection Select(["all", "Alkanes", "PAH", "manual
 
 # ╔═╡ fd69382e-5e7e-4409-9754-f9177d8f35c4
 begin
-	db = DataFrame(CSV.File(datadir("exp_pro","Databases","Database_append.csv")))
-	com_solutes = common_solutes(db, GCsys)
+	db = DataFrame(CSV.File(string(pwd(),"/../data/Database_append.csv")))
+	com_solutes = GasChromatographySystems.common_solutes(db, GCsys)
 	if selection=="manually"
 		md"""
 		manually select from the following $(length(com_solutes)) solutes: 
@@ -486,7 +484,7 @@ begin
 		solutes = PAH_selection(com_solutes)
 		if length(solutes)==0
 			md"""
-			No data for alkanes on selected stationary phases available.
+			No data for PAHs on selected stationary phases available.
 			"""
 		end
 	end
@@ -511,7 +509,7 @@ select temperature plot: $(@bind Tplot Select(["T(x,t)", "T(x)", "T(t)"]; defaul
 
 # ╔═╡ 6114231c-3f8a-4e87-8a19-629e4f03e900
 begin
-	L = length_vector(GCsys)
+	L = GasChromatographySystems.length_vector(GCsys)
 	if Tplot=="T(x)"
 		md"""
 		select time: $(@bind tselect Slider(0:sum(tsteps), show_value=true))s
@@ -529,18 +527,18 @@ begin
 		md"""
 		**_Temperature T(x,t)_**
 		
-		$(embed_display(temperature_plot(GCsys, Option, Tplot)[1]))
+		$(embed_display(GasChromatographySystems.temperature_plot(GCsys, Option, Tplot)[1]))
 		"""
 	elseif Tplot=="T(x)"
 		md"""
 		**_Temperature T(x)_**
 		
-		$(embed_display(temperature_plot(GCsys, Option, Tplot, t₀=tselect)[1]))
+		$(embed_display(GasChromatographySystems.temperature_plot(GCsys, Option, Tplot, t₀=tselect)[1]))
 		"""
 	elseif Tplot=="T(t)"
 		md"""
 		**_Temperature T(t)_**
-		$(embed_display(temperature_plot(GCsys, Option, Tplot, x₀=xselect)[1]))
+		$(embed_display(GasChromatographySystems.temperature_plot(GCsys, Option, Tplot, x₀=xselect)[1]))
 		"""
 	end
 end
@@ -551,7 +549,7 @@ md"""
 
 **_Flow F(t)_**
 
-$(embed_display(flow_plot(GCsys, Option)[1]))
+$(embed_display(GasChromatographySystems.flow_plot(GCsys, Option)[1]))
 """
 
 # ╔═╡ adaf8dfb-7c62-476a-9bb9-fb34ff949abf
@@ -574,26 +572,26 @@ begin
 end
 
 # ╔═╡ a4aadd32-84e8-4d5d-a54d-877da644e2bc
-#=begin
+begin
 	if pplot=="p(x,t)"
 		md"""
 		**_Pressure p(x,t)_**
 		
-		$(embed_display(pressure_plot(GCsys, Option, pplot)[1]))
+		$(embed_display(GasChromatographySystems.pressure_plot(GCsys, Option, pplot)[1]))
 		"""
 	elseif pplot=="p(x)"
 		md"""
 		**_Pressure p(x)_**
 		
-		$(embed_display(pressure_plot(GCsys, Option, pplot, t₀=tselectp)[1]))
+		$(embed_display(GasChromatographySystems.pressure_plot(GCsys, Option, pplot, t₀=tselectp)[1]))
 		"""
 	elseif pplot=="p(t)"
 		md"""
 		**_Pressure p(t)_**
-		$(embed_display(pressure_plot(GCsys, Option, pplot, x₀=xselectp)[1]))
+		$(embed_display(GasChromatographySystems.pressure_plot(GCsys, Option, pplot, x₀=xselectp)[1]))
 		"""
 	end
-end=#
+end
 
 # ╔═╡ bbe1f0ae-3675-4b3b-b012-c25304c38689
 md"""
@@ -604,7 +602,7 @@ Simulate: $(@bind go CheckBox(default=false))
 # ╔═╡ f382e2e5-38ae-4558-99ff-74213b488c1b
 begin
 	if go==true
-		par, sol = linear_GC_system_simulation(GCsys, Option, solutes, db)
+		par, sol = GasChromatographySystems.linear_GC_system_simulation(GCsys, Option, solutes, db)
 	end
 end;
 
@@ -680,13 +678,12 @@ md"""
 # ╟─f5075b30-4b3f-46b8-bb9a-6c8c01d6af9f
 # ╟─f82f4dfc-4bb5-47a0-9a7a-f4faf86360f7
 # ╟─02a3b399-af72-464f-a121-bee782608fdf
-# ╟─6137bf71-6663-49fe-baa5-a2618061a6db
+# ╠═6137bf71-6663-49fe-baa5-a2618061a6db
 # ╠═531977ba-c3d7-49ed-ab64-05b04c8895a2
-# ╟─f041e68e-d629-4f36-902c-7b77be067b1f
+# ╠═f041e68e-d629-4f36-902c-7b77be067b1f
 # ╟─bcfd4677-099c-4be1-9da7-2a44a4ab0f74
 # ╠═91e7bc16-258f-44f7-9b32-b0ee9247045a
 # ╠═e42bf4b4-11c5-4db8-b018-52d355322e0d
-# ╠═b86cc20b-e511-4041-af97-647eb4271b80
 # ╟─87ce0821-e017-4600-8e3e-b24759482a15
 # ╠═08142bda-450f-42fe-aece-6f0bd5e28717
 # ╠═bb5c36f1-5b47-4055-b10c-0b1873c4a5c8
@@ -694,8 +691,8 @@ md"""
 # ╠═fd69382e-5e7e-4409-9754-f9177d8f35c4
 # ╟─6fef3cba-8917-480a-bdf2-a3ae472c02e3
 # ╟─0542086b-0f06-40e5-8ea6-9e788a4ded7f
-# ╟─f781ca29-9d94-4a82-9ab8-41046b3453dc
-# ╟─6114231c-3f8a-4e87-8a19-629e4f03e900
+# ╠═f781ca29-9d94-4a82-9ab8-41046b3453dc
+# ╠═6114231c-3f8a-4e87-8a19-629e4f03e900
 # ╟─e2b9d8bc-038b-4d09-8558-27bf660c9882
 # ╟─b4b3ce39-9d6b-49d2-9b3e-2852d0401c9a
 # ╟─adaf8dfb-7c62-476a-9bb9-fb34ff949abf

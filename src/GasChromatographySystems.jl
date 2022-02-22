@@ -562,7 +562,39 @@ function linear_GC_system_simulation(GCSys, Option, solutes, db)
 	parameters = initilize_parameters(GCSys, Option, solutes, db)
 	if Option.odesys==true
 		solution = Array{Array{Any}}(undef, length(parameters))
-		solution[1] = GasChromatographySimulator.solve_system_multithreads(parameters[1])
+		peaklist = Array{DataFrame}(undef, length(parameters))
+		#solution[1] = GasChromatographySimulator.solve_system_multithreads(parameters[1])
+		peaklist[1], solution[1] = GasChromatographySimulator.simulate(parameters[1])
+		for i=2:length(parameters)
+			t₀ = Array{Float64}(undef, length(solutes))
+			τ₀ = Array{Float64}(undef, length(solutes))
+			for j=1:length(solutes)
+				t₀[j] = solution[i-1][j].u[end][1]
+				τ₀[j] = sqrt(solution[i-1][j].u[end][2])
+			end
+			newpar = GasChromatographyTools.change_initial(parameters[i], t₀, τ₀)
+			peaklist[i], solution[i] = GasChromatographySimulator.simulate(newpar)
+		end
+	end
+	return parameters, peaklist, solution
+end
+#----end-run-the-simulation-for-a-GC-system---
+
+# a non-multithreads-version (should be in GasChromatographySimulator)
+function solve_system(par)
+	n = length(par.sub)
+	sol = Array{Any}(undef, n)
+	for i=1:n
+		sol[i] = GasChromatographySimulator.solving_odesystem_r(par.sys, par.prog, par.sub[i], par.opt)
+	end
+	return sol
+end
+
+function linear_GC_system_simulation_nmt(GCSys, Option, solutes, db)
+	parameters = initilize_parameters(GCSys, Option, solutes, db)
+	if Option.odesys==true
+		solution = Array{Array{Any}}(undef, length(parameters))
+		solution[1] = solve_system(parameters[1])
 		for i=2:length(parameters)
 			t₀ = Array{Float64}(undef, length(solutes))
 			τ₀ = Array{Float64}(undef, length(solutes))
@@ -571,12 +603,11 @@ function linear_GC_system_simulation(GCSys, Option, solutes, db)
 				τ₀[j] = sqrt(solution[i-1][j].u[end][2])
 			end
 			newpar = GasChromatographyTools.change_initial(parameters[i], τ₀, t₀)
-			solution[i] = GasChromatographySimulator.solve_system_multithreads(newpar)
+			solution[i] = solve_system(newpar)
 		end
 	end
 	return parameters, solution
 end
-#----end-run-the-simulation-for-a-GC-system---
 
 #----begin-plot-functions---------------------
 function pressure_plot(GCsys, Option, plot_selector; x₀=0.0, t₀=0.0)

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.7
+# v0.19.9
 
 using Markdown
 using InteractiveUtils
@@ -21,7 +21,7 @@ begin
     Pkg.activate(Base.current_project())
 	#using DataFrames, CSV, Interpolations, Plots, QuadGK, DifferentialEquations, ForwardDiff, Intervals
 	using Plots
-	using GasChromatographySystems, GasChromatographyTools
+	using GasChromatographySystems
 	using HypertextLiteral
 	using PlutoUI
 	TableOfContents()
@@ -385,7 +385,7 @@ begin
 		values_str = String[]
 		for i=1:length(GCsys)
 			n = length(fieldnames(typeof(GCsys[i])))
-			if typeof(GCsys[i])==Pressure_Point || typeof(GCsys[i])==Transferline
+			if typeof(GCsys[i])==GasChromatographySystems.Pressure_Point || typeof(GCsys[i])==GasChromatographySystems.Transferline
 				push!(modul_str, string(typeof(GCsys[i]),","))
 				push!(parameter_str, string(fieldnames(typeof(GCsys[i]))[1],","))
 				push!(tp_parameter_str, ",")
@@ -396,7 +396,7 @@ begin
 					push!(tp_parameter_str, ",")
 					push!(values_str, string(getfield(GCsys[i], fieldnames(typeof(GCsys[i]))[j])))
 				end
-			elseif typeof(GCsys[i])==Column
+			elseif typeof(GCsys[i])==GasChromatographySystems.Column
 				col_modul, col_param, col_tp_param, col_values = column_settings(GCsys[i])
 				for j=1:length(col_modul)
 					push!(modul_str, col_modul[j])
@@ -489,7 +489,7 @@ Selection of solutes: $(@bind selection Select(["all", "Alkanes", "PAH", "manual
 
 # ╔═╡ fd69382e-5e7e-4409-9754-f9177d8f35c4
 begin
-	db = DataFrame(CSV.File(string(pwd(),"/../data/Database_append.csv")))
+	db = DataFrame(CSV.File(string(pwd(),"/../data/database_Kcentric.csv")))
 	com_solutes = GasChromatographySystems.common_solutes(db, GCsys)
 	if selection=="manually"
 		md"""
@@ -629,6 +629,27 @@ md"""
 Simulate: $(@bind go CheckBox(default=false))
 """
 
+# ╔═╡ 84dc1a1c-ab5d-429e-9fba-08f41d720b60
+parameters = GasChromatographySystems.initilize_parameters(GCsys, Option, solutes, db)
+
+# ╔═╡ 1426c26e-4683-448c-93e5-8718c8f588c5
+solutes
+
+# ╔═╡ 3295146e-c006-4e7f-b167-27d2bbdae0a2
+substance = GasChromatographySimulator.load_solute_database(db, GCsys[2].stationary_phase, Option.mobile_phase, solutes, zeros(length(solutes)), zeros(length(solutes)))
+
+# ╔═╡ a6e531a2-f014-488e-916f-fad02e3cc7c2
+length(parameters)
+
+# ╔═╡ b8af15f9-b0e2-4f70-8ab4-b7b4ae91a508
+solution = Array{Array{Any}}(undef, length(parameters))
+
+# ╔═╡ fffcac78-955f-4269-81f2-ae2de170ee50
+peaklist = Array{DataFrame}(undef, length(parameters))
+
+# ╔═╡ 3092cbe3-3f82-44e1-b47f-4e3e9c0248a4
+peaklist[1], solution[1] = GasChromatographySimulator.simulate(parameters[1])
+
 # ╔═╡ f382e2e5-38ae-4558-99ff-74213b488c1b
 begin
 	#if go==true
@@ -712,7 +733,7 @@ md"""
 # ╔═╡ Cell order:
 # ╠═1cce655a-1ba6-11ec-1bf4-edfded0254c8
 # ╟─ed577478-23b5-4c76-95ef-8de32307225e
-# ╟─ed14d2ca-9a09-41fa-a67a-8190161646b6
+# ╠═ed14d2ca-9a09-41fa-a67a-8190161646b6
 # ╟─f5075b30-4b3f-46b8-bb9a-6c8c01d6af9f
 # ╟─f82f4dfc-4bb5-47a0-9a7a-f4faf86360f7
 # ╟─6d694987-d98f-4087-b0f3-515d4332f9af
@@ -729,7 +750,7 @@ md"""
 # ╟─08142bda-450f-42fe-aece-6f0bd5e28717
 # ╟─bb5c36f1-5b47-4055-b10c-0b1873c4a5c8
 # ╟─0cac5ac9-31f7-4bf0-b71b-b8e691e8d5ea
-# ╟─fd69382e-5e7e-4409-9754-f9177d8f35c4
+# ╠═fd69382e-5e7e-4409-9754-f9177d8f35c4
 # ╟─6fef3cba-8917-480a-bdf2-a3ae472c02e3
 # ╟─0542086b-0f06-40e5-8ea6-9e788a4ded7f
 # ╟─f781ca29-9d94-4a82-9ab8-41046b3453dc
@@ -740,6 +761,13 @@ md"""
 # ╟─da3f7878-99d7-41fd-9294-57664cfd1c10
 # ╟─a4aadd32-84e8-4d5d-a54d-877da644e2bc
 # ╟─bbe1f0ae-3675-4b3b-b012-c25304c38689
+# ╠═84dc1a1c-ab5d-429e-9fba-08f41d720b60
+# ╠═1426c26e-4683-448c-93e5-8718c8f588c5
+# ╠═3295146e-c006-4e7f-b167-27d2bbdae0a2
+# ╠═a6e531a2-f014-488e-916f-fad02e3cc7c2
+# ╠═b8af15f9-b0e2-4f70-8ab4-b7b4ae91a508
+# ╠═fffcac78-955f-4269-81f2-ae2de170ee50
+# ╠═3092cbe3-3f82-44e1-b47f-4e3e9c0248a4
 # ╟─f382e2e5-38ae-4558-99ff-74213b488c1b
 # ╟─af016139-05bc-4623-b72e-1c4726024c45
 # ╠═16ef205f-5129-4bdc-8bb7-84b1282c18ef

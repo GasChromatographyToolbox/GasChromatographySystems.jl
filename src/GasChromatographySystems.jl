@@ -2,7 +2,6 @@ module GasChromatographySystems
 
 using Reexport
 @reexport using GasChromatographySimulator
-using GasChromatographyTools
 using Plots
 using Intervals
 
@@ -42,13 +41,13 @@ struct Temperature_Program{F<:Function}
 	Temperature_Program(ts,Ts,gf,a) = (length(ts)!=length(Ts) || length(ts)!=length(gf(0.0))) ? error("Mismatch between length(timesteps) = $(length(ts)), length(temperaturesteps) = $(length(Ts)) and length(gradient_function(0.0)) = $(length(gf(0.0)))") : new{typeof(gf)}(ts,Ts,gf,a)
 end
 
-struct Column{Fd<:Function, Fdf<:Function}
+struct Column#{Fd<:Function, Fdf<:Function}
     # Module
 	# GC column, gradients are possible
 	length::Float64
-	diameter::Fd # Function
+	diameter#::Fd # Function
     a_diameter::Array{Float64,1} # Parameters of diameter function, just for information
-	film_thickness::Fdf # Function
+	film_thickness#::Fdf # Function
     a_film_thickness::Array{Float64,1} # Parameters of film_thickness function, just for information
 	stationary_phase::String
 	temperature_program::Temperature_Program
@@ -324,10 +323,40 @@ function new_gradient_parameter_steps(Module::Column, new_times)
 	return new_a_gf
 end
 
+"""
+	general_step(x, L, a)
+
+A generalized step function
+
+# Arguments
+* `x::Float64`: variable (e.g. x-position)
+* `L::Array{Float64,1}`: Array with different length of the constant segments
+* `a::Array{<:Any,1}`: Array with the values for the segments, can also be
+  functions.
+"""
+function general_step(x::Float64, L::Array{Float64,1}, a::Array{<:Any,1})
+    if length(L)!=length(a)
+        error("Parameters `L` and `a` must have the same length.")
+        return
+    end
+	intervals = Array{Intervals.Interval}(undef, length(L))
+	cumL = round.(cumsum([0; L]), digits=4)
+	for i=1:length(intervals)
+		if i==length(intervals)
+			intervals[i] = Interval{Closed, Closed}(cumL[i],cumL[i+1])
+		else
+			intervals[i]=Interval{Closed, Open}(cumL[i],cumL[i+1])
+		end
+		if x in intervals[i]
+			return a[i]
+		end
+	end
+end
+
 function pressure_at_moduls(GCsys, Option)
 	# new version for multiple Pressure_Points, which can be switched on and off
 	T_itp, xshift, L = temperature_interpolation(GCsys, Option)
-	T_sys(x,t) = GasChromatographyTools.general_step(x, L, TT(x,t,T_itp,xshift))
+	T_sys(x,t) = general_step(x, L, TT(x,t,T_itp,xshift))
 	modul_index = modules_index(GCsys)
 	pp_index = pressure_points_index(GCsys)
 	new_times = new_time_steps(GCsys)
@@ -341,7 +370,7 @@ function pressure_at_moduls(GCsys, Option)
 		# -> for now the case of 'NaN' is not used 
 		pp_itp[i] = pressure_interpolation(GCsys[pp_index[i]])
 	end
-	d_sys(x) = GasChromatographyTools.general_step(x, L, dd(x,GCsys,xshift))
+	d_sys(x) = general_step(x, L, dd(x,GCsys,xshift))
 	gas = Option.mobile_phase
 	xL = [0.0; cumsum(L)]
 
@@ -395,9 +424,9 @@ function pressure_at_moduls(GCsys, Option)
 				if jj>1
 					xx = xL[i+k-1]-cumsum(L_subsys)[jj-1]
 					# d_sys and T_sys must be modified to account for the shift of the positions in the different subsystems
-					T_subsys(x,t) = GasChromatographyTools.general_step(x, L[findall(subsys_index.==jj)], TT(x,t,T_itp,xshift)[findall(subsys_index.==jj)])
+					T_subsys(x,t) = general_step(x, L[findall(subsys_index.==jj)], TT(x,t,T_itp,xshift)[findall(subsys_index.==jj)])
 					#T_subsys = fT_subsys
-					d_subsys = x -> GasChromatographyTools.general_step(x, L[findall(subsys_index.==jj)], dd(x,GCsys,xshift)[findall(subsys_index.==jj)])
+					d_subsys = x -> general_step(x, L[findall(subsys_index.==jj)], dd(x,GCsys,xshift)[findall(subsys_index.==jj)])
 				else
 					xx = xL[i+k-1]
 					d_subsys = d_sys
@@ -488,11 +517,11 @@ function initilize_parameters(GCsys, Option, solutes, db)
 	modul_i = modules_index(GCsys)#
 	#press_i = moduls_are_pressure_point(GCsys)
 	
-	TTsys(x,t) = GasChromatographyTools.general_step(x, L, TT(x,t,T_itp,xshift))#
+	TTsys(x,t) = general_step(x, L, TT(x,t,T_itp,xshift))#
 	#pi = Pressure_interpolation(GCsys[press_i[1]])
 	#po = Pressure_interpolation(GCsys[press_i[end]])
-	d_sys(x) = GasChromatographyTools.general_step(x, L, dd(x,GCsys,xshift))#
-	df_sys(x) = GasChromatographyTools.general_step(x, L, ddff(x,GCsys,xshift))#
+	d_sys(x) = general_step(x, L, dd(x,GCsys,xshift))#
+	df_sys(x) = general_step(x, L, ddff(x,GCsys,xshift))#
 	# need a gf_sys function?
 	
 	press = pressure_at_moduls(GCsys, Option)#
@@ -506,9 +535,9 @@ function initilize_parameters(GCsys, Option, solutes, db)
 			d(x) = GasChromatographySimulator.gradient(x,a_d)
 			a_df = [GCsys[ii].film_thickness]
 			df(x) = GasChromatographySimulator.gradient(x,a_df)
-			system = GasChromatographySimulator.System(L[i], d, a_d, df, a_df, GCsys[ii].stationary_phase, Option.mobile_phase)
+			system = GasChromatographySimulator.Column(L[i], d, a_d, df, a_df, GCsys[ii].stationary_phase, Option.mobile_phase)
 		elseif isa(GCsys[ii], Column)
-			system = GasChromatographySimulator.System(L[i], 
+			system = GasChromatographySimulator.Column(L[i], 
 														GCsys[ii].diameter, 
 														GCsys[ii].a_diameter, 
 														GCsys[ii].film_thickness, 
@@ -558,6 +587,22 @@ end
 #----end-translate-GCsys-into-GasChromatographySimulator.Parameters----- 
 
 #----run-the-simulation-for-a-GC-system---
+"""
+	change_initial(par, init_t, init_τ)
+
+Change the inital time and peak widths for the substances in a defined GC-system
+`par` to the values `init_t` and `, init_τ`.
+""" 
+function change_initial(par::GasChromatographySimulator.Parameters, init_t, init_τ)
+	# copys the parameters `par` and changes the values of par.sub[i].τ₀ and par.sub[i].t₀ to init_τ[i] resp. init_t[i]
+	newsub = Array{GasChromatographySimulator.Substance}(undef, length(par.sub))
+	for i=1:length(par.sub)
+		newsub[i] = GasChromatographySimulator.Substance(par.sub[i].name, par.sub[i].CAS, par.sub[i].Tchar, par.sub[i].θchar, par.sub[i].ΔCp, par.sub[i].φ₀, par.sub[i].ann, par.sub[i].Cag, init_t[i], init_τ[i])
+	end
+	newpar = GasChromatographySimulator.Parameters(par.col, par.prog, newsub, par.opt)
+	return newpar
+end
+
 function linear_GC_system_simulation(GCSys, Option, solutes, db)
 	parameters = initilize_parameters(GCSys, Option, solutes, db)
 	if Option.odesys==true
@@ -572,7 +617,7 @@ function linear_GC_system_simulation(GCSys, Option, solutes, db)
 				t₀[j] = solution[i-1][j].u[end][1]
 				τ₀[j] = sqrt(solution[i-1][j].u[end][2])
 			end
-			newpar = GasChromatographyTools.change_initial(parameters[i], t₀, τ₀)
+			newpar = change_initial(parameters[i], t₀, τ₀)
 			peaklist[i], solution[i] = GasChromatographySimulator.simulate(newpar)
 		end
 	end
@@ -585,7 +630,7 @@ function solve_system(par)
 	n = length(par.sub)
 	sol = Array{Any}(undef, n)
 	for i=1:n
-		sol[i] = GasChromatographySimulator.solving_odesystem_r(par.sys, par.prog, par.sub[i], par.opt)
+		sol[i] = GasChromatographySimulator.solving_odesystem_r(par.col, par.prog, par.sub[i], par.opt)
 	end
 	return sol
 end
@@ -602,7 +647,7 @@ function linear_GC_system_simulation_nmt(GCSys, Option, solutes, db)
 				t₀[j] = solution[i-1][j].u[end][1]
 				τ₀[j] = sqrt(solution[i-1][j].u[end][2])
 			end
-			newpar = GasChromatographyTools.change_initial(parameters[i], τ₀, t₀)
+			newpar = change_initial(parameters[i], τ₀, t₀)
 			solution[i] = solve_system(newpar)
 		end
 	end
@@ -615,7 +660,7 @@ function pressure_plot(GCsys, Option, plot_selector; x₀=0.0, t₀=0.0)
 	T_itp, xshift, L = temperature_interpolation(GCsys, Option)
 	press = pressure_at_moduls(GCsys, Option)
 	piitp, poitp = pressure_at_moduls_itp(L, new_times, press)
-	p_func(x,t) = GasChromatographyTools.general_step(x, L, pp(x, t, T_itp, xshift, piitp, poitp, L, Option.mobile_phase, GCsys))
+	p_func(x,t) = general_step(x, L, pp(x, t, T_itp, xshift, piitp, poitp, L, Option.mobile_phase, GCsys))
 	if plot_selector=="p(x)"
 		nx = 0.0:sum(L)/1000:sum(L)
 		p = p_func.(nx, t₀)
@@ -641,7 +686,7 @@ end
 function temperature_plot(GCsys, Option, plot_selector; x₀=0.0, t₀=0.0)
 	new_times = new_time_steps(GCsys)
 	T_itp, xshift, L = temperature_interpolation(GCsys, Option)
-	TTsys(x,t) = GasChromatographyTools.general_step(x, L, TT(x,t,T_itp,xshift))
+	TTsys(x,t) = general_step(x, L, TT(x,t,T_itp,xshift))
 	if plot_selector=="T(x)"
 		nx = 0.0:sum(L)/1000:sum(L)
 		T = TTsys.(nx, t₀).-273.15
@@ -747,9 +792,9 @@ function flow(t, new_times, new_pressures, pp_index, modul_index, pi_itp, po_itp
 			pi_itp_subsys = pi_itp[findfirst(subsys_index.==jj)]
 			po_itp_subsys = po_itp[findlast(subsys_index.==jj)]
 			# new temperature and diameter functions of the subsystems:
-			fT_subsys(x,t) = GasChromatographyTools.general_step(x, L[findall(subsys_index.==jj)], TT(x,t,T_itp,xshift)[findall(subsys_index.==jj)])
+			fT_subsys(x,t) = general_step(x, L[findall(subsys_index.==jj)], TT(x,t,T_itp,xshift)[findall(subsys_index.==jj)])
 			T_subsys = fT_subsys
-			d_subsys = x -> GasChromatographyTools.general_step(x, L[findall(subsys_index.==jj)], dd(x,GCsys,xshift)[findall(subsys_index.==jj)])
+			d_subsys = x -> general_step(x, L[findall(subsys_index.==jj)], dd(x,GCsys,xshift)[findall(subsys_index.==jj)])
 			# calculate the total flow resistance of the subsystem
 			κL[jj] = GasChromatographySimulator.flow_restriction(L_subsys[jj], t, T_subsys, d_subsys, gas)
 			# calculate the flow of the subsystem

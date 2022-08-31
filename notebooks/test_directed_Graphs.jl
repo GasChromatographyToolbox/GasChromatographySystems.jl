@@ -22,9 +22,6 @@ begin
 	TableOfContents()
 end
 
-# ╔═╡ 4676dd70-b46e-4495-8724-b9c551199b8f
-using Symbolics
-
 # ╔═╡ 00cf5a16-8a1e-431d-a40e-ef620b1c1508
 md"""
 # Test directed Graphs
@@ -367,105 +364,6 @@ src(E[1]), dst(E[1])
 # ╔═╡ 02f967c4-c2d3-43bd-8192-3e1f00c6ec1e
 V = collect(vertices(new_g))
 
-# ╔═╡ 276f9554-5e7b-4aca-b39e-3fb51edfc3e0
-i=2
-
-# ╔═╡ 981c5ca1-c1e1-450a-ab57-57de9ff107cb
-Symbol("x$(i)")
-
-# ╔═╡ 39c53922-386e-4b16-ab65-ab13284feaed
-begin # make symbols for the pressures (vertices/nodes) and the restrictions (edges)
-	ps = Array{Symbol}(undef, nv(new_g))
-	for i=1:nv(new_g)
-		ps[i] = Symbol("p$(i)")
-	end
-	κs = Array{Symbol}(undef, ne(new_g))
-	for i=1:ne(new_g)
-		κs[i] = Symbol("κ$(src(E[i]))_$(dst(E[i]))")
-	end
-end
-
-# ╔═╡ 538670c6-a240-47cb-9cc0-25458b6e3264
-ps
-
-# ╔═╡ fe635e58-74f5-47ef-924c-205403cce941
-κs
-
-# ╔═╡ 244143bd-a973-4f7a-999a-f3648c41c37e
-@variables x y 
-
-# ╔═╡ 4bea2673-1333-4aaf-a935-004ada67fb1d
-Aa = [x^2 + y 0 2x
-     0       0 2y
-     y^2 + x 0 0]
-
-# ╔═╡ 6821bb78-9c0d-4736-a2e3-41a2beaa4136
-typeof(Aa)
-
-# ╔═╡ 5c71a978-371c-4ec8-960b-c46242f258a9
-@variables P[1:nv(new_g)] κ[1:ne(new_g)]
-
-# ╔═╡ 597f5c5c-ab28-4a35-9f68-725667dd4962
-ii = findall(Graphs.degree(new_g).>1)
-
-# ╔═╡ 3c6a9f2f-27eb-46de-90d6-24484bf7f7d2
-all_neighbors(new_g,2)
-
-# ╔═╡ 80007ca1-24e3-4471-9ec3-812b3d12a525
-i_src = findall(src.(E).==ii[2])
-
-# ╔═╡ 55f78500-c005-4f70-a56f-8b27c80cd5ce
-E[i_src]
-
-# ╔═╡ 9bcf9a62-73d4-4732-9d98-93ec5bb4002a
-i_dst = findall(dst.(E).==ii[2])
-
-# ╔═╡ 864f3bb2-db29-4fed-ae39-9338de7fbaf5
-E[i_dst]
-
-# ╔═╡ 051d179e-3417-4fbb-8890-1d8f657e0991
-srcE = src.(E)
-
-# ╔═╡ 18e4593d-35ab-4a96-b94b-b99e2a04cad4
-dstE = dst.(E)
-
-# ╔═╡ 1b4b35dd-1fb4-41fb-b728-d6e99457e20c
-srcE[i_dst[1]]
-
-# ╔═╡ 2f6cdcce-6f8d-4484-bd0d-573c954449b6
-(P[srcE[i_dst[1]]]^2-P[dstE[i_dst[1]]]^2)*κ[findfirst(srcE.==i_dst[1])]
-
-# ╔═╡ a1c2fead-f5da-4e83-bb5f-bf4cc99a457b
-i_src[2]
-
-# ╔═╡ 25dce746-1ff0-4d47-a15f-38236f3096d7
-(P[srcE[i_src[2]]]^2-P[dstE[i_src[2]]]^2)*κ[findfirst(srcE.==2)]
-
-# ╔═╡ 30f3018f-8621-4124-9cbb-0b5fb778f453
-begin
-	i_inner = findall(Graphs.degree(new_g).>1)
-	balance = Array{Num}(undef, length(i_inner)) # correlation of the balance equations to the array does not work, only the last element is correct
-	for i=length(i_inner)
-		ii = i_inner[i]
-		# find edges, where node `i` is the source
-		i_src = findall(src.(E).==ii)
-		# find edges, where node `i` is the destination
-		i_dst = findall(dst.(E).==ii)
-		balance_ = 0
-		for j=1:length(i_dst)
-			balance_ = balance_ + (P[srcE[i_dst[j]]]^2-P[dstE[i_dst[j]]]^2)*κ[findfirst(dstE.==ii)]
-		end
-		for j=1:length(i_src)
-			balance_ = balance_ - (P[srcE[i_src[j]]]^2-P[dstE[i_src[j]]]^2)*κ[findall(srcE.==ii)[j]]
-		end
-		#push!(balance, balance_)
-		balance[i] = balance_
-	end
-end
-
-# ╔═╡ 2cd33438-89ae-4458-a6e2-7dc6b608b79d
-balance
-
 # ╔═╡ 590cefc6-3088-40b7-ab58-94f7f81672a9
 md"""
 # End
@@ -514,7 +412,7 @@ md"""
 # ╠═c9f3413d-5802-4f89-ae8d-3bb74c23c762
 # ╠═595763b4-7518-42fd-a6f1-6d90bf36533e
 # ╠═56d0ec78-1a7d-4197-a74c-a02fa62922fc
-# ╟─5ae20243-f3ff-4256-a8d2-56bdbf673deb
+# ╠═5ae20243-f3ff-4256-a8d2-56bdbf673deb
 # ╠═63a0e7aa-7885-44e1-a907-48e7a1acd9c0
 # ╠═55cfb28a-9b37-4e49-b580-317bda8d3c3d
 # ╠═c35a470c-95eb-4577-9a20-795b13018134
@@ -530,28 +428,4 @@ md"""
 # ╠═fedac331-6e41-447e-a374-9fec674963d7
 # ╠═ad8ee901-8daf-4111-8aee-3609d4acda1a
 # ╠═02f967c4-c2d3-43bd-8192-3e1f00c6ec1e
-# ╠═276f9554-5e7b-4aca-b39e-3fb51edfc3e0
-# ╠═981c5ca1-c1e1-450a-ab57-57de9ff107cb
-# ╠═39c53922-386e-4b16-ab65-ab13284feaed
-# ╠═538670c6-a240-47cb-9cc0-25458b6e3264
-# ╠═fe635e58-74f5-47ef-924c-205403cce941
-# ╠═4676dd70-b46e-4495-8724-b9c551199b8f
-# ╠═244143bd-a973-4f7a-999a-f3648c41c37e
-# ╠═4bea2673-1333-4aaf-a935-004ada67fb1d
-# ╠═6821bb78-9c0d-4736-a2e3-41a2beaa4136
-# ╠═5c71a978-371c-4ec8-960b-c46242f258a9
-# ╠═597f5c5c-ab28-4a35-9f68-725667dd4962
-# ╠═3c6a9f2f-27eb-46de-90d6-24484bf7f7d2
-# ╠═80007ca1-24e3-4471-9ec3-812b3d12a525
-# ╠═55f78500-c005-4f70-a56f-8b27c80cd5ce
-# ╠═9bcf9a62-73d4-4732-9d98-93ec5bb4002a
-# ╠═864f3bb2-db29-4fed-ae39-9338de7fbaf5
-# ╠═051d179e-3417-4fbb-8890-1d8f657e0991
-# ╠═18e4593d-35ab-4a96-b94b-b99e2a04cad4
-# ╠═1b4b35dd-1fb4-41fb-b728-d6e99457e20c
-# ╠═2f6cdcce-6f8d-4484-bd0d-573c954449b6
-# ╠═a1c2fead-f5da-4e83-bb5f-bf4cc99a457b
-# ╠═25dce746-1ff0-4d47-a15f-38236f3096d7
-# ╠═30f3018f-8621-4124-9cbb-0b5fb778f453
-# ╠═2cd33438-89ae-4458-a6e2-7dc6b608b79d
 # ╠═590cefc6-3088-40b7-ab58-94f7f81672a9

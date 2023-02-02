@@ -67,3 +67,29 @@ register_interaction!(ax, :nhover, NodeHoverHighlight(p))
 register_interaction!(ax, :ehover, EdgeHoverHighlight(p))
 register_interaction!(ax, :ndrag, NodeDrag(p))
 register_interaction!(ax, :edrag, EdgeDrag(p))
+
+
+#------------
+# from Makie documentation
+# draw a line from the point where left mouse button is clicked to the point where the left mouse button is released
+using GLMakie
+
+points = Observable(Point2f[])
+
+scene = Scene(camera = campixel!)
+linesegments!(scene, points, color = :black)
+scatter!(scene, points, color = :gray)
+
+on(events(scene).mousebutton) do event
+    if event.button == Mouse.left
+        if event.action == Mouse.press || event.action == Mouse.release
+            mp = events(scene).mouseposition[]
+            push!(points[], mp)
+            notify(points)
+        end
+    end
+end
+
+scene
+# this could perhaps be used to create an edge from the node next to the first point to the node next to second point
+# deletion of an edge could be done by clicking on an edge (possibly in combination with a certain key)

@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.9
+# v0.19.17
 
 using Markdown
 using InteractiveUtils
@@ -20,6 +20,7 @@ begin
     # activate the shared project environment
     Pkg.activate(Base.current_project())
 	#using DataFrames, CSV, Interpolations, Plots, QuadGK, DifferentialEquations, ForwardDiff, Intervals
+	Pkg.instantiate()
 	using Plots
 	using GasChromatographySystems
 	using HypertextLiteral
@@ -650,6 +651,9 @@ peaklist = Array{DataFrame}(undef, length(parameters))
 # ╔═╡ 3092cbe3-3f82-44e1-b47f-4e3e9c0248a4
 peaklist[1], solution[1] = GasChromatographySimulator.simulate(parameters[1])
 
+# ╔═╡ 91483fb5-2044-49cc-823e-2d2c6e6e4af8
+peaklist[2]
+
 # ╔═╡ f382e2e5-38ae-4558-99ff-74213b488c1b
 begin
 	#if go==true
@@ -678,6 +682,12 @@ begin
 	"""
 end
 
+# ╔═╡ 18b57c71-cd40-4e91-aca8-70cfe3e2f482
+pl2
+
+# ╔═╡ 4d960a62-2d7b-4678-bc06-5c65d1039744
+pl3
+
 # ╔═╡ 7b0ede51-4a76-4360-b09d-23b002ae6652
 begin
 	p_chrom1, time1, chrom1 = plot_chromatogram(pl1, TP.timesteps)
@@ -698,6 +708,24 @@ begin
 	
 	$(embed_display(p_chrom3))
 	"""
+end
+
+# ╔═╡ f92f0136-fa53-4fbb-9580-1a2a8e76abef
+Int(232/4)
+
+# ╔═╡ e2f0c775-8836-48e0-aef0-6d655b9b7065
+begin
+	# mark modulation periods in chrom3
+	tp = 6.0 # in s, modulation period
+	tend = 360.0
+	toffset = 0.0
+	tps = Array{Tuple{Float64, Float64},1}(undef, Int(floor(tend/tp)))
+	marks = Array{Tuple{Float64, Float64},1}(undef, Int(floor(tend/tp)))
+	for i=1:Int(floor(tend/tp))
+		tps[i] = ((i-1)*tp+toffset, (i-1)*tp+toffset)
+		marks[i] = (0.0, 2.5)
+	end
+	plot!(p_chrom3, tps, marks, c=:orange, label="")
 end
 
 # ╔═╡ 3f52ec2f-cac1-4c60-b589-f52f4b388273
@@ -725,6 +753,9 @@ $(DownloadButton(export_str, result_filename))
 # ╔═╡ 60738259-20ea-4c69-be9f-aadddbc05b8f
 # add additional graphs, e.g. T(x), T(t), τ(x), σ(t) or u(x) of the solutes
 
+# ╔═╡ 4725ca3b-0082-4d07-bc99-4f536b182eb1
+GCsys
+
 # ╔═╡ 233612d8-ab4d-462e-b825-5106222b1059
 md"""
 # End
@@ -733,7 +764,7 @@ md"""
 # ╔═╡ Cell order:
 # ╠═1cce655a-1ba6-11ec-1bf4-edfded0254c8
 # ╟─ed577478-23b5-4c76-95ef-8de32307225e
-# ╠═ed14d2ca-9a09-41fa-a67a-8190161646b6
+# ╟─ed14d2ca-9a09-41fa-a67a-8190161646b6
 # ╟─f5075b30-4b3f-46b8-bb9a-6c8c01d6af9f
 # ╟─f82f4dfc-4bb5-47a0-9a7a-f4faf86360f7
 # ╟─6d694987-d98f-4087-b0f3-515d4332f9af
@@ -750,7 +781,7 @@ md"""
 # ╟─08142bda-450f-42fe-aece-6f0bd5e28717
 # ╟─bb5c36f1-5b47-4055-b10c-0b1873c4a5c8
 # ╟─0cac5ac9-31f7-4bf0-b71b-b8e691e8d5ea
-# ╠═fd69382e-5e7e-4409-9754-f9177d8f35c4
+# ╟─fd69382e-5e7e-4409-9754-f9177d8f35c4
 # ╟─6fef3cba-8917-480a-bdf2-a3ae472c02e3
 # ╟─0542086b-0f06-40e5-8ea6-9e788a4ded7f
 # ╟─f781ca29-9d94-4a82-9ab8-41046b3453dc
@@ -768,12 +799,18 @@ md"""
 # ╠═b8af15f9-b0e2-4f70-8ab4-b7b4ae91a508
 # ╠═fffcac78-955f-4269-81f2-ae2de170ee50
 # ╠═3092cbe3-3f82-44e1-b47f-4e3e9c0248a4
-# ╟─f382e2e5-38ae-4558-99ff-74213b488c1b
+# ╠═91483fb5-2044-49cc-823e-2d2c6e6e4af8
+# ╠═f382e2e5-38ae-4558-99ff-74213b488c1b
 # ╟─af016139-05bc-4623-b72e-1c4726024c45
 # ╠═16ef205f-5129-4bdc-8bb7-84b1282c18ef
+# ╠═18b57c71-cd40-4e91-aca8-70cfe3e2f482
+# ╠═4d960a62-2d7b-4678-bc06-5c65d1039744
 # ╟─7b0ede51-4a76-4360-b09d-23b002ae6652
+# ╠═f92f0136-fa53-4fbb-9580-1a2a8e76abef
+# ╠═e2f0c775-8836-48e0-aef0-6d655b9b7065
 # ╠═3f52ec2f-cac1-4c60-b589-f52f4b388273
-# ╟─59e8e493-4d40-42cd-bc2e-c3dc415aac45
-# ╟─15ee4fd0-7e13-4e3c-ba54-9e6601279a68
+# ╠═59e8e493-4d40-42cd-bc2e-c3dc415aac45
+# ╠═15ee4fd0-7e13-4e3c-ba54-9e6601279a68
 # ╠═60738259-20ea-4c69-be9f-aadddbc05b8f
+# ╠═4725ca3b-0082-4d07-bc99-4f536b182eb1
 # ╟─233612d8-ab4d-462e-b825-5106222b1059

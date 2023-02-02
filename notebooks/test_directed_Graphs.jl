@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.9
+# v0.19.17
 
 using Markdown
 using InteractiveUtils
@@ -343,7 +343,7 @@ to setup the flow balance equations:
 - flow of the edges where the node `j` is the source are negative
 - the sum of the flows in a node `j` is equal to Zero
 - e.g. `E=[(1,2), (2,3)]` => `F₁₂ - F₂₃ = 0`
-- the flow `Fᵢⱼ ∝ (pᵢ²-pⱼ²)κᵢⱼ`, where `κᵢⱼ` the flow resistance of the edge `(i,j)` (or the module, e.g. GC column)
+- the flow `Fᵢⱼ ∝ (pᵢ²-pⱼ²)/κᵢⱼ`, where `κᵢⱼ` the flow resistance of the edge `(i,j)` (or the module, e.g. GC column)
 """
 
 # ╔═╡ d3a4189a-4134-44ec-baba-8029e1656025

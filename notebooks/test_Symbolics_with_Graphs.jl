@@ -1,17 +1,17 @@
 ### A Pluto.jl notebook ###
-# v0.19.9
+# v0.19.17
 
 using Markdown
 using InteractiveUtils
 
 # ╔═╡ 00a70e44-28ff-11ed-3a74-b939bdc0aa6a
 begin
-	import Pkg
+	##import Pkg
     # activate the shared project environment
-    Pkg.activate(Base.current_project())
+    ##Pkg.activate(Base.current_project())
 	#using DataFrames, CSV, Interpolations, Plots, QuadGK, DifferentialEquations, ForwardDiff, Intervals
 	using Plots
-	using GasChromatographySystems
+	##using GasChromatographySystems
 	using Graphs
 	using GraphRecipes
 	using PlutoUI
@@ -110,10 +110,10 @@ dstE = dst.(E) # the destination nodes of the edges
 i_dst = findall(dstE.==ii[2]) # indices (of `dstE`) of the nodes, which `ii[2]=3`, -> 2nd edge has node 3 as source
 
 # ╔═╡ 26739daf-fc72-48e4-afd4-814bdde40335
-(P²[srcE[i_dst[1]]]-P²[dstE[i_dst[1]]])*κ[findall(dstE.==ii[2])[1]] # construction of a symbolic expression for the flow into node 3
+(P²[srcE[i_dst[1]]]-P²[dstE[i_dst[1]]])/κ[findall(dstE.==ii[2])[1]] # construction of a symbolic expression for the flow into node 3
 
 # ╔═╡ 0239c209-bb5a-4fa7-a4b9-71b4f85f1b03
-(P²[srcE[i_src[2]]]-P²[dstE[i_src[2]]])*κ[findall(srcE.==ii[2])[2]] # construction of a symbolic expression for the flow from node 3 to node 5 (the second destination of node 3)
+(P²[srcE[i_src[2]]]-P²[dstE[i_src[2]]])/κ[findall(srcE.==ii[2])[2]] # construction of a symbolic expression for the flow from node 3 to node 5 (the second destination of node 3)
 
 # ╔═╡ 5ecbbaf1-e8a9-4c97-9054-c613d7e87306
 begin
@@ -127,10 +127,10 @@ begin
 		i_dst = findall(dst.(E).==ii)
 		balance[i] = 0
 		for j=1:length(i_dst)
-			balance[i] = balance[i] + (P²[srcE[i_dst[j]]]-P²[dstE[i_dst[j]]])*κ[findfirst(dstE.==ii)[j]]
+			balance[i] = balance[i] + (P²[srcE[i_dst[j]]]-P²[dstE[i_dst[j]]])/κ[findfirst(dstE.==ii)[j]]
 		end
 		for j=1:length(i_src)
-			balance[i] = balance[i] - (P²[srcE[i_src[j]]]-P²[dstE[i_src[j]]])*κ[findall(srcE.==ii)[j]]
+			balance[i] = balance[i] - (P²[srcE[i_src[j]]]-P²[dstE[i_src[j]]])/κ[findall(srcE.==ii)[j]]
 		end
 		#push!(balance, balance_)
 		#balance[i] = balance_
@@ -283,10 +283,10 @@ function flow_balance(g, i_n, P², κ)
 	i_dst = findall(dstE.==i_n)
 	balance = 0
 	for j=1:length(i_dst) # ingoing flows
-		balance = balance + (P²[srcE[i_dst[j]]]-P²[dstE[i_dst[j]]])*κ[i_dst[j]]
+		balance = balance + (P²[srcE[i_dst[j]]]-P²[dstE[i_dst[j]]])/κ[i_dst[j]]
 	end
 	for j=1:length(i_src) # outgoing flows
-		balance = balance - (P²[srcE[i_src[j]]]-P²[dstE[i_src[j]]])*κ[i_src[j]]
+		balance = balance - (P²[srcE[i_src[j]]]-P²[dstE[i_src[j]]])/κ[i_src[j]]
 	end
 	return balance
 end

@@ -78,9 +78,9 @@ begin
 	modules6 = Array{GasChromatographySystems.AbstractModule}(undef, ne(g6))
 	modules6[1] = GasChromatographySystems.ModuleColumn("1 TL1", 0.5, 0.25e-3, 0.0e-6, "", default_TP)
 	modules6[2] = GasChromatographySystems.ModuleColumn("2 TL2", 1.0, 0.25e-3, 0.0e-6, "", default_TP)
-	modules6[3] = GasChromatographySystems.ModuleColumn("5 GC2", 2.0, 0.1e-3, 0.1e-6, "SLB5ms", default_TP) 
-	modules6[4] = GasChromatographySystems.ModuleColumn("3 GC1", 10.0, 0.25e-3, 0.25e-6, "Wax", default_TP)
-	modules6[5] = GasChromatographySystems.ModuleColumn("4 TL3", 1.0, 0.1e-3, 0.0e-6, "", default_TP)
+	modules6[3] = GasChromatographySystems.ModuleColumn("3 GC2", 2.0, 0.1e-3, 0.1e-6, "SLB5ms", default_TP) 
+	modules6[4] = GasChromatographySystems.ModuleColumn("4 GC1", 10.0, 0.25e-3, 0.25e-6, "Wax", default_TP)
+	modules6[5] = GasChromatographySystems.ModuleColumn("5 TL3", 1.0, 0.1e-3, 0.0e-6, "", default_TP)
 	
 	modules6[6] = GasChromatographySystems.ModuleColumn("6 TL4", 1.5, 0.1e-3, 0.0e-6, "", 300.0)
 	# system
@@ -88,7 +88,13 @@ begin
 end
 
 # ╔═╡ 56c482e8-078c-4440-9dbd-51386abf1b4b
-GasChromatographySystems.plot_graph(sys6; node_size=64, nlabels_fontsize=30, elabels_fontsize=26)
+p_graph = GasChromatographySystems.plot_graph(sys6; node_size=64, arrow_size=30, nlabels_fontsize=30, elabels_fontsize=26)
+
+# ╔═╡ ba4669d8-56f3-4e9d-a76e-e2da5f252ce5
+#save("graph.svg", p_graph)
+
+# ╔═╡ bebb2543-6f16-4563-8050-152381850110
+pwd()
 
 # ╔═╡ 4b379226-1646-4b13-b64a-7b55b66442f5
 md"""
@@ -102,7 +108,10 @@ GasChromatographySystems.flow_balance(sys6)
 GasChromatographySystems.solve_balance(sys6)
 
 # ╔═╡ 0aef6b6a-c58d-4bc8-812a-e958973598b9
-GasChromatographySystems.plot_graph_with_flow(sys6, 0, node_size=90, nlabels_fontsize=20, elabels_fontsize=20, elabels_distance=28)
+p_graph_flow = GasChromatographySystems.plot_graph_with_flow(sys6, 0, arrow_size=30, node_size=90, nlabels_fontsize=20, elabels_fontsize=20, elabels_distance=28)
+
+# ╔═╡ 81861823-5a64-41a5-aad0-117649ff2fc1
+#save("graph_flow.svg", p_graph_flow)
 
 # ╔═╡ a8b54992-6dec-42f2-b29b-7fa4f2128809
 begin
@@ -332,10 +341,13 @@ end
 # ╠═7cc0cc2b-db2f-40aa-8f76-d99b1958e817
 # ╠═e9607708-458d-4a85-8ba6-0f404e35d441
 # ╠═56c482e8-078c-4440-9dbd-51386abf1b4b
+# ╠═ba4669d8-56f3-4e9d-a76e-e2da5f252ce5
+# ╠═bebb2543-6f16-4563-8050-152381850110
 # ╠═4b379226-1646-4b13-b64a-7b55b66442f5
 # ╠═bfd7ed6a-f293-448f-b827-a914396f101b
 # ╠═3946d9e6-78e3-41df-b204-4fd780721242
 # ╠═0aef6b6a-c58d-4bc8-812a-e958973598b9
+# ╠═81861823-5a64-41a5-aad0-117649ff2fc1
 # ╠═a8b54992-6dec-42f2-b29b-7fa4f2128809
 # ╠═e842ff4e-b999-4794-9b73-d6754bb01d55
 # ╠═306a6211-5709-43ae-9154-2efed03c62e0

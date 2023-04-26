@@ -75,7 +75,7 @@ begin
 	pp5[2] = GasChromatographySystems.PressurePoint("p₂", [0.0, 1800.0], [NaN, NaN]) # 
 	pp5[3] = GasChromatographySystems.PressurePoint("p₃", [0.0, 1800.0], [NaN, NaN]) #  
 	pp5[4] = GasChromatographySystems.PressurePoint("p₄", [0.0, 1800.0], [101300.0, 101300.0]) # outlet 
-	pp5[5] = GasChromatographySystems.PressurePoint("p₅", [0.0, 1800.0], [NaN, NaN]) #
+	pp5[5] = GasChromatographySystems.PressurePoint("p₅", [0.0, 1800.0], [NaN, NaN])#[400000., 550000.0]) #
 	pp5[6] = GasChromatographySystems.PressurePoint("p₆", [0.0, 1800.0], [NaN, NaN]) # 
 	pp5[7] = GasChromatographySystems.PressurePoint("p₇", [0.0, 1800.0], [NaN, NaN]) #
 	pp5[8] = GasChromatographySystems.PressurePoint("p₈", [0.0, 1800.0], [eps(Float64), eps(Float64)])#[0.0, 0.0]) # outlet 2
@@ -109,7 +109,7 @@ GasChromatographySystems.flow_balance(sys5)
 GasChromatographySystems.solve_balance(sys5)
 
 # ╔═╡ 459ddf82-89d5-47a0-a535-699c015202bf
-GasChromatographySystems.plot_graph_with_flow(sys5, 0, lay = Stress(), arrow_shift=0.6, nlabels_fontsize=16, elabels_fontsize=16)
+GasChromatographySystems.plot_graph_with_flow(sys5, 1200, lay = Stress(), arrow_shift=0.6, nlabels_fontsize=16, elabels_fontsize=16)
 
 # ╔═╡ e0fad228-0ba2-427e-8702-2d4640456e53
 begin

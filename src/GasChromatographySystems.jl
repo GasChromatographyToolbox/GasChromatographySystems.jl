@@ -262,23 +262,39 @@ function unknowns_in_flow_balances(sys)
 		end
 		in_equation[i] = in_equation_
 	end
+	# in_equation ... Array of Arrays, lists the idices of the flow balances in which the unknown is in it.
+	# touched ... total number of different unknowns in the flow balance equations
 	return in_equation, touched
 end
 
 function solve_balance(sys)
 	@variables P²[1:nv(sys.g)], κ[1:ne(sys.g)]
-	i_unknown_p = unknown_p(sys)
-	F_balance = flow_balance(sys)
-	num_use_eq = unknowns_in_flow_balances(sys)[2]
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+	F_balance = GasChromatographySystems.flow_balance(sys)
+	#num_use_eq = GasChromatographySystems.unknowns_in_flow_balances(sys)[2]
 	if length(i_unknown_p) == length(F_balance)
 		sol = Symbolics.solve_for(F_balance, [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
-	elseif length(i_unknown_p) == (length(F_balance) - 1)
-		leave_out_eq = findfirst(num_use_eq.==minimum(num_use_eq))
-		sol = Symbolics.solve_for(F_balance[Not(leave_out_eq)], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
-	elseif length(i_unknown_p) < (length(F_balance) - 1)
-		error("More flow balance equations than unknown pressures. ToDo: leave equations out.")
+	#elseif length(i_unknown_p) == 1
+	#	sol = Symbolics.solve_for(F_balance[i_unknown_p[1]-1], [P²[i_unknown_p[1]]])
+	#elseif length(i_unknown_p) == (length(F_balance) - 1)
+		#if length(findall(minimum(num_use_eq).==num_use_eq)) == 1
+	#		leave_out_eq = findlast(num_use_eq.==minimum(num_use_eq))
+		#else
+		#	leave_out_eq = 
+		#end
+	#	sol = Symbolics.solve_for(F_balance[Not(leave_out_eq)], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
+	#elseif length(i_unknown_p) < (length(F_balance) - 1)
+	#	error("More flow balance equations than unknown pressures. ToDo: leave equations out.")
 	elseif length(i_unknown_p) > length(F_balance)
 		error("More unknown pressures than flow balance equations.")
+	else # loop of the i_unknown_p
+		# identifie inner nodes which are unknown pressures, there index in the inner_vertices() is the index of the flow balance equations to use 
+		inner_V = GasChromatographySystems.inner_vertices(sys.g) 
+		F_balance_i = Array{Int}(undef, length(i_unknown_p))
+		for i=1:length(i_unknown_p)
+			F_balance_i[i] = findfirst(i_unknown_p[i].==inner_V)
+		end
+		sol = Symbolics.solve_for([F_balance[x] for x in F_balance_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
 	end
 	return sol
 end

@@ -54,6 +54,7 @@ begin
 	    a_film_thickness::Array{Float64,1} # Parameters of film_thickness function, just for information
 		stationary_phase::String
 		temperature # a number (constant temperature) or a TemperatureProgram structure
+		flow # an number (constant flow) or a Function
 	end
 
 	function ModuleColumn(name, L, d, df, sp, tp)
@@ -171,8 +172,8 @@ end
 function flow_balance(g, i_n, P², κ)
 	#@variables P²[1:nv(g)], κ[1:ne(g)]
 	E = collect(edges(g))
-	srcE = src.(E)
-	dstE = dst.(E)
+	srcE = src.(E) # source nodes of the edges
+	dstE = dst.(E) # destination nodes of the edges
 	# find edges, where node `i_n` is the source
 	i_src = findall(srcE.==i_n)
 	# find edges, where node `i_n` is the destination
@@ -222,7 +223,7 @@ end
 
 function flow_balance(sys)
 	@variables P²[1:nv(sys.g)], κ[1:ne(sys.g)]
-	inner_V = inner_vertices(sys.g)
+	inner_V = inner_vertices(sys.g) # one flow balance equation for every inner node
 	bal_eq = Array{Symbolics.Equation}(undef, length(inner_V))
 	for i=1:length(inner_V)
 		bal_eq[i] = flow_balance(sys.g, inner_V[i], P², κ) ~ 0

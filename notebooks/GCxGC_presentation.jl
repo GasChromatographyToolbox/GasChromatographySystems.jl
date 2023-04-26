@@ -50,7 +50,7 @@ md"""
 (300-40)/8*60
 
 # ╔═╡ cec32771-d528-45ce-9bb4-59c6b3e95e15
-tsteps = [0.0, 120.0, 1560.0, 300.0]
+tsteps = [0.0, 120.0, 3120.0, 300.0]
 
 # ╔═╡ c9941593-0311-473a-9c0c-f764d41ac7e7
 GCxGC_TP = GasChromatographySystems.TemperatureProgram(tsteps, [40.0, 40.0, 300.0, 300.0])
@@ -384,6 +384,35 @@ begin
 	p_GCxGC_cats
 end
 
+# ╔═╡ 987efbb5-8a48-4c83-9a20-50e5fbd0a16d
+function plot_GCxGC_contour_(pl_GCxGC; split_ratio=ones(length(pl_GCxGC.Name)))
+	t¹ = 0.9*minimum(pl_GCxGC.tR1):(1.1*maximum(pl_GCxGC.tR1)-0.9*minimum(pl_GCxGC.tR1))/1000:1.1*maximum(pl_GCxGC.tR1)
+	t² = 0.9*minimum(pl_GCxGC.tR2.-pl_GCxGC.tR1):(1.1*maximum(pl_GCxGC.tR2.-pl_GCxGC.tR1)-0.9*minimum(pl_GCxGC.tR2.-pl_GCxGC.tR1))/1000:1.1*maximum(pl_GCxGC.tR2.-pl_GCxGC.tR1)
+	chrom2D = Array{Float64}(undef, length(t¹), length(t²), length(pl_GCxGC.Name))
+	for j=1:length(t²)
+		for i=1:length(t¹)
+			for k=1:length(pl_GCxGC.Name)
+				chrom2D[i,j,k] = split_ratio[k]*exp(-((t¹[i]-pl_GCxGC.tR1[k])^2/(2*pl_GCxGC.τR1[k]^2)+(t²[j]-(pl_GCxGC.tR2[k]-pl_GCxGC.tR1[k]))^2/(2*pl_GCxGC.τR2[k]^2)))
+			end
+		end
+	end
+	#p_2D = Plots.contourf(t¹, t², sum(chrom2D, dims=3)[:,:,1]', fill=true, legend=false, xlabel="tR1 in s", ylabel="tR2 in s", c=:turbo, levels=40)
+	return t¹, t², sum(chrom2D, dims=3)[:,:,1]'
+end
+
+# ╔═╡ 939e3a45-03cd-4e07-a672-10c32cf2637e
+t¹, t², chrom = plot_GCxGC_contour_(pl_foc)
+
+# ╔═╡ 7100eeed-5604-4d81-855e-b08cd40135a6
+Plots.contour(t¹, t², chrom, legend=false, xlabel="tR1 in s", ylabel="tR2 in s", c=:turbo, levels=100, xlims=(0.0, 1700.0), ylims=(0.0, 5.0), grid=false)
+
+# ╔═╡ 00fbcd7c-71a1-43f7-b358-abfde851a237
+begin
+	plotly()
+	p_GCxGC = Plots.heatmap(t¹, t², chrom.^(1//3), legend=false, xlabel="tR1 in s", ylabel="tR2 in s", c=:jet1, dpi=500)#, xlims=(0.0, 1700.0), ylims=(0.0, 5.0), grid=false)
+	gui()
+end
+
 # ╔═╡ fba31c65-0465-458a-8fa5-7df1abdf179c
 # plot 1d chromatogram measured at detector
 
@@ -501,6 +530,10 @@ md"""
 # ╠═938d8677-7898-43c8-b07c-6e9d7f3c7e2e
 # ╠═c5888be4-c641-4871-81a5-11d01ace12ed
 # ╠═127069e6-6da1-4742-88b4-a0d398a88b24
+# ╠═987efbb5-8a48-4c83-9a20-50e5fbd0a16d
+# ╠═939e3a45-03cd-4e07-a672-10c32cf2637e
+# ╠═7100eeed-5604-4d81-855e-b08cd40135a6
+# ╠═00fbcd7c-71a1-43f7-b358-abfde851a237
 # ╠═fba31c65-0465-458a-8fa5-7df1abdf179c
 # ╠═88bf3e84-6772-453d-8bee-2ccbbcf7cb34
 # ╠═0cc7f988-bf98-4e45-93d5-7e3dea48c4ed

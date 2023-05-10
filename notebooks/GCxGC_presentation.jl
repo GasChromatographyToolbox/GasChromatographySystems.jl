@@ -21,6 +21,15 @@ begin
 	TableOfContents()
 end
 
+# ╔═╡ fc787595-9163-410f-82f4-2252f5ebaf63
+using Interpolations
+
+# ╔═╡ 60a07e1e-f85d-45af-908b-b9ae3adc6220
+using BenchmarkTools
+
+# ╔═╡ 2d2882e1-5980-45a7-9891-9b328de9fa3d
+using Profile
+
 # ╔═╡ 139bfe64-17ac-455d-84a2-09c9564156cd
 md"""
 # Simple GCxGC system
@@ -100,6 +109,41 @@ begin
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, GasChromatographySystems.Options(ng=true)))
 end
 
+# ╔═╡ af30bbcd-d6e4-4bd7-97f0-3243c514194a
+GasChromatographySystems.plot_flow_over_time(sys)
+
+# ╔═╡ f04130dc-e108-4e82-a2a2-a2c123b99df1
+md"""
+### 1a. Constant flow
+"""
+
+# ╔═╡ 5a250aed-458e-443e-849c-5e7580d260f1
+begin
+	g_ = SimpleDiGraph(3)
+	add_edge!(g_, 1, 2) # 1st-D GC
+	add_edge!(g_, 2, 3) # 2nd-D GC
+	# pressure points
+	pp_ = Array{GasChromatographySystems.PressurePoint}(undef, nv(g_))
+	pp_[1] = GasChromatographySystems.PressurePoint("p₁", tsteps, [NaN, NaN, NaN, NaN]) # inlet 
+	pp_[2] = GasChromatographySystems.PressurePoint("p₂", tsteps, [NaN, NaN, NaN, NaN]) # mid-point 
+	pp_[3] = GasChromatographySystems.PressurePoint("p₃", tsteps, [eps(Float64), eps(Float64), eps(Float64), eps(Float64)]) # outlet
+	# modules
+	modules_ = Array{GasChromatographySystems.AbstractModule}(undef, ne(g_))
+	modules_[1] = GasChromatographySystems.ModuleColumn("GC column 1", 30.0, 0.25e-3, 0.25e-6, "Rxi5ms", GCxGC_TP, 1.0/60e6)
+	modules_[2] = GasChromatographySystems.ModuleColumn("GC column 2", 2.0, 0.25e-3, 0.25e-6, "Rxi17SilMS", GCxGC_TP, NaN) # defining here also the flow results in an error
+	# system
+	sys_1a = GasChromatographySystems.update_system(GasChromatographySystems.System(g_, pp_, modules_, GasChromatographySystems.Options(ng=true)))
+end
+
+# ╔═╡ cfb715f1-8ccd-4035-ab6a-cb2746e0e6bf
+GasChromatographySystems.plot_graph_with_flow(sys_1a, 0; lay=SquareGrid(cols=3), node_size=90, nlabels_fontsize=20, elabels_fontsize=20, elabels_distance=28)
+
+# ╔═╡ 7ee6e1c0-8102-49dd-a4d9-0a84d3461e06
+GasChromatographySystems.plot_flow_over_time(sys_1a)
+
+# ╔═╡ 80df8382-bb80-4937-804b-58c861b76c10
+GasChromatographySystems.plot_pressure_over_time(sys_1a)
+
 # ╔═╡ 6cfda8f9-f918-4451-97c3-084eb1d9d339
 md"""
 ### 1b. reverse phases
@@ -125,6 +169,44 @@ begin
 	# system
 	sys_rev = GasChromatographySystems.update_system(GasChromatographySystems.System(g_rev, pp_rev, modules_rev, GasChromatographySystems.Options(ng=true)))
 end
+
+# ╔═╡ aa2e85ad-4b19-4f90-9650-1dadb47306ae
+md"""
+### 1c. Flow modulator
+"""
+
+# ╔═╡ 9509bc4d-2906-4a4c-919b-99412f1e0985
+begin
+	g_1c = SimpleDiGraph(4)
+	add_edge!(g_1c, 1, 3) # 1st-D GC
+	add_edge!(g_1c, 2, 3) # Flow modulator
+	add_edge!(g_1c, 3, 4) # 2nd-D GC
+	# pressure points
+	pp_1c = Array{GasChromatographySystems.PressurePoint}(undef, nv(g_1c))
+	pp_1c[1] = GasChromatographySystems.PressurePoint("p₁", tsteps, [NaN, NaN, NaN, NaN]) # inlet 
+	pp_1c[2] = GasChromatographySystems.PressurePoint("p₂", tsteps, [NaN, NaN, NaN, NaN]) # flow modulator inlet
+	pp_1c[3] = GasChromatographySystems.PressurePoint("p₃", tsteps, [NaN, NaN, NaN, NaN]) # mid-point 
+	pp_1c[4] = GasChromatographySystems.PressurePoint("p₄", tsteps, [eps(Float64), eps(Float64), eps(Float64), eps(Float64)])# outlet
+	# modules
+	modules_1c = Array{GasChromatographySystems.AbstractModule}(undef, ne(g_1c))
+	modules_1c[1] = GasChromatographySystems.ModuleColumn("GC column 1", 30.0, 0.25e-3, 0.25e-6, "Rxi5ms", GCxGC_TP, 1.0/60e6)
+	modules_1c[2] = GasChromatographySystems.ModuleColumn("FM", 0.1, 0.5e-3, 0.0, "", GCxGC_TP, NaN) 
+	modules_1c[3] = GasChromatographySystems.ModuleColumn("GC column 2", 2.0, 0.25e-3, 0.25e-6, "Rxi17SilMS", GCxGC_TP, 2.0/60e6) 
+	# system
+	sys_1c = GasChromatographySystems.update_system(GasChromatographySystems.System(g_1c, pp_1c, modules_1c, GasChromatographySystems.Options(ng=true)))
+end
+
+# ╔═╡ 1b60cf45-d8db-4e28-b287-2ac6ff2cd1ea
+GasChromatographySystems.substitute_unknown_flows(sys_1c)
+
+# ╔═╡ a72f4c81-0a48-4343-8840-acb0514fc2ee
+GasChromatographySystems.plot_graph_with_flow(sys_1c, 0; node_size=90, nlabels_fontsize=20, elabels_fontsize=20, elabels_distance=28)
+
+# ╔═╡ 22674e61-db92-4181-ad84-c36955ac77a7
+GasChromatographySystems.plot_flow_over_time(sys_1c)
+
+# ╔═╡ 56ac1bb7-7e33-45ad-965c-d9b6e8d29bf3
+GasChromatographySystems.plot_pressure_over_time(sys_1c)
 
 # ╔═╡ e4fa29f4-fc83-4aa4-a548-f2683ad5d335
 md"""
@@ -154,60 +236,11 @@ md"""
 ## Pressure and flow calculation
 """
 
-# ╔═╡ 7783216f-6a73-44aa-98f7-e0ca628ba145
-function plot_flow_over_time(sys)
-	plotly()
-	F_func = GasChromatographySystems.flow_functions(sys)
-	com_timesteps = GasChromatographySystems.common_timesteps(sys)
-	trange = 0:sum(com_timesteps)/100:sum(com_timesteps)
-	p_flow = Plots.plot(xlabel="time in s", ylabel="flow in mL/min")
-	for i=1:ne(sys.g)
-		Plots.plot!(p_flow, trange, F_func[i].(trange)*60*1e6, label="F_$(sys.modules[i].name)")
-	end
-	return p_flow
-end
-
-# ╔═╡ af30bbcd-d6e4-4bd7-97f0-3243c514194a
-plot_flow_over_time(sys)
-
-# ╔═╡ b51877ef-a8a6-48d4-a521-5b1e01d2be40
-function plot_pressure_over_time(sys)
-	plotly()
-	p_func = GasChromatographySystems.pressure_functions(sys)
-	com_timesteps = GasChromatographySystems.common_timesteps(sys)
-	trange = 0:sum(com_timesteps)/100:sum(com_timesteps)
-	p_pres = Plots.plot(xlabel="time in s", ylabel="pressure in Pa(a)", legend=:topleft)
-	for i=1:nv(sys.g)
-		Plots.plot!(p_pres, trange, p_func[i].(trange), label="$(sys.pressurepoints[i].name)")
-	end
-	return p_pres
-end
-
 # ╔═╡ 06b9ba3f-4dff-4fba-afce-923b95fae9c3
 GasChromatographySystems.plot_graph_with_flow(sys, 0; lay=SquareGrid(cols=3), node_size=90, nlabels_fontsize=20, elabels_fontsize=20, elabels_distance=28)
 
-# ╔═╡ d256dfee-4639-4687-bba0-c1c662e1a12b
-function plot_graph_with_flow(sys, t; lay = Stress(), color=:lightblue, node_size=80, arrow_size=20)
-	p_func = GasChromatographySystems.pressure_functions(sys)
-	F_func = GasChromatographySystems.flow_functions(sys)
-	fig, ax, p = GraphMakie.graphplot(sys.g, 
-						layout=lay,
-						nlabels = [sys.pressurepoints[i].name*"\n$(trunc(Int, p_func[i](t)/1000))kPa" for i in 1:nv(sys.g)],
-						nlabels_align=(:center,:center),
-						node_size = [node_size for i in 1:nv(sys.g)],
-						node_color = [color for i in 1:nv(sys.g)],
-						elabels = [sys.modules[i].name*"\n $(round(F_func[i](t)*60*1e6; sigdigits=2)) mL/min" for i in 1:ne(sys.g)],
-						elabels_distance = 20,
-						arrow_size = arrow_size
-					)
-	hidedecorations!(ax)
-	hidespines!(ax)
-	#ax.aspect = DataAspect()
-	return fig
-end
-
 # ╔═╡ 9c9aed82-3015-419b-ae6a-aa6f97a9d753
-plot_pressure_over_time(sys)
+GasChromatographySystems.plot_pressure_over_time(sys)
 
 # ╔═╡ a65c868c-fa26-4a7f-be94-2d86ee9518fc
 md"""
@@ -237,75 +270,6 @@ md"""
 ## Simulation
 """
 
-# ╔═╡ cc85656c-59f9-4134-99d6-3c33103372b8
-function change_initial_focussed(par::GasChromatographySimulator.Parameters, pl; τ₀=zeros(length(pl.tR)))
-	# copys the parameters `par` and changes the values of par.sub[i].t₀ to pl.tR[]
-	CAS_pl = GasChromatographySimulator.CAS_identification(pl.Name).CAS
-	newsub = Array{GasChromatographySimulator.Substance}(undef, length(par.sub))
-	for i=1:length(par.sub)
-		ii = findfirst(par.sub[i].CAS.==CAS_pl)
-		newsub[i] = GasChromatographySimulator.Substance(par.sub[i].name, par.sub[i].CAS, par.sub[i].Tchar, par.sub[i].θchar, par.sub[i].ΔCp, par.sub[i].φ₀, par.sub[i].ann, par.sub[i].Cag, pl.tR[ii], 0.0)
-	end
-	newpar = GasChromatographySimulator.Parameters(par.col, par.prog, newsub, par.opt)
-	return newpar
-end
-
-# ╔═╡ 53b140dc-d5ba-4808-83c9-af711563be9e
-function simulate_along_paths(sys, paths, db_dataframe, selected_solutes, par_sys; t₀=zeros(length(selected_solutes)), τ₀=zeros(length(selected_solutes)), refocus=falses(ne(sys.g)))
-	#par_sys = graph_to_parameters(sys, db_dataframe, selected_solutes)
-	E = collect(edges(sys.g))
-	peaklists = Array{Array{DataFrame,1}}(undef, length(paths))
-	solutions = Array{Array{Any,1}}(undef, length(paths))
-	path_pos = Array{String}(undef, length(paths))
-	new_par_sys = Array{GasChromatographySimulator.Parameters}(undef, length(par_sys))
-	visited_E = falses(length(E))
-	for i=1:length(paths)
-		i_par = GasChromatographySystems.index_parameter(sys.g, paths[i])
-		if GasChromatographySystems.path_possible(sys, paths[i]) == true
-			path_pos[i] = "path is possible"
-			peaklists_ = Array{DataFrame}(undef, length(i_par))
-			solutions_ = Array{Any}(undef, length(i_par))
-			for j=1:length(i_par)
-				if (i>1) && (all(visited_E[1:i_par[j]].==true))
-					# look in all previous paths for the correct result -> the simulation correlated to the same edge and where this edge is connected to only previouse visited edges
-					i_path = 0
-					for k=1:i-1 # previous paths
-						i_par_previous = GasChromatographySystems.index_parameter(sys.g, paths[k])[1:j]
-						if all(x->x in i_par_previous, i_par[1:j]) == true # all edges up to j are the same between the two paths
-							i_path = k
-						end
-					end
-					peaklists_[j] = peaklists[i_path][i_par[j]]
-					solutions_[j] = solutions[i_path][i_par[j]]
-				else
-					if j == 1
-						new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], t₀, τ₀)
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-					else
-						if refocus[i_par[j]] == true
-							new_par_sys[i_par[j]] = change_initial_focussed(par_sys[i_par[j]], peaklists_[j-1])
-						else
-							new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], peaklists_[j-1])
-						end
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-					end
-				end
-			end
-			visited_E[i_par] .= true
-			peaklists[i] = peaklists_
-			solutions[i] = solutions_
-		else
-			neg_flow_modules = sys.modules[findall(paths[i][findall(GasChromatographySystems.positive_flow(sys)[i_par].==false)].==edges(sys.g))]
-			str_neg_flow = "path not possible: "
-			for j=1:length(neg_flow_modules)
-				str_neg_flow = str_neg_flow*"Flow in module >$(neg_flow_modules[j].name)< becomes negative during the program. "
-			end
-			path_pos[i] = str_neg_flow
-		end
-	end
-	return path_pos, peaklists, solutions, new_par_sys
-end
-
 # ╔═╡ 1436c866-9124-4ab4-8ab7-0b04f4de896c
 md"""
 ### 1. GCxGC common temperature program
@@ -325,37 +289,16 @@ begin
 end
 
 # ╔═╡ 7dac264f-2e91-44bd-b96d-207f072cba9c
-sim_res_foc = simulate_along_paths(sys, paths, db, selected_solutes, par; refocus=[true, true])
+sim_res_foc = GasChromatographySystems.simulate_along_paths(sys, paths, db, selected_solutes, par; refocus=[true, true])
 
 # ╔═╡ 5373eaae-4372-4561-83cf-b62664bf28af
 sim_res[2][1][1]
 
-# ╔═╡ e57ab914-8db4-41ca-9950-1134e35e8c40
-function peaklist_GCxGC(pl_1, pl_2)
-	CAS1 = GasChromatographySimulator.CAS_identification(pl_1.Name).CAS
-	pl_GCxGC = DataFrame(Name = pl_1.Name, CAS = CAS1, tR1 = pl_1.tR, τR1 = pl_1.τR)
-	tR2 = Array{Float64}(undef, length(pl_GCxGC.Name))
-	τR2 = Array{Float64}(undef, length(pl_GCxGC.Name))
-	Cat = Array{Array{String}}(undef, length(pl_GCxGC.Name))
-	CAS2 = GasChromatographySimulator.CAS_identification(pl_2.Name).CAS
-	for i=1:length(pl_GCxGC.Name)
-		ii = findfirst(CAS1[i].==CAS2)
-		tR2[i] = pl_2.tR[ii]
-		τR2[i] = pl_2.τR[ii]
-		i_db = findfirst(CAS1[i].==db.CAS)
-		Cat[i] = unique([string(db.Cat_1[i_db]), string(db.Cat_2[i_db]), string(db.Cat_3[i_db]), string(db.Cat_4[i_db])])
-	end
-	pl_GCxGC[!, :tR2] = tR2
-	pl_GCxGC[!, :τR2] = τR2
-	pl_GCxGC[!, :Cat] = Cat
-	return pl_GCxGC
-end
-
 # ╔═╡ 0bc7a04d-7534-4e0b-993c-a6ca65f8d363
-pl = peaklist_GCxGC(sim_res[2][1][1], sim_res[2][1][2])
+pl = GasChromatographySystems.peaklist_GCxGC(sim_res[2][1][1], sim_res[2][1][2])
 
 # ╔═╡ 5429291b-8efd-4ebb-9d4d-1be143073482
-pl_foc = peaklist_GCxGC(sim_res_foc[2][1][1], sim_res_foc[2][1][2])
+pl_foc = GasChromatographySystems.peaklist_GCxGC(sim_res_foc[2][1][1], sim_res_foc[2][1][2])
 
 # ╔═╡ c5888be4-c641-4871-81a5-11d01ace12ed
 #savefig(p_GCxGC_cats, "chrom_GCxGC_10.svg")
@@ -430,6 +373,36 @@ begin
 	p_chrom_foc
 end
 
+# ╔═╡ a3492676-6d52-49ef-9623-ffb3e5bda682
+md"""
+### 1a. Constant flow
+"""
+
+# ╔═╡ 81f7d27c-4048-4c06-acc7-8c01ab580c58
+par_1a = GasChromatographySystems.graph_to_parameters(sys_1a, db, selected_solutes)
+
+# ╔═╡ cce329b8-234a-45a9-aa6d-b4a57a0f4627
+paths_1a = GasChromatographySystems.all_paths(sys_1a.g, 1)[2]
+
+# ╔═╡ dfc605b8-bc23-4456-8dbe-6cb83f340785
+sim_res_1a = GasChromatographySystems.simulate_along_paths(sys_1a, paths_1a, db, selected_solutes, par_1a; refocus=[true, true])
+
+# ╔═╡ 6a1e1c53-93da-4b2d-a65d-dd13fd86c174
+pl_1a = GasChromatographySystems.peaklist_GCxGC(sim_res_1a[2][1][1], sim_res_1a[2][1][2])
+
+# ╔═╡ 9976debc-cbbf-462a-a1f6-b4f9aa468cd2
+plot_GCxGC(pl_1a, sys_1a)
+
+# ╔═╡ 1143dfde-bc45-4c2f-b90c-be6afe7bb35a
+#t¹_1a, t²_1a, chrom_1a = plot_GCxGC_contour_(pl_1a)
+
+# ╔═╡ 5771318a-215a-440d-bc13-d71e042a5c03
+begin
+#	plotly()
+#	p_GCxGC_1a = Plots.heatmap(t¹_1a, t²_1a, chrom_1a.^(1//3), legend=false, xlabel="tR1 in s", ylabel="tR2 in s", c=:jet1, dpi=500)#, xlims=(0.0, 1700.0), ylims=(0.0, 5.0), grid=false)
+	#gui()
+end
+
 # ╔═╡ e7956916-dccb-46c1-a30b-ef77650e54ce
 md"""
 ### 1b. reverse phases
@@ -445,13 +418,128 @@ paths_rev = GasChromatographySystems.all_paths(sys_rev.g, 1)[2]
 sim_res_rev = GasChromatographySystems.simulate_along_paths(sys_rev, paths_rev, db, selected_solutes, par_rev)
 
 # ╔═╡ 397a913b-fa6c-4eba-b8b7-7571256a001b
-pl_rev = peaklist_GCxGC(sim_res_rev[2][1][1], sim_res_rev[2][1][2])
+pl_rev = GasChromatographySystems.peaklist_GCxGC(sim_res_rev[2][1][1], sim_res_rev[2][1][2])
 
 # ╔═╡ c3f16558-43b8-4822-98af-daf8e06cd1df
 p_GCxGC_cats_rev = plot_GCxGC(pl_rev, sys_rev; categories = ["saturated FAME", "unsaturated FAME", "aromatic", "PCB", "alkanes", "alcohols", "alkanones", "phenones"])
 
 # ╔═╡ 834739e9-fa7f-43f0-beac-ae5790575255
 #savefig(p_GCxGC_cats_rev, "chrom_GCxGC_8_rev.svg")
+
+# ╔═╡ 28316a84-710b-443e-a136-43fcfd821afa
+md"""
+### 1c. Flow modulator
+"""
+
+# ╔═╡ d298a226-f5df-4636-9b41-2a302858592f
+# graph_to_parameters has to be modified for defined Flows
+# interpolate_pressure_functions() seems to be to slow
+#par_1c = GasChromatographySystems.graph_to_parameters(sys_1c, db, selected_solutes)
+
+# ╔═╡ 3e34982e-f791-4d96-9dde-27ee29720114
+tsteps_ = GasChromatographySystems.common_timesteps(sys_1c)
+
+# ╔═╡ d89e4c44-6335-40ec-a158-ce1940a57cd5
+tend_ = sum(tsteps_)
+
+# ╔═╡ 47901238-c0ff-45f3-a0c7-f0bd60f10162
+all(degree(sys_1c.g).<3)
+
+# ╔═╡ f89db6b4-d805-4a1e-b9e6-43542c29e204
+trange_ = 0:1:tend_
+
+# ╔═╡ d3a24890-989e-4832-a98a-ce60e5b5bdf0
+length(trange_)
+
+# ╔═╡ bc36251b-b48d-42af-8c74-ae70744a0838
+p_func_ = GasChromatographySystems.pressure_functions(sys_1c)
+
+# ╔═╡ 8196a315-eeb8-457b-8f2c-5b4591521f5f
+p_itp_ = Array{Any}(undef, length(p_func_))
+
+# ╔═╡ b4fd1811-ee6d-4f8d-87d7-2f13c328060a
+all(isnan.(sys_1c.pressurepoints[1].pressure_steps))
+
+# ╔═╡ eed9dc74-6b7c-4fd1-b6e0-0f28a213ff26
+#p_itp_[1] = LinearInterpolation((trange_, ), p_func_[1].(trange_), extrapolation_bc=Flat())
+
+# ╔═╡ be54942b-0bec-49cf-9687-0a70143a63bd
+p_itp_test = linear_interpolation(collect(0.0:60.0:3540.0), p_func_[1].(0.0:60.0:3540.0), extraploation_bc=Interpolations.Flat())
+
+# ╔═╡ 0e3395a1-4137-4264-8309-49c0c7e66e42
+tt = 0.0
+
+# ╔═╡ 7cd1fb34-8f79-4d0d-801b-c2b6883085f2
+@benchmark p_func_[1]($tt)
+
+# ╔═╡ 086173f9-a16b-4201-9b1e-439ae9e08dc8
+@benchmark p_func_[2]($tt)
+
+# ╔═╡ f2c3a527-bc28-4f58-aedb-74101c383293
+@benchmark p_func_[3]($tt)
+
+# ╔═╡ 7479fd7b-c81c-475a-9dbb-fdaea5ab8005
+@benchmark p_func_[4]($tt)
+
+# ╔═╡ c1e71e46-7b55-424b-b242-5609ddbd9a10
+begin
+	@profile p_func_[1](tt)
+	Profile.print()
+end
+
+# ╔═╡ f8f6bf15-f5a6-4738-8bbd-d7adc9a214ed
+itp = linear_interpolation(collect(0.0:60.0:3540.0), p_func_[1].(0.0:60.0:3540.0))
+
+# ╔═╡ b142fbc0-baca-4205-83d5-ea85c55baf7c
+itp(0)
+
+# ╔═╡ b9727123-582b-4f28-a073-c004e97d8b24
+itp(3541)
+
+# ╔═╡ 1d3d3ed9-4127-4fcf-822a-43f38c5632c7
+knots = 0.0:60.0:3540.0
+
+# ╔═╡ 1d94af98-b90b-4a57-af2d-eaf0aefa8fbd
+A = p_func_[1].(knots) # the evaluation of the function takes a long time
+
+# ╔═╡ 37f7be98-67f0-43e2-b8b1-e2d48f6f8e53
+iitp = extrapolate(scale(interpolate(A, BSpline(Linear())), knots), Interpolations.Flat())
+
+# ╔═╡ 83470d02-8fcd-45d5-acda-3f28da0c547b
+extrapolate(scale(interpolate(p_func_[1].(knots), BSpline(Linear())), knots), Interpolations.Flat())
+
+# ╔═╡ dc712259-89aa-4138-a7b9-042956c89a33
+iitp(30000)
+
+# ╔═╡ c15d42ef-3b56-4093-b84a-0df13e46132f
+#GasChromatographySystems.interpolate_pressure_functions(sys_1c)
+
+# ╔═╡ fa011932-61e2-4377-bbf9-eb0bcd8c1b22
+par_1c = GasChromatographySystems.graph_to_parameters(sys_1c, db, selected_solutes; interp=true, dt=10) # using the calculated functions for the pressures
+# -> in this case the simulation takes to long
+# interpolation for an increased stepsize seems workable
+
+# ╔═╡ 1783d8de-90df-434d-b71d-43c39a0d3579
+paths_1c = GasChromatographySystems.all_paths(sys_1c.g, 1)[2]
+
+# ╔═╡ fcba3e01-9464-4f95-8144-d8d1671b265e
+sim_res_1c = GasChromatographySystems.simulate_along_paths(sys_1c, paths_1c, db, selected_solutes, par_1c)
+
+# ╔═╡ 7bcca943-1b5a-4eb5-a419-30a1959c53aa
+pl_1c = GasChromatographySystems.peaklist_GCxGC(sim_res_1c[2][1][1], sim_res_1c[2][1][2])
+
+# ╔═╡ ee516d3e-d60b-49c6-aa2f-eb7cb3a9acd1
+plot_GCxGC(pl_1c, sys_1c)
+
+# ╔═╡ ec9dcf65-93ca-4299-a5a7-578aca60e906
+t¹_1c, t²_1c, chrom_1c = plot_GCxGC_contour_(pl_1c)
+
+# ╔═╡ a6b8b92d-e7a7-4b1a-9a12-1db83b530e13
+begin
+	plotly()
+	p_GCxGC_1c = Plots.heatmap(t¹_1c, t²_1c, chrom_1c.^(1//3), legend=false, xlabel="tR1 in s", ylabel="tR2 in s", c=:jet1, dpi=500)#, xlims=(0.0, 1700.0), ylims=(0.0, 5.0), grid=false)
+	#gui()
+end
 
 # ╔═╡ 679140af-7598-41fe-aad1-90c50e503218
 md"""
@@ -498,15 +586,23 @@ md"""
 # ╠═a5dc0d72-03cd-4a54-9420-1b237171a279
 # ╠═af30bbcd-d6e4-4bd7-97f0-3243c514194a
 # ╠═d571712f-981e-4d1e-95ce-b4dbf7de50c6
+# ╠═f04130dc-e108-4e82-a2a2-a2c123b99df1
+# ╠═5a250aed-458e-443e-849c-5e7580d260f1
+# ╠═cfb715f1-8ccd-4035-ab6a-cb2746e0e6bf
+# ╠═7ee6e1c0-8102-49dd-a4d9-0a84d3461e06
+# ╠═80df8382-bb80-4937-804b-58c861b76c10
 # ╠═6cfda8f9-f918-4451-97c3-084eb1d9d339
 # ╠═a8971018-3f53-4276-b004-9245985ca490
+# ╠═aa2e85ad-4b19-4f90-9650-1dadb47306ae
+# ╠═9509bc4d-2906-4a4c-919b-99412f1e0985
+# ╠═1b60cf45-d8db-4e28-b287-2ac6ff2cd1ea
+# ╠═a72f4c81-0a48-4343-8840-acb0514fc2ee
+# ╠═22674e61-db92-4181-ad84-c36955ac77a7
+# ╠═56ac1bb7-7e33-45ad-965c-d9b6e8d29bf3
 # ╠═e4fa29f4-fc83-4aa4-a548-f2683ad5d335
 # ╠═38a4081d-49ed-4688-84ba-88218f535911
 # ╠═4b379226-1646-4b13-b64a-7b55b66442f5
-# ╠═7783216f-6a73-44aa-98f7-e0ca628ba145
-# ╠═b51877ef-a8a6-48d4-a521-5b1e01d2be40
 # ╠═06b9ba3f-4dff-4fba-afce-923b95fae9c3
-# ╠═d256dfee-4639-4687-bba0-c1c662e1a12b
 # ╠═9c9aed82-3015-419b-ae6a-aa6f97a9d753
 # ╠═a65c868c-fa26-4a7f-be94-2d86ee9518fc
 # ╠═b424f5f1-aca8-40e5-aa0d-32fc7c4d4ee6
@@ -515,8 +611,6 @@ md"""
 # ╠═e935ae05-c654-4365-a569-fed418f35fe1
 # ╠═d060c9a3-d760-472f-b52b-3c481b39a85c
 # ╠═79bc683a-8d51-4d81-a27c-e42663720917
-# ╠═cc85656c-59f9-4134-99d6-3c33103372b8
-# ╠═53b140dc-d5ba-4808-83c9-af711563be9e
 # ╟─1436c866-9124-4ab4-8ab7-0b04f4de896c
 # ╠═457df2b2-8bfa-4e04-b4f2-ae1ca8902a4e
 # ╠═f106b5fd-e17a-4876-8562-e82670a1ab25
@@ -525,7 +619,6 @@ md"""
 # ╠═5373eaae-4372-4561-83cf-b62664bf28af
 # ╠═0bc7a04d-7534-4e0b-993c-a6ca65f8d363
 # ╠═5429291b-8efd-4ebb-9d4d-1be143073482
-# ╠═e57ab914-8db4-41ca-9950-1134e35e8c40
 # ╠═3986a24a-689c-48b8-8e78-ec5d3842d0d7
 # ╠═938d8677-7898-43c8-b07c-6e9d7f3c7e2e
 # ╠═c5888be4-c641-4871-81a5-11d01ace12ed
@@ -537,6 +630,14 @@ md"""
 # ╠═fba31c65-0465-458a-8fa5-7df1abdf179c
 # ╠═88bf3e84-6772-453d-8bee-2ccbbcf7cb34
 # ╠═0cc7f988-bf98-4e45-93d5-7e3dea48c4ed
+# ╠═a3492676-6d52-49ef-9623-ffb3e5bda682
+# ╠═81f7d27c-4048-4c06-acc7-8c01ab580c58
+# ╠═cce329b8-234a-45a9-aa6d-b4a57a0f4627
+# ╠═dfc605b8-bc23-4456-8dbe-6cb83f340785
+# ╠═6a1e1c53-93da-4b2d-a65d-dd13fd86c174
+# ╠═9976debc-cbbf-462a-a1f6-b4f9aa468cd2
+# ╠═1143dfde-bc45-4c2f-b90c-be6afe7bb35a
+# ╠═5771318a-215a-440d-bc13-d71e042a5c03
 # ╠═e7956916-dccb-46c1-a30b-ef77650e54ce
 # ╠═2c45c22a-842f-4d49-8b0b-d6f9546932c9
 # ╠═eccd7341-eae1-4a37-9cfd-f1817857e572
@@ -544,6 +645,43 @@ md"""
 # ╠═397a913b-fa6c-4eba-b8b7-7571256a001b
 # ╠═c3f16558-43b8-4822-98af-daf8e06cd1df
 # ╠═834739e9-fa7f-43f0-beac-ae5790575255
+# ╠═28316a84-710b-443e-a136-43fcfd821afa
+# ╠═d298a226-f5df-4636-9b41-2a302858592f
+# ╠═3e34982e-f791-4d96-9dde-27ee29720114
+# ╠═d89e4c44-6335-40ec-a158-ce1940a57cd5
+# ╠═47901238-c0ff-45f3-a0c7-f0bd60f10162
+# ╠═f89db6b4-d805-4a1e-b9e6-43542c29e204
+# ╠═d3a24890-989e-4832-a98a-ce60e5b5bdf0
+# ╠═bc36251b-b48d-42af-8c74-ae70744a0838
+# ╠═8196a315-eeb8-457b-8f2c-5b4591521f5f
+# ╠═b4fd1811-ee6d-4f8d-87d7-2f13c328060a
+# ╠═eed9dc74-6b7c-4fd1-b6e0-0f28a213ff26
+# ╠═fc787595-9163-410f-82f4-2252f5ebaf63
+# ╠═be54942b-0bec-49cf-9687-0a70143a63bd
+# ╠═60a07e1e-f85d-45af-908b-b9ae3adc6220
+# ╠═0e3395a1-4137-4264-8309-49c0c7e66e42
+# ╠═7cd1fb34-8f79-4d0d-801b-c2b6883085f2
+# ╠═086173f9-a16b-4201-9b1e-439ae9e08dc8
+# ╠═f2c3a527-bc28-4f58-aedb-74101c383293
+# ╠═7479fd7b-c81c-475a-9dbb-fdaea5ab8005
+# ╠═2d2882e1-5980-45a7-9891-9b328de9fa3d
+# ╠═c1e71e46-7b55-424b-b242-5609ddbd9a10
+# ╠═f8f6bf15-f5a6-4738-8bbd-d7adc9a214ed
+# ╠═b142fbc0-baca-4205-83d5-ea85c55baf7c
+# ╠═b9727123-582b-4f28-a073-c004e97d8b24
+# ╠═1d3d3ed9-4127-4fcf-822a-43f38c5632c7
+# ╠═1d94af98-b90b-4a57-af2d-eaf0aefa8fbd
+# ╠═37f7be98-67f0-43e2-b8b1-e2d48f6f8e53
+# ╠═83470d02-8fcd-45d5-acda-3f28da0c547b
+# ╠═dc712259-89aa-4138-a7b9-042956c89a33
+# ╠═c15d42ef-3b56-4093-b84a-0df13e46132f
+# ╠═fa011932-61e2-4377-bbf9-eb0bcd8c1b22
+# ╠═1783d8de-90df-434d-b71d-43c39a0d3579
+# ╠═fcba3e01-9464-4f95-8144-d8d1671b265e
+# ╠═7bcca943-1b5a-4eb5-a419-30a1959c53aa
+# ╠═ee516d3e-d60b-49c6-aa2f-eb7cb3a9acd1
+# ╠═ec9dcf65-93ca-4299-a5a7-578aca60e906
+# ╠═a6b8b92d-e7a7-4b1a-9a12-1db83b530e13
 # ╠═679140af-7598-41fe-aad1-90c50e503218
 # ╠═1f92dabf-8597-4ef8-9e05-628e922defbf
 # ╠═6efdb3ef-4f6e-4073-bfa1-501732088e5c

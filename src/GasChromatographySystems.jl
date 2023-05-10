@@ -17,7 +17,6 @@ const R = 8.31446261815324 # J mol⁻¹ K⁻¹
 const Tn = 25.0 + Tst # K
 const pn = 101300 # Pa
 
-default_TP = GasChromatographySystems.TemperatureProgram([0.0, 1800.0], [40.0, 340.0])
 # structures
 
 # options structure
@@ -93,6 +92,8 @@ function TemperatureProgram(timesteps::Array{<:Real, 1}, temperaturesteps::Array
     prog = TemperatureProgram(timesteps, temperaturesteps, gf, a_gf)
     return prog
 end
+
+default_TP() = GasChromatographySystems.TemperatureProgram([0.0, 1800.0], [40.0, 340.0])
 
 # pressure point structure
 struct PressurePoint
@@ -909,7 +910,7 @@ function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=GasChromatography
 	return sys
 end
 
-example_SeriesSystem() = SeriesSystem([10.0, 5.0, 2.0, 1.0], [0.53, 0.32, 0.25, 0.1], [0.53, 0.32, 0.25, 0.1], ["Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS"], [default_TP, default_TP, default_TP, default_TP], NaN, 300.0, 0.0)
+example_SeriesSystem() = SeriesSystem([10.0, 5.0, 2.0, 1.0], [0.53, 0.32, 0.25, 0.1], [0.53, 0.32, 0.25, 0.1], ["Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS"], [default_TP(), default_TP(), default_TP(), default_TP()], NaN, 300.0, 0.0)
 
 function SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=GasChromatographySystems.Options(ng=true))
 	g = SimpleDiGraph(4)
@@ -956,7 +957,7 @@ function SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=GasChroma
 	return sys
 end
 
-example_SplitSystem() = SplitSystem([10.0, 1.0, 5.0], [0.25, 0.1, 0.25], [0.25, 0.0, 0.0], ["Rxi17SilMS", "", ""], [default_TP, 300.0, 300.0], [1.0, NaN, NaN], NaN, 0.0, 101.3)
+example_SplitSystem() = SplitSystem([10.0, 1.0, 5.0], [0.25, 0.1, 0.25], [0.25, 0.0, 0.0], ["Rxi17SilMS", "", ""], [default_TP(), 300.0, 300.0], [1.0, NaN, NaN], NaN, 0.0, 101.3)
 
 function GCxGC_TM_simp(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, F, pin, pout; opt=GasChromatographySystems.Options(ng=true))
 	# ? make two versions
@@ -1005,7 +1006,7 @@ function GCxGC_TM_simp(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, F, pin, pou
 	return sys
 end
 
-example_GCxGC_TM_simp() = GCxGC_TM_simp(30.0, 0.25, 0.25, "Rxi17SilMS", default_TP, 2.0, 0.25, 0.25, "Wax", default_TP, NaN, 200.0, 0.0)
+example_GCxGC_TM_simp() = GCxGC_TM_simp(30.0, 0.25, 0.25, "Rxi17SilMS", default_TP(), 2.0, 0.25, 0.25, "Wax", default_TP(), NaN, 200.0, 0.0)
 
 function GCxGC_FM_simp(L1, d1, df1, sp1, TP1, F1, L2, d2, df2, sp2, TP2, F2, pin, pout)
 	# ? make two versions
@@ -1051,6 +1052,6 @@ function GCxGC_FM_simp(L1, d1, df1, sp1, TP1, F1, L2, d2, df2, sp2, TP2, F2, pin
 	return sys
 end
 
-example_GCxGC_FM_simp() = GCxGC_FM_simp(30.0, 0.25, 0.25, "Rxi17SilMS", default_TP, 1.0, 2.0, 0.25, 0.25, "Wax", default_TP, 2.0, NaN, 0.0)
+example_GCxGC_FM_simp() = GCxGC_FM_simp(30.0, 0.25, 0.25, "Rxi17SilMS", default_TP(), 1.0, 2.0, 0.25, 0.25, "Wax", default_TP(), 2.0, NaN, 0.0)
 
 end # module

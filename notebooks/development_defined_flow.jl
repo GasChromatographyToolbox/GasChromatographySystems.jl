@@ -398,7 +398,7 @@ length(substitute_unknown_flows(sys_series))
 
 # ╔═╡ bf15d0c9-c328-4f91-9cd1-2c0b7ff9c93a
 function solve_balance(sys)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys_split.g)]
+	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
 	i_unknown_p = GasChromatographySystems.unknown_p(sys) # indices of the nodes with unknown pressure
 	i_unknown_F = unknown_F(sys) # indices of the edges with an unknown flow
 	bal_eq = substitute_unknown_flows(sys)
@@ -539,7 +539,7 @@ md"""
 """
 
 # ╔═╡ 27c84842-a39a-4b47-bb4b-c79232fe98c5
-plot_graph_with_flow(sys_split,0)
+plot_graph_with_flow(sys_split,1800)
 
 # ╔═╡ d9df5e5a-4501-4b6f-8eb5-b7f82dfd5bcf
 function plot_flow_over_time(sys; dt=60.0)

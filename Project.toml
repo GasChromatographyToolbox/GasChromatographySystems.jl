@@ -28,6 +28,7 @@ PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
+Waveforms = "cb13b1c6-351e-5134-b3ad-d6a530956a82"
 
 [compat]
 Reexport = "1.2.2"

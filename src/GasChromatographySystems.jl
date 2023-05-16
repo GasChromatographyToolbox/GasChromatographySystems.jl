@@ -72,6 +72,35 @@ function ModuleColumn(name, L, d, df, sp, tp, flow)
 end
 
 # add a thermal modulator module
+
+struct ModuleTM<:GasChromatographySystems.AbstractModule
+	# Module
+	# thermal modulator
+	name::String
+	length::Float64
+	diameter#::Fd # Function
+	a_diameter::Array{Float64,1} # Parameters of diameter function, just for information
+	film_thickness#::Fdf # Function
+	a_film_thickness::Array{Float64,1} # Parameters of film_thickness function, just for information
+	stationary_phase::String
+	temperature # a number (constant temperature) or a TemperatureProgram structure
+	PM::Float64 # a number, modulation periode 
+	ratio::Float64 # a number, ratio of the duration between hot and cold jet, approx. as rectangular function
+	Thot::Float64 # heating with hot jet
+	Tcold::Float64 # cooling with cold jet
+	flow # an number (constant flow) or a Function
+end
+
+function ModuleTM(name, L, d, df, sp, tp, pm, ratio, Thot, Tcold)
+	TM = ModuleTM(name, L, d, [d], df, [df], sp, tp, pm, ratio, Thot, Tcold, NaN)
+	return TM
+end
+
+function ModuleTM(name, L, d, df, sp, tp, pm, ratio, Thot, Tcold, F)
+	TM = ModuleTM(name, L, d, [d], df, [df], sp, tp, pm, ratio, Thot, Tcold, F)
+	return TM
+end
+
 # add a flow modulator module
 
 # temperature program structure
@@ -115,6 +144,11 @@ end
 
 # functions
 
+# rectangular temperature modulation
+function therm_mod(t, shift, PM, ratio, Thot, Tcold) 
+	return ifelse(mod(t + shift, PM) < ratio*PM, Thot, Tcold)
+end
+
 # common programs
 function common_timesteps(sys)
 	com_timesteps = []
@@ -155,23 +189,27 @@ function match_programs(sys)
 end
 
 function update_system(sys)
-	new_timesteps, new_pressuresteps, new_temperaturesteps, index_module_tempprog = GasChromatographySystems.match_programs(sys)
-	new_pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(sys.g))
+	new_timesteps, new_pressuresteps, new_temperaturesteps, index_module_tempprog = match_programs(sys)
+	new_pp = Array{PressurePoint}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
-		new_pp[i] = GasChromatographySystems.PressurePoint(sys.pressurepoints[i].name, new_timesteps, new_pressuresteps[i])
+		new_pp[i] = PressurePoint(sys.pressurepoints[i].name, new_timesteps, new_pressuresteps[i])
 	end
-	new_modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(sys.g))
+	new_modules = Array{AbstractModule}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
 		if typeof(sys.modules[i].temperature) <: Number
 			new_modules[i] = sys.modules[i]
-		elseif typeof(sys.modules[i].temperature) <: GasChromatographySystems.TemperatureProgram
+		elseif typeof(sys.modules[i].temperature) <: TemperatureProgram
 			# add/modify for gradient
 			ii = findfirst(index_module_tempprog.==i)
-			new_tp = GasChromatographySystems.TemperatureProgram(new_timesteps, new_temperaturesteps[ii])
-			new_modules[i] = ModuleColumn(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].flow)
+			new_tp = TemperatureProgram(new_timesteps, new_temperaturesteps[ii])
+			if typeof(sys.modules[i]) == ModuleColumn
+				new_modules[i] = ModuleColumn(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].flow)
+			elseif typeof(sys.modules[i]) == ModuleTM
+				new_modules[i] = ModuleTM(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].flow)
+			end
 		end
 	end
-	new_sys = GasChromatographySystems.System(sys.g, new_pp, new_modules, sys.options)
+	new_sys = System(sys.g, new_pp, new_modules, sys.options)
     return new_sys
 end
 
@@ -997,9 +1035,8 @@ function GCxGC_TM_simp(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, F, pin, pou
 	pp[3] = GasChromatographySystems.PressurePoint("p3", com_timesteps, pouts) # outlet
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, n)
-	for i=1:n
-		modules[i] = GasChromatographySystems.ModuleColumn("GC$(i)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6)
-	end
+	modules[1] = GasChromatographySystems.ModuleColumn("GC1", Ls[1], ds[1]*1e-3, dfs[1]*1e-6, sps[1], TPs[1], F/60e6)
+	modules[2] = GasChromatographySystems.ModuleColumn("GC2", Ls[2], ds[2]*1e-3, dfs[2]*1e-6, sps[2], TPs[2], NaN/60e6)
 	# system
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))
 	# add test for the defined pressures and flows

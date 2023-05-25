@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 7f5b6a3c-ed83-11ed-2af0-4b696e429dc4
 begin
 	import Pkg
@@ -21,8 +31,23 @@ begin
 	TableOfContents()
 end
 
-# ╔═╡ 389bfb23-2bb0-4a4e-81b5-72d5d3b6409b
-using BenchmarkTools
+# ╔═╡ 595ee5c8-b125-48bc-9318-e04651c4443c
+(0.6)^2/(0.1e-3)^2
+
+# ╔═╡ 07d4ad41-168d-458e-86d7-28b304cc5589
+(1+1)^2/(0.25e-3)^2 - (0.6)^2/(0.1e-3)^2
+
+# ╔═╡ aa6dfbab-c4e8-496d-86bb-aa6d07e11fcc
+(2.5)^2/(0.25e-3)^2
+
+# ╔═╡ 5e34bb31-71d3-4eb7-a951-977aa4e27074
+L2 = sqrt(8e7*(0.1e-3)^2)
+
+# ╔═╡ 1eed04b3-b900-4a4c-b256-213997469361
+L3 = sqrt(6e7*(0.25e-3)^2)
+
+# ╔═╡ 0aa52c1f-2515-46fd-8a95-4b591d3d844c
+L4 = sqrt(4e7*(0.1e-3)^2)
 
 # ╔═╡ 60ed17af-1494-4dd4-ab5a-9ed76ed82c11
 md"""
@@ -58,9 +83,9 @@ begin
 	pp[5] = GasChromatographySystems.PressurePoint("p₅", [0.0, 1800.0], [NaN, NaN])
 	pp[6] = GasChromatographySystems.PressurePoint("p₆", [0.0, 1800.0], [NaN, NaN])
 	pp[7] = GasChromatographySystems.PressurePoint("p₇", [0.0, 1800.0], [NaN, NaN])
-	pp[8] = GasChromatographySystems.PressurePoint("p₇", [0.0, 1800.0], [NaN, NaN])
-	pp[9] = GasChromatographySystems.PressurePoint("p₇", [0.0, 1800.0], [NaN, NaN])
-	pp[10] = GasChromatographySystems.PressurePoint("p₈", [0.0, 1800.0], [eps(Float64), eps(Float64)]) # outlet 1
+	pp[8] = GasChromatographySystems.PressurePoint("p₈", [0.0, 1800.0], [NaN, NaN])
+	pp[9] = GasChromatographySystems.PressurePoint("p₉", [0.0, 1800.0], [NaN, NaN])
+	pp[10] = GasChromatographySystems.PressurePoint("p₁₀", [0.0, 1800.0], [eps(Float64), eps(Float64)]) # outlet 1
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
 	modules[1] = GasChromatographySystems.ModuleColumn("GC1", 30.0, 0.25e-3, 0.25e-6, "SLB5ms", default_TP, 1.0/60e6)
@@ -68,15 +93,15 @@ begin
 	modules[3] = GasChromatographySystems.ModuleColumn("Sp1b", 0.5, 0.1e-3, 0.0e-6, "", default_TP, NaN)
 	modules[4] = GasChromatographySystems.ModuleColumn("Sp2b1", 1.42, 0.25e-3, 0.0e-6, "", default_TP, NaN)
 	modules[5] = GasChromatographySystems.ModuleColumn("Sp2a", 0.14, 0.1e-3, 0.0e-6, "", default_TP, NaN)
-	modules[6] = GasChromatographySystems.ModuleColumn("Sp3b1", 2.93, 0.25e-3, 0.0e-6, "", default_TP, NaN)
-	modules[7] = GasChromatographySystems.ModuleColumn("Sp3a", 4.46, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[6] = GasChromatographySystems.ModuleColumn("Sp3b1", 2.715, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[7] = GasChromatographySystems.ModuleColumn("Sp3a", 4.37, 0.25e-3, 0.0e-6, "", default_TP, NaN)
 	modules[8] = GasChromatographySystems.ModuleColumn("Sp2b2", 0.095, 0.1e-3, 0.0e-6, "", default_TP, NaN)
 	modules[9] = GasChromatographySystems.ModuleColumn("Sp3b2", 0.05, 0.1e-3, 0.0e-6, "", default_TP, NaN)
 	modules[10] = GasChromatographySystems.ModuleColumn("Sp4a", 0.5, 0.1e-3, 0.0e-6, "", default_TP, NaN)
 	modules[11] = GasChromatographySystems.ModuleColumn("Sp4b", 0.5, 0.1e-3, 0.0e-6, "", default_TP, NaN)
 	modules[12] = GasChromatographySystems.ModuleColumn("GC2", 60.0, 0.25e-3, 0.5e-6, "Wax", default_TP, NaN)
 	# system
-	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, GasChromatographySystems.Options(ng=true)))
+	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, GasChromatographySystems.Options(ng=true, vis="HP")))
 end
 
 # ╔═╡ 87fd20bd-2e93-401a-8978-6e4714bd334d
@@ -87,6 +112,15 @@ GasChromatographySystems.plot_graph_with_flow(sys,0)
 
 # ╔═╡ 6e5cc5cd-7a17-4505-b2cb-caec7f4e39d1
 GasChromatographySystems.plot_graph_with_flow(sys,1800)
+
+# ╔═╡ efb6cb49-811b-4a29-8eac-93c79a10b765
+GasChromatographySystems.flow_balance(sys)
+
+# ╔═╡ 2bb93f4d-3d7b-47ad-86e6-3a958a915a7e
+GasChromatographySystems.substitute_unknown_flows(sys)
+
+# ╔═╡ 02d8a178-410c-42f5-8784-596df16218b1
+# ATTENETION Notebook chrashes with this GasChromatographySystems.solve_balance(sys)
 
 # ╔═╡ 556e42d6-d0b0-4c0a-9044-f5462fd7de23
 function plot_graph_with_flow(sys, t; lay = Spring(), color=:lightblue, node_size=80, arrow_size=20, arrow_shift=0.8, dataaspect=false, nlabels_fontsize=14, elabels_fontsize=14, elabels_distance = 20)
@@ -181,149 +215,37 @@ function plot_flow_over_time(sys, F_func; dt=60.0)
 end
 
 # ╔═╡ 523c7c64-84a7-4612-99c0-c0fdd23591df
-plot_flow_over_time(sys, F_func; dt=60.0)
+begin
+	gr()
+	#p_flow = plot_flow_over_time(sys, F_func; dt=60.0)
+end
+
+# ╔═╡ 55f06025-db1c-4b42-9da8-5cb2d95e0234
+#savefig(p_flow, "MultipSplit_flow.svg")
 
 # ╔═╡ 714b3bdd-2b2b-44af-8672-f21245c57634
 plotly()
 
 # ╔═╡ 9df9bdcf-7efb-4cf3-a379-b89a4e81f25d
-GasChromatographySystems.plot_pressure_over_time(sys; dt=60.0)
-
-# ╔═╡ 7dc3197e-fce8-4dd3-82e5-aed9ae75edd9
-function pressure_functions(sys, pres, unk)
-	#pres, unk = solve_pressure(sys)
-	#p²s = pressures_squared(sys)
-	p_func = Array{Any}(undef, nv(sys.g))
-	for i=1:nv(sys.g)
-		f = if i in unk
-			pres[findfirst(unk.==i)]
-		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].timesteps, identity.(sys.pressurepoints[i].pressure_steps))
-		end
-	p_func[i] = f
-	end
-	return p_func
+begin
+	gr()
+	#p_pres = GasChromatographySystems.plot_pressure_over_time(sys; dt=60.0)
 end
 
-# ╔═╡ cb832d7b-027d-41a7-86d3-d5258cbf351a
-pres, unk = GasChromatographySystems.solve_pressure(sys)
+# ╔═╡ 60680135-ada1-48ae-bbef-b587cb81c50c
+#savefig(p_pres, "MultipSplit_pres.svg")
 
-# ╔═╡ c61e2f99-2250-4cbe-be6f-8038c61af70a
-pf = pressure_functions(sys, pres, unk)
+# ╔═╡ 22e80b28-7670-4d80-a65b-942135d63a8a
+GasChromatographySystems.flow_restrictions(sys)
 
-# ╔═╡ 642ae6df-39a8-47f1-86ce-c210414c8b89
-tt = 0.0
-
-# ╔═╡ b2f86914-f2a8-4f32-93dd-46ab9ad03fc8
-@benchmark pf[1]($tt)
-
-# ╔═╡ 96b9987d-bb1a-4197-9751-c3021286e468
-@benchmark p_func[1]($tt)
-
-# ╔═╡ 6d3a708f-5c50-4e8d-b432-c5ced01a68d6
-i_unknown_p = GasChromatographySystems.unknown_p(sys)
-
-# ╔═╡ a512cf44-4759-4717-b8f2-0ccbb15418a5
-i_unknown_F = GasChromatographySystems.unknown_F(sys)
-
-# ╔═╡ 59869a59-0f2f-4ca6-8717-be6cb7b01109
-solutions = GasChromatographySystems.solve_balance(sys);
-
-# ╔═╡ 89a986df-1828-451f-af82-c6c2d4ba759e
-function solve_pressure(sys, solutions, i_unknown_p, i_unknown_F)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
-	#balance = flow_balance(sys)
-	#i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	i_known_F = collect(1:length(edges(sys.g)))[Not(i_unknown_F)]
-	#solutions = solve_balance(sys)
-	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
-	κs = GasChromatographySystems.flow_restrictions(sys)
-	p²s = GasChromatographySystems.pressures_squared(sys)
-	p_solution = Array{Function}(undef, length(i_unknown_p))
-	for i=1:length(i_unknown_p)
-		sub_dict(t) = merge(Dict((P²[j] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((κ[j] => κs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].flow for j in i_known_F))
-		f(t) = sqrt(substitute(solutions[i], sub_dict(t)))
-		p_solution[i] = f
+# ╔═╡ d828afa5-8335-434a-96be-041cbd53a5a8
+begin
+	Ld_ratios = Array{Float64}(undef, length(sys.modules))
+	for i=1:length(sys.modules)
+		Ld_ratios[i] = sys.modules[i].length/sys.modules[i].diameter
 	end
-	return p_solution
+	Ld_ratios
 end
-
-# ╔═╡ 4073f1f9-0ee3-4b41-935c-757041aea8e7
-sol_pres = solve_pressure(sys, solutions, i_unknown_p, i_unknown_F)
-
-# ╔═╡ c44d5045-39fa-4580-aa72-57e69f2cf1e2
-sol_pf = pressure_functions(sys, sol_pres, i_unknown_p)
-
-# ╔═╡ e1f5c846-af73-4be5-9eb1-87eeff308a0c
-i = 1
-
-# ╔═╡ d9b61df5-279f-4c0f-992e-7caa1578520d
-@benchmark sol_pf[1]($tt)
-
-# ╔═╡ cfa8e73f-ec5d-4c55-b0a1-b7029cdee213
-@benchmark sol_pf[$i]($tt)
-
-# ╔═╡ 3fc02e41-c92c-4ca9-a29b-f967e08c21cb
-function solve_pressure_(sys, solutions, i_unknown_p, i_unknown_F)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
-	#balance = flow_balance(sys)
-	#i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	i_known_F = collect(1:length(edges(sys.g)))[Not(i_unknown_F)]
-	#solutions = solve_balance(sys)
-	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
-	κs = GasChromatographySystems.flow_restrictions(sys)
-	p²s = GasChromatographySystems.pressures_squared(sys)
-	sub_dict = Array{Any}(undef, length(i_unknown_p))
-	for i=1:length(i_unknown_p)
-		sub_dict(t) = merge(Dict((P²[j] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((κ[j] => κs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].flow for j in i_known_F))
-		#f(t) = sqrt(substitute(solutions[i], sub_dict(t)))
-		#p_solution[i] = f
-	end
-	return sub_dict
-end
-
-# ╔═╡ 9fa333f0-ef2b-4195-878a-c485594c8def
-sol_dict = solve_pressure_(sys, solutions, i_unknown_p, i_unknown_F)
-
-# ╔═╡ 4c6ada6d-828c-4fe6-a535-985134f74980
-sol_dict(0.0)
-
-# ╔═╡ 19e1dc02-52b7-4b32-b6ca-bf7eacaaa988
-function solve_pressure__(sys, solutions, i_unknown_p, sol_dict)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
-	#balance = flow_balance(sys)
-	#i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	#i_known_F = collect(1:length(edges(sys.g)))[Not(i_unknown_F)]
-	#solutions = solve_balance(sys)
-	#a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
-	#κs = GasChromatographySystems.flow_restrictions(sys)
-	#p²s = GasChromatographySystems.pressures_squared(sys)
-	p_solution = Array{Function}(undef, length(i_unknown_p))
-	for i=1:length(i_unknown_p)
-		#sub_dict(t) = merge(Dict((P²[j] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((κ[j] => κs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].flow for j in i_known_F))
-		f(t) = sqrt(substitute(solutions[i], sol_dict(t)))
-		p_solution[i] = f
-	end
-	return p_solution
-end
-
-# ╔═╡ 3786b3aa-ec89-41f8-98e1-6970f5a9dd87
-p_f = solve_pressure__(sys, solutions, i_unknown_p, sol_dict)
-
-# ╔═╡ 0150b30f-b937-4091-8c5c-41581e4b0923
-@benchmark p_f[$i]($tt)
-
-# ╔═╡ 03f79d8d-a50b-44ed-bca7-e7ca47fc28d6
-p1(t) = sqrt(substitute(solutions[1], sol_dict(t)))
-
-# ╔═╡ 7b2cfc7a-e0a3-4574-ac4e-c68880767bae
-@benchmark p1($tt)
-
-# ╔═╡ 5e395dcc-c180-4483-9edd-3312217c71a2
-p_f_(t) = sqrt.(substitute.(solutions, (sol_dict(t),)))
-
-# ╔═╡ d56dcdd7-7d1d-48e2-8dee-11121a82a49f
-@benchmark p_f_($tt)[$i]
 
 # ╔═╡ 9eecf202-d3e7-405a-99d7-6a17a12d481a
 md"""
@@ -342,13 +264,98 @@ md"""
 """
 
 # ╔═╡ 54151540-4150-49c0-a260-d755d663462b
-par = GasChromatographySystems.graph_to_parameters(sys, db, [com_solutes[9]]; interp=true, dt=60)
+par = GasChromatographySystems.graph_to_parameters(sys, db, com_solutes[1:9]; interp=true, dt=60)
 
 # ╔═╡ b531f3cf-1d0a-453a-ad7b-16c113991ba2
 paths = GasChromatographySystems.all_paths(sys.g, 4)[2]
 
+# ╔═╡ bd9955af-9d6e-4092-8a8e-8cb62b1e97a9
+md"""
+## Holdup times
+"""
+
+# ╔═╡ 94b05220-e3c2-4ccb-8193-64aa3b224915
+GasChromatographySimulator.holdup_time(0.0, par[1])
+
+# ╔═╡ efda5295-ca67-4746-a84b-6de830e87e09
+GasChromatographySystems.index_parameter(sys.g, paths[1])
+
+# ╔═╡ 399d3c27-4db3-4165-af03-4512df3262d7
+function holdup_times_of_paths(t, paths, sys)
+	tMs = Array{Float64,1}(undef, length(paths))
+	tM = Array{Array{Float64,1},1}(undef, length(paths))
+	for i=1:length(paths)
+		i_par = GasChromatographySystems.index_parameter(sys.g, paths[i])
+		tM_ = Array{Float64}(undef, length(i_par))
+		for j=1:length(i_par)
+			tM_[j] = GasChromatographySimulator.holdup_time(t, par[i_par[j]])
+		end
+		tMs[i] = sum(tM_)
+		tM[i] = tM_
+	end
+	return tMs, tM
+end
+
+# ╔═╡ 2d856b07-7739-4b9b-a7f2-a2dedf5e882e
+tMs = holdup_times_of_paths(0.0, paths, sys)[1]
+
+# ╔═╡ 4bd3f0ea-03dd-4dd7-a8d8-99f20bcdb27a
+tMs[1]-tMs[2]
+
+# ╔═╡ a0314b36-7840-4fbe-8084-12d7c4fd5f9c
+tMs[3]-tMs[1]
+
+# ╔═╡ 9596cd2b-2e05-4247-a889-e64186fcca9a
+tMs[4]-tMs[3]
+
+# ╔═╡ 20b6a285-6449-4ec5-b0d3-a7c443978c0f
+tMs[4]-tMs[3]
+
+# ╔═╡ 82bb824c-a0c9-46a2-8aec-603fce1bf66d
+tMs[3]-tMs[1]
+
+# ╔═╡ 4864997a-b053-40bf-81e9-ff0a8b28867f
+tMs[1]-tMs[2]
+
+# ╔═╡ 80da63de-c461-4727-b57f-34856be6a71e
+begin
+	t = 0.0:1.0:1800.0
+	tM = Array{Float64}(undef, length(t), 4)
+	for i=1:length(t)
+		tM_ = holdup_times_of_paths(t[i], paths, sys)[1]
+		for j=1:4
+			tM[i,j] = tM_[j]
+		end
+	end
+	Plots.plot(t, tM[:,4].-tM[:,3], label="tM4-tM3")
+	Plots.plot!(t, tM[:,3].-tM[:,1], label="tM3-tM1")
+	Plots.plot!(t, tM[:,1].-tM[:,2], label="tM1-tM2")
+	# these holdup time differences between the different paths should be the same, but could vary during the program
+end
+
+# ╔═╡ 5101c8d7-7e16-407a-b9cb-e726994034da
+begin
+	Plots.plot(t, tM[:,1], label="tM1")
+	Plots.plot!(t, tM[:,2], label="tM2")
+	Plots.plot!(t, tM[:,3], label="tM3")
+	Plots.plot!(t, tM[:,4], label="tM4")
+	# the holdup times between the different paths should be different
+end
+
+# ╔═╡ e13060a8-9ab7-46b5-807d-93f577bf7ce3
+f(x)=0.0
+
+# ╔═╡ a07e2feb-5ba9-4d35-a776-a01d46ab84bb
+f_(x) = x
+
+# ╔═╡ 83978df2-41f5-48f1-a3a8-88a346730490
+f__(x) = f_(x) + f(x)
+
+# ╔═╡ 685cd6f8-c3c6-4f53-b6c5-0814e633c17c
+f__(10)
+
 # ╔═╡ 06d4d265-0353-46ee-ad7f-6fd4df88d11c
-sim_res = GasChromatographySystems.simulate_along_paths(sys, paths, db, [com_solutes[9]], par)
+sim_res = GasChromatographySystems.simulate_along_paths(sys, paths, par)
 
 # ╔═╡ 33e4d5c0-42f8-4c3e-8465-fb41cc38336e
 sim_res[3][1]
@@ -472,14 +479,101 @@ begin
 	p_chrom#_
 end
 
+# ╔═╡ edb3cbb3-040f-45fe-85be-5ec90ab93376
+md"""
+## Slicing the chromatogram
+"""
+
+# ╔═╡ 17cbcc86-9360-4702-b019-7b8071d320fc
+c = A1.*c1 .+ A2.*c2 .+ A3.*c3 .+ A4.*c4
+
+# ╔═╡ f4ea54b0-b95f-44f3-a76e-067eae2727ca
+Int.(fld.(collect(t1), 30.0))
+
+# ╔═╡ 6a33ee2c-8ed9-4e10-a878-75c742a9332e
+begin # slicing the 1D chrom to 2D
+	PM = 25.0
+	n = Int.(fld.(collect(t1), PM)) # number of the slices
+	slices = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
+	t_D2 = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
+	for i=1:length(unique(n))
+		i1 = findfirst(unique(n)[i].==n)
+		i2 = findlast(unique(n)[i].==n)
+		slices[i] = c[i1:i2]
+		t_D2[i] = t1[i1:i2] .- unique(n)[i] * PM
+	end
+	t_D1 = 0.0:PM:t1[end]
+end
+
+# ╔═╡ 8231226c-7ab7-49aa-89ff-00394975049f
+n
+
+# ╔═╡ db7beb42-7f7d-49e7-9944-c81f606c31a9
+t_D2
+
+# ╔═╡ 20d5756a-9663-4ddc-a243-a6cae54481b6
+begin
+	p_slices = Plots.plot(t_D2[1], slices[1])
+	for i=2:length(unique(n))
+		Plots.plot!(p_slices, t_D2[i], slices[i].+i*0.1)
+	end
+	p_slices
+end
+
+# ╔═╡ 11f8842a-1c32-4a52-8762-209f80e3cbe5
+function slicing(t1, c, PM)
+	n = Int.(fld.(collect(t1), PM)) # number of the slices
+	slices = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
+	t_D2 = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
+	for i=1:length(unique(n))
+		i1 = findfirst(unique(n)[i].==n)
+		i2 = findlast(unique(n)[i].==n)
+		slices[i] = c[i1:i2]
+		t_D2[i] = t1[i1:i2] .- unique(n)[i] * PM
+	end
+	t_D1 = 0.0:PM:t1[end]
+	return slices, t_D1, t_D2
+end
+
+# ╔═╡ 57d2199c-a1f7-45f0-aaf2-c1a4492967d5
+@bind select_PM PlutoUI.Slider(0.0:0.1:60.0, default=30.0)
+
+# ╔═╡ 2dc1893c-2c92-4453-a0a7-c85138b49482
+select_PM
+
+# ╔═╡ c00417e0-a227-4420-b9c8-a7770a2bdc3b
+begin
+	slices_, t_D1_, t_D2_ = slicing(t1, c, select_PM)
+	p_slices_ = Plots.plot(t_D2_[1], slices_[1])
+	for i=2:length(slices_)
+		Plots.plot!(p_slices_, t_D2_[i], slices_[i].+i*0.1)
+	end
+	p_slices_
+end
+
+# ╔═╡ f4f3a3a1-7ec6-4b87-959a-ae6a7fbc3164
+t_D2_
+
 # ╔═╡ Cell order:
 # ╠═7f5b6a3c-ed83-11ed-2af0-4b696e429dc4
+# ╠═595ee5c8-b125-48bc-9318-e04651c4443c
+# ╠═07d4ad41-168d-458e-86d7-28b304cc5589
+# ╠═aa6dfbab-c4e8-496d-86bb-aa6d07e11fcc
+# ╠═5e34bb31-71d3-4eb7-a951-977aa4e27074
+# ╠═1eed04b3-b900-4a4c-b256-213997469361
+# ╠═0aa52c1f-2515-46fd-8a95-4b591d3d844c
 # ╠═60ed17af-1494-4dd4-ab5a-9ed76ed82c11
 # ╠═af37fc60-57a4-4af9-b78e-fe467f3e9164
 # ╠═31190533-2581-42f9-b352-23ae1cd54f10
+# ╠═4bd3f0ea-03dd-4dd7-a8d8-99f20bcdb27a
+# ╠═a0314b36-7840-4fbe-8084-12d7c4fd5f9c
+# ╠═9596cd2b-2e05-4247-a889-e64186fcca9a
 # ╠═87fd20bd-2e93-401a-8978-6e4714bd334d
 # ╠═15faeed7-066a-4f66-b64f-9cd915437ca0
 # ╠═6e5cc5cd-7a17-4505-b2cb-caec7f4e39d1
+# ╠═efb6cb49-811b-4a29-8eac-93c79a10b765
+# ╠═2bb93f4d-3d7b-47ad-86e6-3a958a915a7e
+# ╠═02d8a178-410c-42f5-8784-596df16218b1
 # ╠═556e42d6-d0b0-4c0a-9044-f5462fd7de23
 # ╠═d6e02463-f9df-4658-ba6c-865f2640c3b9
 # ╠═803485e0-fd65-4794-98ae-b79fb13d9518
@@ -489,40 +583,32 @@ end
 # ╠═b04bd252-fea8-41ed-a249-cc564241a4ec
 # ╠═2aa1f5f1-2f60-4eaf-ae82-949df1532fd9
 # ╠═523c7c64-84a7-4612-99c0-c0fdd23591df
+# ╠═55f06025-db1c-4b42-9da8-5cb2d95e0234
 # ╠═714b3bdd-2b2b-44af-8672-f21245c57634
 # ╠═9df9bdcf-7efb-4cf3-a379-b89a4e81f25d
-# ╠═389bfb23-2bb0-4a4e-81b5-72d5d3b6409b
-# ╠═7dc3197e-fce8-4dd3-82e5-aed9ae75edd9
-# ╠═cb832d7b-027d-41a7-86d3-d5258cbf351a
-# ╠═c61e2f99-2250-4cbe-be6f-8038c61af70a
-# ╠═642ae6df-39a8-47f1-86ce-c210414c8b89
-# ╠═b2f86914-f2a8-4f32-93dd-46ab9ad03fc8
-# ╠═96b9987d-bb1a-4197-9751-c3021286e468
-# ╠═6d3a708f-5c50-4e8d-b432-c5ced01a68d6
-# ╠═a512cf44-4759-4717-b8f2-0ccbb15418a5
-# ╠═59869a59-0f2f-4ca6-8717-be6cb7b01109
-# ╠═89a986df-1828-451f-af82-c6c2d4ba759e
-# ╠═4073f1f9-0ee3-4b41-935c-757041aea8e7
-# ╠═c44d5045-39fa-4580-aa72-57e69f2cf1e2
-# ╠═e1f5c846-af73-4be5-9eb1-87eeff308a0c
-# ╠═d9b61df5-279f-4c0f-992e-7caa1578520d
-# ╠═cfa8e73f-ec5d-4c55-b0a1-b7029cdee213
-# ╠═3fc02e41-c92c-4ca9-a29b-f967e08c21cb
-# ╠═9fa333f0-ef2b-4195-878a-c485594c8def
-# ╠═4c6ada6d-828c-4fe6-a535-985134f74980
-# ╠═19e1dc02-52b7-4b32-b6ca-bf7eacaaa988
-# ╠═3786b3aa-ec89-41f8-98e1-6970f5a9dd87
-# ╠═0150b30f-b937-4091-8c5c-41581e4b0923
-# ╠═03f79d8d-a50b-44ed-bca7-e7ca47fc28d6
-# ╠═7b2cfc7a-e0a3-4574-ac4e-c68880767bae
-# ╠═5e395dcc-c180-4483-9edd-3312217c71a2
-# ╠═d56dcdd7-7d1d-48e2-8dee-11121a82a49f
+# ╠═60680135-ada1-48ae-bbef-b587cb81c50c
+# ╠═22e80b28-7670-4d80-a65b-942135d63a8a
+# ╠═d828afa5-8335-434a-96be-041cbd53a5a8
 # ╠═9eecf202-d3e7-405a-99d7-6a17a12d481a
 # ╠═a1dcef3e-3d8f-418a-875a-4d05258d39a3
 # ╠═bd81cafc-208f-4afb-94af-990c6697335b
 # ╠═70bc6f4d-a4aa-47e7-92f0-671d8f230e6a
 # ╠═54151540-4150-49c0-a260-d755d663462b
 # ╠═b531f3cf-1d0a-453a-ad7b-16c113991ba2
+# ╠═bd9955af-9d6e-4092-8a8e-8cb62b1e97a9
+# ╠═94b05220-e3c2-4ccb-8193-64aa3b224915
+# ╠═efda5295-ca67-4746-a84b-6de830e87e09
+# ╠═399d3c27-4db3-4165-af03-4512df3262d7
+# ╠═2d856b07-7739-4b9b-a7f2-a2dedf5e882e
+# ╠═20b6a285-6449-4ec5-b0d3-a7c443978c0f
+# ╠═82bb824c-a0c9-46a2-8aec-603fce1bf66d
+# ╠═4864997a-b053-40bf-81e9-ff0a8b28867f
+# ╠═80da63de-c461-4727-b57f-34856be6a71e
+# ╠═5101c8d7-7e16-407a-b9cb-e726994034da
+# ╠═e13060a8-9ab7-46b5-807d-93f577bf7ce3
+# ╠═a07e2feb-5ba9-4d35-a776-a01d46ab84bb
+# ╠═83978df2-41f5-48f1-a3a8-88a346730490
+# ╠═685cd6f8-c3c6-4f53-b6c5-0814e633c17c
 # ╠═33e4d5c0-42f8-4c3e-8465-fb41cc38336e
 # ╠═4d1b2744-29da-439b-aa1a-e45138823e60
 # ╠═414b08d5-8fa5-40d0-831c-0b63864f9cde
@@ -560,3 +646,15 @@ end
 # ╠═5623cb51-ceae-49ab-974b-c2a530d55487
 # ╠═01bae1cb-a3f4-4a2c-a5d3-8201a776c562
 # ╠═afb77882-db2f-48a9-85c6-889920e6ab78
+# ╠═edb3cbb3-040f-45fe-85be-5ec90ab93376
+# ╠═17cbcc86-9360-4702-b019-7b8071d320fc
+# ╠═f4ea54b0-b95f-44f3-a76e-067eae2727ca
+# ╠═6a33ee2c-8ed9-4e10-a878-75c742a9332e
+# ╠═8231226c-7ab7-49aa-89ff-00394975049f
+# ╠═db7beb42-7f7d-49e7-9944-c81f606c31a9
+# ╠═20d5756a-9663-4ddc-a243-a6cae54481b6
+# ╠═11f8842a-1c32-4a52-8762-209f80e3cbe5
+# ╠═57d2199c-a1f7-45f0-aaf2-c1a4492967d5
+# ╠═2dc1893c-2c92-4453-a0a7-c85138b49482
+# ╠═f4f3a3a1-7ec6-4b87-959a-ae6a7fbc3164
+# ╠═c00417e0-a227-4420-b9c8-a7770a2bdc3b

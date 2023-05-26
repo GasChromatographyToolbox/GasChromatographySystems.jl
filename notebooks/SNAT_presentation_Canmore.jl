@@ -39,20 +39,26 @@ according to Tungkijanansin2022
 """
 
 # ╔═╡ af37fc60-57a4-4af9-b78e-fe467f3e9164
-default_TP = GasChromatographySystems.TemperatureProgram([0.0, 1800.0], [40.0, 240.0])
+default_TP = GasChromatographySystems.TemperatureProgram([0.0, 1500.0], [40.0, 240.0])
 
 # ╔═╡ 71e7d4bb-faa8-43da-9bab-41046ca38ade
 begin
 	Ldratio² = [10e7, 8e7, 6e7, 4e7]
-	d = [0.1e-3, 0.1e-3, 0.1e-3, 0.1e-3]
+	d = [0.1e-3, 0.15e-3, 0.18e-3, 0.25e-3]
 	L = sqrt.(Ldratio².*d.^2)
 end
 
-# ╔═╡ 07fb0cea-e5aa-43be-900e-c7ff91f6e639
+# ╔═╡ 5548429b-da44-4abd-bb4d-00d9ab66649d
+L./d.^4
 
+# ╔═╡ 07fb0cea-e5aa-43be-900e-c7ff91f6e639
+begin
+	Ld4 = 1e16
+	L_ = d.^4.0*Ld4
+end
 
 # ╔═╡ 31190533-2581-42f9-b352-23ae1cd54f10
-begin
+#=begin
 	g = SimpleDiGraph(10)
 	add_edge!(g, 1, 2) # GC1
 	add_edge!(g, 2, 3) # Split 1a
@@ -81,20 +87,110 @@ begin
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
 	modules[1] = GasChromatographySystems.ModuleColumn("GC1", 30.0, 0.25e-3, 0.25e-6, "SLB5ms", default_TP, 1.0/60e6)
-	modules[2] = GasChromatographySystems.ModuleColumn("Sp1a", 0.5, 0.1e-3, 0.0e-6, "", default_TP, NaN)
-	modules[3] = GasChromatographySystems.ModuleColumn("Sp1b", 0.5, 0.1e-3, 0.0e-6, "", default_TP, NaN)
+	modules[2] = GasChromatographySystems.ModuleColumn("Sp1a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[3] = GasChromatographySystems.ModuleColumn("Sp1b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
 	modules[4] = GasChromatographySystems.ModuleColumn("Sp2b1", L[1]/2, d[1], 0.0e-6, "", default_TP, NaN)
-	modules[5] = GasChromatographySystems.ModuleColumn("Sp2a", L[1], d[1], 0.0e-6, "", default_TP, NaN)#3
-	modules[6] = GasChromatographySystems.ModuleColumn("Sp3b1", L[1]/2, d[1], 0.0e-6, "", default_TP, NaN)#2
-	modules[7] = GasChromatographySystems.ModuleColumn("Sp3a", L[1], d[1], 0.0e-6, "", default_TP, NaN)#4
+	modules[5] = GasChromatographySystems.ModuleColumn("Sp2a", L[3], d[3], 0.0e-6, "", default_TP, NaN)#3
+	modules[6] = GasChromatographySystems.ModuleColumn("Sp3b1", L[2]/2, d[2], 0.0e-6, "", default_TP, NaN)#2
+	modules[7] = GasChromatographySystems.ModuleColumn("Sp3a", L[4], d[4], 0.0e-6, "", default_TP, NaN)#4
 	modules[8] = GasChromatographySystems.ModuleColumn("Sp2b2", L[1]/2, d[1], 0.0e-6, "", default_TP, NaN)
-	modules[9] = GasChromatographySystems.ModuleColumn("Sp3b2", L[1]/2, d[1], 0.0e-6, "", default_TP, NaN)#2
-	modules[10] = GasChromatographySystems.ModuleColumn("Sp4a", 0.5, 0.1e-3, 0.0e-6, "", default_TP, NaN)
-	modules[11] = GasChromatographySystems.ModuleColumn("Sp4b", 0.5, 0.1e-3, 0.0e-6, "", default_TP, NaN)
-	modules[12] = GasChromatographySystems.ModuleColumn("GC2", 60.0, 0.25e-3, 0.5e-6, "Wax", default_TP, NaN)
+	modules[9] = GasChromatographySystems.ModuleColumn("Sp3b2", L[2]/2, d[2], 0.0e-6, "", default_TP, NaN)#2
+	modules[10] = GasChromatographySystems.ModuleColumn("Sp4a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[11] = GasChromatographySystems.ModuleColumn("Sp4b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[12] = GasChromatographySystems.ModuleColumn("GC2", 30.0, 0.25e-3, 0.25e-6, "Wax", default_TP, NaN)
+	# system
+	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, GasChromatographySystems.Options(ng=true, vis="HP")))
+end=#
+
+# ╔═╡ deb6198d-6e0a-471b-9ab3-30bd21ca37a1
+begin # column config from Tungkijanansin2022
+	g = SimpleDiGraph(10)
+	add_edge!(g, 1, 2) # GC1
+	add_edge!(g, 2, 3) # Split 1a
+	add_edge!(g, 2, 4) # Split 1b
+	add_edge!(g, 3, 5) # Split 2b1
+	add_edge!(g, 3, 7) # Split 2a
+	add_edge!(g, 4, 6) # Split 3b1
+	add_edge!(g, 4, 8) # Split 3a
+	add_edge!(g, 5, 7) # Split 2b2
+	add_edge!(g, 6, 8) # Split 3b2
+	add_edge!(g, 7, 9) # Split 4a
+	add_edge!(g, 8, 9) # Split 4b
+	add_edge!(g, 9, 10) # GC2
+	# pressure points
+	pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(g))
+	pp[1] = GasChromatographySystems.PressurePoint("p₁", [0.0, 1800.0], [475000, 475000]) # inlet 
+	pp[2] = GasChromatographySystems.PressurePoint("p₂", [0.0, 1800.0], [NaN, NaN]) #
+	pp[3] = GasChromatographySystems.PressurePoint("p₃", [0.0, 1800.0], [NaN, NaN])
+	pp[4] = GasChromatographySystems.PressurePoint("p₄", [0.0, 1800.0], [NaN, NaN])
+	pp[5] = GasChromatographySystems.PressurePoint("p₅", [0.0, 1800.0], [NaN, NaN])
+	pp[6] = GasChromatographySystems.PressurePoint("p₆", [0.0, 1800.0], [NaN, NaN])
+	pp[7] = GasChromatographySystems.PressurePoint("p₇", [0.0, 1800.0], [NaN, NaN])
+	pp[8] = GasChromatographySystems.PressurePoint("p₈", [0.0, 1800.0], [NaN, NaN])
+	pp[9] = GasChromatographySystems.PressurePoint("p₉", [0.0, 1800.0], [NaN, NaN])
+	pp[10] = GasChromatographySystems.PressurePoint("p₁₀", [0.0, 1800.0], [eps(Float64), eps(Float64)]) # outlet 1
+	# modules
+	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
+	modules[1] = GasChromatographySystems.ModuleColumn("GC1", 30.0, 0.25e-3, 0.25e-6, "SLB5ms", default_TP, NaN)
+	modules[2] = GasChromatographySystems.ModuleColumn("Sp1a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[3] = GasChromatographySystems.ModuleColumn("Sp1b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[4] = GasChromatographySystems.ModuleColumn("Sp2b1", 1.42, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[5] = GasChromatographySystems.ModuleColumn("Sp2a", 0.14, 0.1e-3, 0.0e-6, "", default_TP, NaN)#3
+	modules[6] = GasChromatographySystems.ModuleColumn("Sp3b1", 2.93, 0.25e-3, 0.0e-6, "", default_TP, NaN)#2
+	modules[7] = GasChromatographySystems.ModuleColumn("Sp3a", 4.46, 0.25e-3, 0.0e-6, "", default_TP, NaN)#4
+	modules[8] = GasChromatographySystems.ModuleColumn("Sp2b2", 0.095, 0.1e-3, 0.0e-6, "", default_TP, NaN)
+	modules[9] = GasChromatographySystems.ModuleColumn("Sp3b2", 0.05, 0.1e-3, 0.0e-6, "", default_TP, NaN)#2
+	modules[10] = GasChromatographySystems.ModuleColumn("Sp4a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[11] = GasChromatographySystems.ModuleColumn("Sp4b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[12] = GasChromatographySystems.ModuleColumn("GC2", 30.0, 0.25e-3, 0.25e-6, "Wax", default_TP, NaN)
 	# system
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, GasChromatographySystems.Options(ng=true, vis="HP")))
 end
+
+# ╔═╡ 0e3164b6-d583-477f-843f-f6d3d8a390d4
+#=begin # column config from Tungkijanansin2022 but const flow
+	g = SimpleDiGraph(10)
+	add_edge!(g, 1, 2) # GC1
+	add_edge!(g, 2, 3) # Split 1a
+	add_edge!(g, 2, 4) # Split 1b
+	add_edge!(g, 3, 5) # Split 2b1
+	add_edge!(g, 3, 7) # Split 2a
+	add_edge!(g, 4, 6) # Split 3b1
+	add_edge!(g, 4, 8) # Split 3a
+	add_edge!(g, 5, 7) # Split 2b2
+	add_edge!(g, 6, 8) # Split 3b2
+	add_edge!(g, 7, 9) # Split 4a
+	add_edge!(g, 8, 9) # Split 4b
+	add_edge!(g, 9, 10) # GC2
+	# pressure points
+	pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(g))
+	pp[1] = GasChromatographySystems.PressurePoint("p₁", [0.0, 1800.0], [NaN, NaN]) # inlet 
+	pp[2] = GasChromatographySystems.PressurePoint("p₂", [0.0, 1800.0], [NaN, NaN]) #
+	pp[3] = GasChromatographySystems.PressurePoint("p₃", [0.0, 1800.0], [NaN, NaN])
+	pp[4] = GasChromatographySystems.PressurePoint("p₄", [0.0, 1800.0], [NaN, NaN])
+	pp[5] = GasChromatographySystems.PressurePoint("p₅", [0.0, 1800.0], [NaN, NaN])
+	pp[6] = GasChromatographySystems.PressurePoint("p₆", [0.0, 1800.0], [NaN, NaN])
+	pp[7] = GasChromatographySystems.PressurePoint("p₇", [0.0, 1800.0], [NaN, NaN])
+	pp[8] = GasChromatographySystems.PressurePoint("p₈", [0.0, 1800.0], [NaN, NaN])
+	pp[9] = GasChromatographySystems.PressurePoint("p₉", [0.0, 1800.0], [NaN, NaN])
+	pp[10] = GasChromatographySystems.PressurePoint("p₁₀", [0.0, 1800.0], [eps(Float64), eps(Float64)]) # outlet 1
+	# modules
+	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
+	modules[1] = GasChromatographySystems.ModuleColumn("GC1", 30.0, 0.25e-3, 0.25e-6, "SLB5ms", default_TP, 1/60e6)
+	modules[2] = GasChromatographySystems.ModuleColumn("Sp1a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[3] = GasChromatographySystems.ModuleColumn("Sp1b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[4] = GasChromatographySystems.ModuleColumn("Sp2b1", 1.42, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[5] = GasChromatographySystems.ModuleColumn("Sp2a", 0.14, 0.1e-3, 0.0e-6, "", default_TP, NaN)#3
+	modules[6] = GasChromatographySystems.ModuleColumn("Sp3b1", 2.93, 0.25e-3, 0.0e-6, "", default_TP, NaN)#2
+	modules[7] = GasChromatographySystems.ModuleColumn("Sp3a", 4.46, 0.25e-3, 0.0e-6, "", default_TP, NaN)#4
+	modules[8] = GasChromatographySystems.ModuleColumn("Sp2b2", 0.095, 0.1e-3, 0.0e-6, "", default_TP, NaN)
+	modules[9] = GasChromatographySystems.ModuleColumn("Sp3b2", 0.05, 0.1e-3, 0.0e-6, "", default_TP, NaN)#2
+	modules[10] = GasChromatographySystems.ModuleColumn("Sp4a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[11] = GasChromatographySystems.ModuleColumn("Sp4b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
+	modules[12] = GasChromatographySystems.ModuleColumn("GC2", 30.0, 0.25e-3, 0.25e-6, "Wax", default_TP, NaN)
+	# system
+	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, GasChromatographySystems.Options(ng=true, vis="HP")))
+end=#
 
 # ╔═╡ 87fd20bd-2e93-401a-8978-6e4714bd334d
 GasChromatographySystems.plot_graph(sys)
@@ -222,6 +318,8 @@ plotly()
 begin
 	gr()
 	#p_pres = GasChromatographySystems.plot_pressure_over_time(sys; dt=60.0)
+	#Plots.plot!(p_pres, ylims=(1.5e5, 3.5e5))
+	#p_pres
 end
 
 # ╔═╡ 60680135-ada1-48ae-bbef-b587cb81c50c
@@ -463,13 +561,21 @@ plot4, t4, c4 = GasChromatographySimulator.plot_chromatogram(sim_res[2][3][end],
 
 # ╔═╡ afb77882-db2f-48a9-85c6-889920e6ab78
 begin
-	p_chrom = Plots.plot(t1, A1.*c1 .+ A2.*c2 .+ A3.*c3 .+ A4.*c4, xlabel="time in s", label="detector signal")
-	Plots.plot!(p_chrom, t1, A1.*c1.+ 0.1, label="1")
-	Plots.plot!(p_chrom, t1, A2.*c2.+ 0.2, label="2")
-	Plots.plot!(p_chrom, t1, A3.*c3.+ 0.3, label="3")
-	Plots.plot!(p_chrom, t1, A4.*c4.+ 0.4, label="4")
+	p_chrom = Plots.plot(xlabel="time in s", label="detector signal")
+	Plots.plot!(p_chrom, t1, A1.*c1.+ 0.0, label="1", c=2, lw=2)
+	Plots.plot!(p_chrom, t1, A2.*c2.+ 0.2, label="2", c=3, lw=2)
+	Plots.plot!(p_chrom, t1, A3.*c3.+ 0.4, label="3", c=4, lw=2)
+	Plots.plot!(p_chrom, t1, A4.*c4.+ 0.6, label="4", c=5, lw=2)
+	Plots.plot!(p_chrom, t1, (A1.*c1 .+ A2.*c2 .+ A3.*c3 .+ A4.*c4).+ 0.8, label="detector signal", c=1, lw=2)
+	Plots.plot!(p_chrom, xlims=(0.0, 520.0))
 	p_chrom#_
 end
+
+# ╔═╡ a995c54c-6386-4b1f-a3e3-c6ab84f4544d
+paths
+
+# ╔═╡ f2f0188d-bc26-49da-9d40-03238ed0c3e6
+#savefig(p_chrom, "chrom_SNAT_pconst.svg")
 
 # ╔═╡ edb3cbb3-040f-45fe-85be-5ec90ab93376
 md"""
@@ -551,8 +657,11 @@ t_D2_
 # ╠═60ed17af-1494-4dd4-ab5a-9ed76ed82c11
 # ╠═af37fc60-57a4-4af9-b78e-fe467f3e9164
 # ╠═71e7d4bb-faa8-43da-9bab-41046ca38ade
+# ╠═5548429b-da44-4abd-bb4d-00d9ab66649d
 # ╠═07fb0cea-e5aa-43be-900e-c7ff91f6e639
 # ╠═31190533-2581-42f9-b352-23ae1cd54f10
+# ╠═deb6198d-6e0a-471b-9ab3-30bd21ca37a1
+# ╠═0e3164b6-d583-477f-843f-f6d3d8a390d4
 # ╠═4bd3f0ea-03dd-4dd7-a8d8-99f20bcdb27a
 # ╠═a0314b36-7840-4fbe-8084-12d7c4fd5f9c
 # ╠═9596cd2b-2e05-4247-a889-e64186fcca9a
@@ -634,6 +743,8 @@ t_D2_
 # ╠═5623cb51-ceae-49ab-974b-c2a530d55487
 # ╠═01bae1cb-a3f4-4a2c-a5d3-8201a776c562
 # ╠═afb77882-db2f-48a9-85c6-889920e6ab78
+# ╠═a995c54c-6386-4b1f-a3e3-c6ab84f4544d
+# ╠═f2f0188d-bc26-49da-9d40-03238ed0c3e6
 # ╠═edb3cbb3-040f-45fe-85be-5ec90ab93376
 # ╠═17cbcc86-9360-4702-b019-7b8071d320fc
 # ╠═f4ea54b0-b95f-44f3-a76e-067eae2727ca

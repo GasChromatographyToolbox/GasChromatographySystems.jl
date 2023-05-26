@@ -26,7 +26,7 @@ end
 # ╔═╡ d7f045e5-47c7-44b6-8bce-ce9dc3154fff
 using Integrals
 
-# ╔═╡ f1c44358-3e2b-4417-8193-d608af3694c9
+# ╔═╡ 08d9257e-6d49-4cf6-97a9-f8b546d9e933
 using LsqFit
 
 # ╔═╡ 4dd08d9d-7068-4198-b5d4-5377a787dc8a
@@ -913,11 +913,11 @@ function chrom_after_loop(pl; nτ=6)
 	end
 	t1 = minimum(tstart[isnan.(tstart).==false])
 	t2 = maximum(tend[isnan.(tstart).==false])
-	t_sum = collect(t1:(t2-t1)/1000:t2)
-	c_sum = fill(0.0, 1001)
+	t_sum = collect(t1:(t2-t1)/10000:t2)
+	c_sum = fill(0.0, 10001)
 	for i=1:length(pl.Name)
 		if isnan(tstart[i])
-			c[i] = fill(NaN,1001)
+			c[i] = fill(NaN,10001)
 		else
 			c[i] = GasChromatographySimulator.chromatogram(t_sum, [pl.tR[i]], [pl.τR[i]])*pl.A[i]
 			c_sum = c_sum .+ c[i]
@@ -1136,27 +1136,95 @@ end
 # time in tl
 sol_tl[1].tR .- sol_gc2[1].tR
 
+# ╔═╡ 8b500dc4-98de-46af-9a83-f5ff7e8190ee
+sim[2][1][2].Name, sim[2][1][2].tR, sim[2][1][2].τR
+
+# ╔═╡ b0490a91-8a34-4fee-b819-de4f6ecb7a27
+1897.52 - 1901.32
+
+# ╔═╡ 9d6944b7-7794-4912-b8ab-ce91672cf0de
+function dot_color(name, selected_solutes)
+		if name == selected_solutes[1]
+			color = :blue
+		elseif name == selected_solutes[2]
+			color = :red
+		else
+			color = :orange
+		end
+	return color
+end
+
+# ╔═╡ a0b9918a-1ea2-463a-8587-2b4ca0f1230c
+#savefig(p_chrom_tl, "Chrom_after_tl_fit.svg")
+
+# ╔═╡ 6c4c9478-1392-442c-9a26-b654b64c1b14
+function heights_of_peaks(pl)
+	heights = Array{Float64}(undef, length(pl.tR))
+ 	for i=1:length(pl.tR)
+		heights[i] = (GasChromatographySimulator.chromatogram([pl.tR[i]], [pl.tR[i]], [pl.τR[i]])[1].*pl.A[i])
+	end
+	#Plots.plot(t_, chrom_sliced)
+	heights
+end
+
+# ╔═╡ 50792b68-8acf-4349-afd5-66267fa9153b
+heights_tl = heights_of_peaks(sol_tl[1])
+
+# ╔═╡ df1c6430-8ea8-4bdd-a9be-078a0357fe05
+@. model_g(x,p) = p[3]/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
+
+# ╔═╡ c2074cee-177c-4ece-bf67-0262e504536a
+function fit_gauss_D1(pl_D2, pl_D1)
+	heights = heights_of_peaks(pl_D2)
+	tR = pl_D2.tR
+	Name = unique(pl_D2.Name)
+	nsub = length(Name)
+
+	@. model_g(x,p) = p[3]/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
+	
+	sort_heights = Array{Array{Float64}}(undef, nsub)
+	sort_tR = Array{Array{Float64}}(undef, nsub)
+	fits = Array{LsqFit.LsqFitResult}(undef, nsub)
+	for i=1:nsub
+		ii_name = findall(Name[i].==pl_D2.Name)
+		ii = findfirst(Name[i].==pl_D1.Name)
+		sort_heights[i] = heights[ii_name]
+		sort_tR[i] = tR[ii_name]
+		fits[i] = curve_fit(model_g, sort_tR[i], sort_heights[i], [pl_D1.tR[ii], pl_D1.τR[ii], 1.0])
+	end
+	return DataFrame(Name=Name, tRs=sort_tR, heights=sort_heights, fits=fits)
+end
+
 # ╔═╡ f1504c87-b24f-4550-9a89-c7759b635218
 begin
 	gr()
 	t_tl, c_tls, c_tl = chrom_after_loop(sol_tl[1])
 	p_chrom_tl = Plots.plot(t_tl, c_tl, xlabel="time in s")
 	for i=1:length(c_tls)
-		if sol_tl[1].Name[i] == selected_solutes[1]
-			color = :blue
-		elseif sol_tl[1].Name[i] == selected_solutes[2]
-			color = :red
-		else
-			color = :orange
-		end
-		Plots.plot!(p_chrom_tl, t_tl, c_tls[i], label=sol_tl[1].Name[i], c=color)
+		#if sol_tl[1].Name[i] == selected_solutes[1]
+		#	color = :blue
+		#elseif sol_tl[1].Name[i] == selected_solutes[2]
+		#	color = :red
+		#else
+		#	color = :orange
+		#end
+		Plots.plot!(p_chrom_tl, t_tl, c_tls[i], label=sol_tl[1].Name[i], c=dot_color(sol_tl[1].Name[i], selected_solutes))
+		#Plots.scatter!(p_chrom_tl, (sol_tl[1].tR[i], heights_tl[i]), msize=2, c=color)
+	end
+	fit = fit_gauss_D1(sol_tl[1], sim[2][1][2])
+	for i=1:length(fit.Name)
+		Plots.scatter!(p_chrom_tl, fit.tRs[i], fit.heights[i], msize=2, c=dot_color(fit.Name[i], selected_solutes))
+		Plots.plot!(p_chrom_tl, t_tl, model_g(t_tl, fit.fits[i].param), c=dot_color(fit.Name[i], selected_solutes), linestyle=:dash)
 	end
 	Plots.plot!(p_chrom_tl, xticks=0:4:3000, legend=false)
 	p_chrom_tl
 end
 
-# ╔═╡ a0b9918a-1ea2-463a-8587-2b4ca0f1230c
-#savefig(p_chrom_tl, "Chrom_after_tl_new.svg")
+# ╔═╡ d0f14e55-10ad-4ddb-a743-54a3ca28aa85
+fit.Name
+
+# ╔═╡ 95897aaf-d2bf-4edd-9cf3-8bf7353fd089
+fit.fits
 
 # ╔═╡ 78a325ce-a934-4afb-bb31-e1eb98e5349a
 sol_final = sol_tl;
@@ -1433,6 +1501,12 @@ pl_simp = GasChromatographySystems.peaklist_GCxGC(sim_simp[2][1][1], sim_simp[2]
 
 # ╔═╡ 690988a3-e9f0-4c01-adb1-399ffbe2f093
 pl = GasChromatographySystems.peaklist_GCxGC(sim[2][1][1], sim[2][1][end])
+
+# ╔═╡ e41444ed-8012-4263-aa49-1e15399538a4
+begin
+	Plots.scatter(pl_simp.tR1, pl_simp.tR2.-pl_simp.tR1, xlabel="1st dim time in s", ylabel="2nd dim time in s")
+	Plots.scatter!(pl_simp.tR2, pl_simp.tR2.-pl_simp.tR1)
+end
 
 # ╔═╡ 1f1fe7e1-d27d-485c-ad65-022b0862cc16
 md"""
@@ -1756,7 +1830,6 @@ md"""
 # ╠═9c6573e8-bc0f-4c40-9eea-9733726fbd76
 # ╠═d5b4ac08-43e0-4d2c-ab7c-9fea2a926ff3
 # ╠═095ee9ba-d974-4625-a47c-3634d91c6a5d
-# ╠═f1c44358-3e2b-4417-8193-d608af3694c9
 # ╠═471878ef-b115-411c-9d9d-764d6db08069
 # ╠═f6093dce-30a7-4628-8362-0c5ed8c55ebc
 # ╠═beb15214-b1bb-4b39-a2aa-86f0727bc2c4
@@ -1798,7 +1871,17 @@ md"""
 # ╠═32e40a19-ebab-47a6-b4ca-9300c2b04dab
 # ╠═93ee192a-7374-43f4-a1a1-a1265fda42a4
 # ╠═f1504c87-b24f-4550-9a89-c7759b635218
+# ╠═8b500dc4-98de-46af-9a83-f5ff7e8190ee
+# ╠═d0f14e55-10ad-4ddb-a743-54a3ca28aa85
+# ╠═95897aaf-d2bf-4edd-9cf3-8bf7353fd089
+# ╠═b0490a91-8a34-4fee-b819-de4f6ecb7a27
+# ╠═9d6944b7-7794-4912-b8ab-ce91672cf0de
 # ╠═a0b9918a-1ea2-463a-8587-2b4ca0f1230c
+# ╠═6c4c9478-1392-442c-9a26-b654b64c1b14
+# ╠═50792b68-8acf-4349-afd5-66267fa9153b
+# ╠═08d9257e-6d49-4cf6-97a9-f8b546d9e933
+# ╠═df1c6430-8ea8-4bdd-a9be-078a0357fe05
+# ╠═c2074cee-177c-4ece-bf67-0262e504536a
 # ╠═78a325ce-a934-4afb-bb31-e1eb98e5349a
 # ╠═a76b6b3e-a41c-413e-9b4d-920823e9edda
 # ╠═ac2e34ed-a519-48fc-a87e-fb8dde6f3ff5
@@ -1841,6 +1924,7 @@ md"""
 # ╠═b360f18a-fb8a-4e66-b13f-67e14d008238
 # ╠═3e0f5a36-4db1-4ded-863b-2f0bfe01108a
 # ╠═690988a3-e9f0-4c01-adb1-399ffbe2f093
+# ╠═e41444ed-8012-4263-aa49-1e15399538a4
 # ╠═1f1fe7e1-d27d-485c-ad65-022b0862cc16
 # ╠═b5598366-a6d2-49b3-b71f-1aefe5b9ef26
 # ╠═6ad69424-5cd5-4ac2-ae15-c3220b6ce449

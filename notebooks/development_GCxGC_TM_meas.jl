@@ -1319,6 +1319,9 @@ begin
 	Plots.plot(t_, chrom_sliced_sum)
 end
 
+# ╔═╡ 6075d217-9072-46e6-9e59-47c8dad10a55
+
+
 # ╔═╡ 6021015b-107d-41e0-b258-43219028e292
 
 
@@ -1416,7 +1419,8 @@ t_D2
 # ╔═╡ af6e107a-6a36-4a23-8a1b-9c58dff9d22f
 begin
 	gr()
-	Plots.contour(t_D1[1:end-1], t_D2[1], slice_mat', levels=1)#, c=:jet1)
+	Plots.contour(t_D1[1:end-1], t_D2[1], slice_mat', levels=10, xlims=(1884, 1912), ylims=(0,4), xlabel="tR1 in s", ylabel="tR2 in s", size=(400,300), xticks=1884:4:1912)#, c=:jet1)
+	#savefig("2D_chrom_3terpenes.svg")
 end
 
 # ╔═╡ 0cadf6e0-c0a7-4632-9d4f-e1754123b75a
@@ -1549,6 +1553,7 @@ end
 
 # ╔═╡ 9c3223ab-1dcc-40b6-8996-c8dbc22a2c6a
 begin
+	gr()
 	_offset_D2 = 0.0
 	p_sliced = Plots.scatter(slice_tR1, slice_tR2.+_offset_D2, ylims=(0.0, 6.0))
 	Plots.scatter!(p_sliced, sim[2][1][1].tR, 2.0.*ones(length(sim[2][1][1].tR)))
@@ -1908,6 +1913,7 @@ md"""
 # ╠═976f9f2b-2d1b-4f5f-8d3c-d8132bd7fd8e
 # ╠═39a9ed84-c33b-4a0a-b489-4e0ac4fa5f39
 # ╠═af6e107a-6a36-4a23-8a1b-9c58dff9d22f
+# ╠═6075d217-9072-46e6-9e59-47c8dad10a55
 # ╠═0cadf6e0-c0a7-4632-9d4f-e1754123b75a
 # ╠═6021015b-107d-41e0-b258-43219028e292
 # ╠═5af9ebbe-b126-4ad4-9a44-c934d0d18cb3

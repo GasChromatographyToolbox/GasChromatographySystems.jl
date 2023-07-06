@@ -783,7 +783,7 @@ end
 
 function change_initial(par::GasChromatographySimulator.Parameters, pl)
 	# copys the parameters `par` and changes the values of par.sub[i].τ₀ and par.sub[i].t₀ to pl.tR[], pl.τR[]
-	CAS_pl = GasChromatographySimulator.CAS_identification(pl.Name).CAS
+	CAS_pl = [GasChromatographySimulator.CAS_identification(name).CAS for name in pl.Name] # CAS-numbers of the peaklist entries
 	newsub = Array{GasChromatographySimulator.Substance}(undef, length(par.sub))
 	for i=1:length(par.sub)
 		ii = findfirst(par.sub[i].CAS.==CAS_pl)
@@ -795,7 +795,7 @@ end
 
 function change_initial_focussed(par::GasChromatographySimulator.Parameters, pl; τ₀=zeros(length(pl.tR)))
 	# copys the parameters `par` and changes the values of par.sub[i].t₀ to pl.tR[]
-	CAS_pl = GasChromatographySimulator.CAS_identification(pl.Name).CAS
+	CAS_pl = [GasChromatographySimulator.CAS_identification(name).CAS for name in pl.Name] # CAS-numbers of the peaklist entries
 	newsub = Array{GasChromatographySimulator.Substance}(undef, length(par.sub))
 	for i=1:length(par.sub)
 		ii = findfirst(par.sub[i].CAS.==CAS_pl)
@@ -877,8 +877,8 @@ function peaklist_GCxGC(pl_1, pl_2)
 	pl_GCxGC = DataFrame(Name = pl_1.Name, tR1 = pl_1.tR, τR1 = pl_1.τR)
 	tR2 = Array{Float64}(undef, length(pl_GCxGC.Name))
 	τR2 = Array{Float64}(undef, length(pl_GCxGC.Name))
-	CAS1 = GasChromatographySimulator.CAS_identification(pl_1.Name).CAS
-	CAS2 = GasChromatographySimulator.CAS_identification(pl_2.Name).CAS
+	CAS1 = [GasChromatographySimulator.CAS_identification(name).CAS for name in pl_1.Name] 
+	CAS2 = [GasChromatographySimulator.CAS_identification(name).CAS for name in pl_2.Name]
 	for i=1:length(pl_GCxGC.Name)
 		ii = findfirst(CAS1[i].==CAS2)
 		tR2[i] = pl_2.tR[ii]

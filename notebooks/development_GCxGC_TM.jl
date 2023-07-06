@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.19
+# v0.19.26
 
 using Markdown
 using InteractiveUtils
@@ -818,9 +818,9 @@ function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].
 					if j == 1
 						new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], t₀, τ₀)
 						peaklists_[j], solutions_[j] = simulate(new_par_sys[i_par[j]])
-						peaklists_[j][!,:A] = ones(length(peaklists_[j].Name))
+#						peaklists_[j][!,:A] = ones(length(peaklists_[j].Name))
 						# increase peakwidth of 1st dimension by 100%
-						peaklists_[j][!,:τR] = 2.0.*peaklists_[j][!,:τR]
+#						peaklists_[j][!,:τR] = 2.0.*peaklists_[j][!,:τR]
 					elseif typeof(sys.modules[i_par[j]]) == ModuleTM
 						if refocus[i_par[j]] == true
 							τ₀=τ₀_focus

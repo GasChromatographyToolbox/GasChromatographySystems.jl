@@ -575,9 +575,9 @@ function slicing(tR, τR, PM, ratio, shift, par::GasChromatographySimulator.Para
 		for j=1:n_slice[i]
 			t₀ = init_t_start[i]+(j-1)*PM # initial start time
 			
-			sub_TM_focussed[ii] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "slice_f$(j), "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀, τ₀[i])
+			sub_TM_focussed[ii] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "TM1_f$(j), "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀, τ₀[i])
 
-			sub_TM_unfocussed[ii] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "slice_uf$(j), "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀+tcold, thot)
+			sub_TM_unfocussed[ii] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "TM1_uf$(j), "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀+tcold, thot)
 			# Integrals:
 			p = [tR[i], τR[i]]
 		
@@ -830,7 +830,7 @@ end
 
 # ╔═╡ 095ee9ba-d974-4625-a47c-3634d91c6a5d
 begin
-	gr()
+	plotly()
 	# focussed peaks
 	t_TM1, c_TM1s, c_TM1 = chrom_after_modulation(sol_1st_TM[1], par_slice_1st_TM)
 	p_chrom_TM1 = Plots.plot(t_TM1, c_TM1, xlabel="time in s")
@@ -993,7 +993,7 @@ end
 
 # ╔═╡ 96200092-8afd-4ce3-8287-79806a331656
 # time in loop
-sol_loop[1].tR .- sol_1st_TM[1].tR
+ΔtR_loop = sol_loop[1].tR .- sol_1st_TM[1].tR
 
 # ╔═╡ 486273df-608e-4f21-ab97-d5466f38f6e8
 md"""
@@ -1108,11 +1108,6 @@ end
 # ╔═╡ e1ce8764-cec4-4c43-9354-ccceea375f3f
 # for now, this 2nd modulator spot is deactivated and works with the oven temperature
 
-# ╔═╡ 9399f646-5263-469d-b51d-4af3609f58c2
-md"""
-# TODO
-"""
-
 # ╔═╡ 269dde5f-9611-458e-a731-ce37cd5bdb97
 tR_foc = sol_loop[1].tR
 
@@ -1128,8 +1123,37 @@ tR_unfoc = sol_loop_unfoc[1].tR
 # ╔═╡ 6f727703-05c3-4c1b-afad-084bb59dfb9b
 shift = sys.modules[5].shift
 
+# ╔═╡ cd1a2bed-0d5a-4530-8b47-51ca8e46709a
+(1-sys.modules[5].ratio)*sys.modules[5].PM
+
+# ╔═╡ becced0a-364f-4414-bcec-4b2b009d46b5
+# warning
+# 1. time in loop should be bigger than time of hot jet
+all(ΔtR_loop .- nτ .* τR_foc .> (1-sys.modules[5].ratio)*sys.modules[5].PM)
+
+# ╔═╡ 0924d96b-c598-45a3-ba08-9d0ae95e4a3a
+# warning
+# 2. time in loop + time of hot jet (roughly the width of the unfocussed peak) should be smaller than time of cold jet
+ΔtR_loop .+ (1-sys.modules[5].ratio)*sys.modules[5].PM .< sys.modules[5].ratio*sys.modules[5].PM
+
+# ╔═╡ 2390b6a8-8927-466d-a392-f76c4cd2c7f2
+function warning_2nd_TM(ΔtR_loop, τR_foc_loop, PM, ratio)
+	if all(ΔtR_loop .- nτ .* τR_foc .> (1-sys.modules[5].ratio)*sys.modules[5].PM) == false
+		@warn "Time in loop is shorter than time of hot jet. Breaktrough in the modulator."
+	elseif all(ΔtR_loop .+ 1.1*(1-sys.modules[5].ratio)*sys.modules[5].PM .< sys.modules[5].ratio*sys.modules[5].PM) == false
+		@warn "Time in loop (plus width of unfocussed part) is longer than time of cold jet. Breaktrough in the modulator."
+	end
+end
+
+# ╔═╡ f071a5bc-922d-4a17-81c1-2e809ff380a5
+warning_2nd_TM(ΔtR_loop.+3, τR_foc, sys.modules[5].PM, sys.modules[5].ratio)
+
 # ╔═╡ bb24116c-5828-40ce-9e8e-673dceb19a66
 init_t_start_foc = (fld.(tR_foc.-nτ.*τR_foc, PM)).*PM .+ shift
+
+# ╔═╡ 723b771c-d727-4438-8092-06a9ad060acc
+# warning
+tR_foc.+(1-sys.modules[5].ratio)*sys.modules[5].PM .- init_t_start_foc
 
 # ╔═╡ 3699039a-62fe-43e5-be1d-b1b166e9afbe
 init_t_end_foc = (fld.(tR_foc.+nτ.*τR_foc, PM)).*PM .+ shift
@@ -1146,8 +1170,52 @@ init_t_end_unfoc = (fld.(tR_unfoc.+1.0.*τR_unfoc, PM)).*PM .+ shift
 # ╔═╡ 3b8841e3-60dd-4cc2-8e93-9cc274a77225
 n_slice_unfoc = Int.((init_t_end_unfoc .- init_t_start_unfoc)./PM .+ 1)
 
+# ╔═╡ f7b718fb-488a-4eea-9e5d-b6d7b4cb29da
+A_foc_ = sol_loop[1].A
+
+# ╔═╡ ce48d436-4ebe-4887-b513-fb2562cd76d8
+A_unfoc_ = sol_loop_unfoc[1].A
+
+# ╔═╡ 914aa8c6-6ae1-4f56-a978-60496e3fbbc1
+n_slice_foc == n_slice_unfoc
+
+# ╔═╡ 0f213e62-ed46-4633-bdc6-3d3b729ef12a
+init_t_start_foc == init_t_start_unfoc
+
+# ╔═╡ 43d79322-59f5-4d07-9a42-2abb964cc0a9
+sub_TM2 = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice_foc))
+
+# ╔═╡ 5355575b-d3a6-436d-9c68-93a969cad4aa
+A_TM2 = Array{Float64}(undef, sum(n_slice))
+
+# ╔═╡ 3e95800f-69c3-445d-936c-1da337f77dbd
+τ₀=zeros(length(τR_foc))
+
+# ╔═╡ 9b3cd294-d6b3-42cd-81a1-07ad6119e012
+for i=1:length(n_slice_foc)
+		#for j=1:n_slice_foc[i] # n_slice_foc[i] should always be = 1
+			t₀ = init_t_start_foc[i]#+(j-1)*PM # initial start time
+			
+			sub_TM2[i] = GasChromatographySimulator.Substance(newpar_loop.sub[i].name, newpar_loop.sub[i].CAS, newpar_loop.sub[i].Tchar, newpar_loop.sub[i].θchar, newpar_loop.sub[i].ΔCp, newpar_loop.sub[i].φ₀, "TM2_f1_"*newpar_loop.sub[i].ann, newpar_loop.sub[i].Cag, t₀, τ₀[i])
+
+			A_TM2[i] = A_foc_[i] + A_unfoc_[i]
+		#end
+	end
+
+# ╔═╡ f845cfe5-bdde-4bc8-851f-3b05d14d75ad
+sub_TM2
+
+# ╔═╡ 16630a1c-d7e5-405d-b3fc-c802b2f48c85
+A_TM2
+
+# ╔═╡ 44c7cc8e-a02b-437a-8da0-89f94cac878f
+par
+
+# ╔═╡ 96a0bd4f-cfe1-4dc3-8059-ee270e979ddb
+par_2nd_TM = GasChromatographySimulator.Parameters(par[5].col, par[5].prog, sub_TM2, GasChromatographySimulator.Options(par[5].opt.alg, 1e-18, 1e-14, par[5].opt.Tcontrol, par[5].opt.odesys, par[5].opt.ng, par[5].opt.vis, par[5].opt.control, par[5].opt.k_th))
+
 # ╔═╡ a205623b-bd86-4cec-923f-7a87ede6d408
-function slicing_2nd(tR_foc, τR_foc, A_foc, tR_unfoc, τR_unfoc, A_unfoc, PM, ratio, shift, par::GasChromatographySimulator.Parameters, prev_par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(τR)), abstol=1e-18, reltol=1e-14)
+function slicing_2nd(tR_foc, τR_foc, A_foc, tR_unfoc, τR_unfoc, A_unfoc, PM, ratio, shift, par::GasChromatographySimulator.Parameters, prev_par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(τR_foc)), abstol=1e-18, reltol=1e-14)
 	tcold = PM*ratio
 	thot = PM*(1-ratio)
 	# focussed peaks
@@ -1162,113 +1230,76 @@ function slicing_2nd(tR_foc, τR_foc, A_foc, tR_unfoc, τR_unfoc, A_unfoc, PM, r
 
 	# focussed and unfocussed peaks of the same substance in the same modulation periode have to be combined, there areas added up
 
+	#if init_t_start_foc == init_t_start_unfoc # in every slice one focussed and one unfocussed peak of the same substance should be present
+		# the order in both should be the same
 	#---------
-	sub_TM = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice))
-	sub_TM_unfocussed = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice))
-	A_focussed = Array{Float64}(undef, sum(n_slice))
-	A_unfocussed = Array{Float64}(undef, sum(n_slice))
-	g(x,p) = 1/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
-	ii = 1
-	for i=1:length(n_slice)
-		for j=1:n_slice[i]
-			t₀ = init_t_start[i]+(j-1)*PM # initial start time
+	sub_TM2 = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice_foc))
+	#sub_TM_unfocussed = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice))
+	A_TM2 = Array{Float64}(undef, sum(n_slice))
+	#A_unfocussed = Array{Float64}(undef, sum(n_slice))
+	#g(x,p) = 1/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
+	#ii = 1
+	for i=1:length(n_slice_foc)
+		#for j=1:n_slice_foc[i] # n_slice_foc[i] should always be = 1
+			t₀ = init_t_start[i]#+(j-1)*PM # initial start time
 			
-			sub_TM_focussed[ii] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "slice_f$(j), "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀, τ₀[i])
+			sub_TM2[i] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "TM2_slice_f1, "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀, τ₀[i])
 
-			sub_TM_unfocussed[ii] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "slice_uf$(j), "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀+tcold, thot)
-			# Integrals:
-			p = [tR[i], τR[i]]
-		
-			prob_focussed = IntegralProblem(g, t₀, t₀+tcold, p)
-			prob_unfocussed = IntegralProblem(g, t₀+tcold, t₀+tcold+thot, p)
-			A_focussed[ii] = solve(prob_focussed, QuadGKJL()).u
-			A_unfocussed[ii] = solve(prob_unfocussed, QuadGKJL()).u
-			ii = ii + 1
-		end
+			A_TM2[i] = A_foc[i] + A_unfoc[i]
+		#end
 	end
 	newopt = GasChromatographySimulator.Options(par.opt.alg, abstol, reltol, par.opt.Tcontrol, par.opt.odesys, par.opt.ng, par.opt.vis, par.opt.control, par.opt.k_th)
-	newpar_focussed = GasChromatographySimulator.Parameters(par.col, par.prog, sub_TM_focussed, newopt)
-	newpar_unfocussed = GasChromatographySimulator.Parameters(par.col, par.prog, sub_TM_unfocussed, newopt)
+	newpar_TM2 = GasChromatographySimulator.Parameters(par.col, par.prog, sub_TM2, newopt)
 	
-	return newpar_focussed, newpar_unfocussed, A_focussed, A_unfocussed
+	return newpar_TM2, A_TM2
 end
 
-# ╔═╡ 6cb2892e-066d-448c-bc93-618220f0acc6
-par_slice_2nd_TM, par_slice_unfoc_2nd_TM, A_slice_2nd_TM, A_slice_unfoc_2nd_TM = slicing(sol_loop[1].tR, sol_loop[1].τR, sys.modules[5].PM, sys.modules[5].ratio, sys.modules[5].shift, par[5], newpar_loop; nτ=6)
-
-# ╔═╡ 12c5ce26-4a91-4b1b-b86e-0465c1c155a3
-#=begin
-	# if next module == moduleTM
-	par_prev__ = newpar_loop
-	# initial peak width?
-	τ0__ = sol_loop[1].τR
-	init_t_start__ = (fld.(sol_loop[1].tR.-6*sol_loop[1].τR, PM)).*PM
-	init_t_end__ = (fld.(sol_loop[1].tR.+6*sol_loop[1].τR, PM)).*PM 
-	n_slice__ = Int.((init_t_end__ .- init_t_start__)./PM .+ 1)
-	sub_TM__ = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice__))
-	if sum(n_slice__) == length(par_prev__.sub)
-		for i=1:sum(n_slice__)
-			sub_TM__[i] = GasChromatographySimulator.Substance(par_prev__.sub[i].name, par_prev__.sub[i].CAS, par_prev__.sub[i].Tchar, par_prev__.sub[i].θchar, par_prev__.sub[i].ΔCp, par_prev__.sub[i].φ₀, par_prev__.sub[i].ann, par_prev__.sub[i].Cag, init_t_start__[i], τ0__[i])
-		end
-	else
-		ii__ = 1
-		for i=1:length(n_slice__)
-			for j=1:n_slice__[i] # additional slices can appear
-				#sub_TM__[ii] = GasChromatographySimulator.Substance(par_prev__.sub[i].name, par_prev__.sub[i].CAS, par_prev__.sub[i].Tchar, par_prev__.sub[i].θchar, par_prev__.sub[i].ΔCp, par_prev__.sub[i].φ₀, par_prev__.sub[i].ann*", slice$(j)", par_prev__.sub[i].Cag, init_t_start__[i]+(j-1)*PM, τ0__[ii__])
-				ii__ = ii__ + 1
-			end
-		end
-	end
-	newopt__ = GasChromatographySimulator.Options(par[5].opt.alg, 1e-14, 1e-6, par[5].opt.Tcontrol, par[5].opt.odesys, par[5].opt.ng, par[5].opt.vis, par[5].opt.control, par[5].opt.k_th)
-	newpar__ = GasChromatographySimulator.Parameters(par[5].col, par[5].prog, sub_TM__, newopt__)
-	
-end=#
-
-# ╔═╡ ece4ada0-9944-40e1-b90d-8c1cd34209f6
-newpar_2nd_TM = change_parameters(par[5], newpar_loop, sol_loop[1], prev_TM=false)
-
-# ╔═╡ 31c843d2-e4ad-47b0-b90e-409b9bdb0f4c
-par_slice_2nd_TM_, A_slice_2nd_TM_ = slicing(sol_loop[1].tR, τ0___, PM, par[5], newpar_loop; nτ=6)
-
-# ╔═╡ 4c85cfd1-cb1b-449d-a101-e537abe25e86
+# ╔═╡ e78ffe7d-3f9f-471c-925c-4feae33231b8
 begin
-	sol_2nd_TM = GasChromatographySimulator.simulate(newpar_2nd_TM)
-	add_A_to_pl!(sol_2nd_TM[1], sol_loop[1].A, newpar_2nd_TM)
+	sol_2nd_TM = GasChromatographySimulator.simulate(par_2nd_TM)
+	#add_A_to_pl!(sol_TM2[1], A_TM2, par_TM2)
+	sol_2nd_TM[1][!,:A] = A_TM2
+	sol_2nd_TM[1]
 end
 
-# ╔═╡ dca2c405-93dc-460c-8a06-9892154d503a
-# time in 2nd TM (at oven temperature)
-sol_2nd_TM[1].tR .- sol_loop[1].tR
+# ╔═╡ db04ef60-3490-49c3-a5c1-f198c4015b06
+md"""
+#### Chromatogram after 2nd TM
+"""
 
-# ╔═╡ 6010a66c-d23c-4127-afae-62b6fddcb541
+# ╔═╡ ebc1b905-eef4-4c66-abb6-b070d19f17d9
+p_chrom_TM1
+
+# ╔═╡ 672e5876-0f0d-483a-9936-604b3fc7f97a
 begin
-	gr()
-	t_2nd_TM, c_2nd_TMs, c_2nd_TM = chrom_after_loop(sol_2nd_TM[1])
-	p_chrom_2nd_TM = Plots.plot(t_2nd_TM, c_2nd_TM, xlabel="time in s")
-	for i=1:length(c_2nd_TMs)
-		if sol_2nd_TM[1].Name[i] == selected_solutes[1]
-			color = :blue
-		elseif sol_2nd_TM[1].Name[i] == selected_solutes[2]
-			color = :red
-		else
-			color = :orange
-		end
-		Plots.plot!(p_chrom_2nd_TM, t_2nd_TM, c_2nd_TMs[i], label=sol_2nd_TM[1].Name[i], c=color)
-	end
-	Plots.plot!(p_chrom_2nd_TM, xticks=0:4:3000, legend=false)
-	p_chrom_2nd_TM
+	plotly()
+	# focussed peaks
+	t_TM2, c_TM2s, c_TM2 = chrom_after_modulation(sol_2nd_TM[1], par_2nd_TM)
+	p_chrom_TM2 = Plots.plot(t_TM2, c_TM2, xlabel="time in s")
+	# unfocussed peaks 
+	#t_unfoc, c_unfoc, h_unfoc, t_unfoc_sum, c_unfoc_sum = rec_chrom_after_modulation(sol_1st_unfoc_TM[1])
+	#for i=1:length(c_TM1s)
+	#	Plots.plot!(p_chrom_TM1, t_TM1, c_TM1s[i], label=sol_1st_TM[1].Name[i])
+	#end
+	Plots.plot!(p_chrom_TM2, xticks=0:4:3000, legend=false)
+	#Plots.plot!(p_chrom_TM1, t_unfoc_sum, c_unfoc_sum)
+	Plots.plot!(p_chrom_TM2)#, xlims=(1899.5, 1900.2), ylims=(-0.01, 0.5))
+	p_chrom_TM2
 end
 
 # ╔═╡ 231edaa6-8ef3-4a85-b48e-e0e1829d124d
-#savefig(p_chrom_2nd_TM, "Chrom_after_2nd_TM_new.svg")
+#savefig(p_chrom_TM2, "Chrom_after_2nd_TM_new.svg")
 
 # ╔═╡ 64e635f8-f5fd-4935-b44e-b02ebdd96b64
 md"""
-### connection to GC2
+### Connection to GC2
 """
 
-# ╔═╡ f388ca37-0167-4459-858b-619f1d2ce2d7
-newpar_mod_out = change_parameters(par[6], newpar_2nd_TM, sol_2nd_TM[1], prev_TM=false)
+# ╔═╡ 78dbaf44-0468-417a-8c69-90c139e2e2ad
+newpar_mod_out = change_initial(par[6], par_2nd_TM, sol_2nd_TM[1], prev_TM=true)
+
+# ╔═╡ 0400ee95-e5f2-48f3-bc57-8f3eb24a2e21
+sol_2nd_TM[1]
 
 # ╔═╡ bb01e67d-fbca-461e-b592-508bc5480b94
 begin
@@ -1276,13 +1307,19 @@ begin
 	add_A_to_pl!(sol_mod_out[1], sol_2nd_TM[1].A, newpar_mod_out)
 end
 
-# ╔═╡ c959c1ae-2c46-412d-b23b-fadb87d4d3be
-# time in mod out
-sol_mod_out[1].tR .- sol_2nd_TM[1].tR
+# ╔═╡ 195f8556-e4e8-4b85-86d1-f70b5a6ce0bf
+md"""
+#### Chromatogram after Connection to GC2
+"""
+
+# ╔═╡ 6dd3369b-5b76-45b3-aafa-966aee2c175e
+md"""
+# TODO - Check Area Assignment
+"""
 
 # ╔═╡ 088c0c0f-0722-4498-8306-8286069fc24b
 begin
-	gr()
+	plotly()
 	t_mod_out, c_mod_outs, c_mod_out = chrom_after_loop(sol_mod_out[1])
 	p_chrom_mod_out = Plots.plot(t_mod_out, c_mod_out, xlabel="time in s")
 	for i=1:length(c_mod_outs)
@@ -1308,7 +1345,7 @@ md"""
 """
 
 # ╔═╡ 98713f9d-123a-4eda-8a8c-72c6ada1a3a4
-newpar_gc2 = change_parameters(par[7], newpar_mod_out, sol_mod_out[1], prev_TM=false)
+newpar_gc2 = change_initial(par[7], newpar_mod_out, sol_mod_out[1], prev_TM=false)
 
 # ╔═╡ caef921f-f06c-471b-a56a-8415ac2d4fa6
 begin
@@ -1319,6 +1356,11 @@ end
 # ╔═╡ 05a0e4f4-8a1b-4f3c-84b0-c2491840d20c
 # time in gc2
 sol_gc2[1].tR .- sol_mod_out[1].tR
+
+# ╔═╡ 2465e19f-36f8-4a7d-93ed-d6b872532c40
+md"""
+#### Chromatogram after GC2
+"""
 
 # ╔═╡ 1bc4ae12-6f10-499a-b20f-35d5bd297378
 begin
@@ -1348,7 +1390,7 @@ md"""
 """
 
 # ╔═╡ 6accd799-2058-4756-9e31-c0b8b6bc6130
-newpar_tl = change_parameters(par[8], newpar_gc2, sol_gc2[1], prev_TM=false)
+newpar_tl = change_initial(par[8], newpar_gc2, sol_gc2[1], prev_TM=false)
 
 # ╔═╡ 32e40a19-ebab-47a6-b4ca-9300c2b04dab
 begin
@@ -1360,11 +1402,13 @@ end
 # time in tl
 sol_tl[1].tR .- sol_gc2[1].tR
 
+# ╔═╡ 07922786-3664-4308-a939-6d9cd9cffb33
+md"""
+#### Chromatogram after TL - Detector
+"""
+
 # ╔═╡ 8b500dc4-98de-46af-9a83-f5ff7e8190ee
 sim[2][1][2].Name, sim[2][1][2].tR, sim[2][1][2].τR
-
-# ╔═╡ b0490a91-8a34-4fee-b819-de4f6ecb7a27
-1897.52 - 1901.32
 
 # ╔═╡ 9d6944b7-7794-4912-b8ab-ce91672cf0de
 function dot_color(name, selected_solutes)
@@ -2080,48 +2124,65 @@ md"""
 # ╠═86274690-dfe8-4f71-8084-66fe5f03f932
 # ╟─0d51d9c5-8a70-4d4d-b247-4c5fe07b7d1c
 # ╠═e1ce8764-cec4-4c43-9354-ccceea375f3f
-# ╠═9399f646-5263-469d-b51d-4af3609f58c2
 # ╠═269dde5f-9611-458e-a731-ce37cd5bdb97
 # ╠═086c2c55-bd1f-4fb3-ad05-e7f6abbf87b8
 # ╠═a05a4081-db0d-406c-bee6-f5399c49b123
 # ╠═191670bd-952d-4521-b8eb-88202db5f98f
 # ╠═6f727703-05c3-4c1b-afad-084bb59dfb9b
+# ╠═cd1a2bed-0d5a-4530-8b47-51ca8e46709a
+# ╠═723b771c-d727-4438-8092-06a9ad060acc
+# ╠═becced0a-364f-4414-bcec-4b2b009d46b5
+# ╠═0924d96b-c598-45a3-ba08-9d0ae95e4a3a
+# ╠═2390b6a8-8927-466d-a392-f76c4cd2c7f2
+# ╠═f071a5bc-922d-4a17-81c1-2e809ff380a5
 # ╠═bb24116c-5828-40ce-9e8e-673dceb19a66
 # ╠═3699039a-62fe-43e5-be1d-b1b166e9afbe
 # ╠═d5f9d884-0274-4f71-b932-0d39fc457b14
 # ╠═71bc9925-13fb-4823-9f7c-4d9585114df5
 # ╠═06771585-9592-4542-979e-e9a271028094
 # ╠═3b8841e3-60dd-4cc2-8e93-9cc274a77225
+# ╠═f7b718fb-488a-4eea-9e5d-b6d7b4cb29da
+# ╠═ce48d436-4ebe-4887-b513-fb2562cd76d8
+# ╠═914aa8c6-6ae1-4f56-a978-60496e3fbbc1
+# ╠═0f213e62-ed46-4633-bdc6-3d3b729ef12a
+# ╠═43d79322-59f5-4d07-9a42-2abb964cc0a9
+# ╠═5355575b-d3a6-436d-9c68-93a969cad4aa
+# ╠═3e95800f-69c3-445d-936c-1da337f77dbd
+# ╠═9b3cd294-d6b3-42cd-81a1-07ad6119e012
+# ╠═f845cfe5-bdde-4bc8-851f-3b05d14d75ad
+# ╠═16630a1c-d7e5-405d-b3fc-c802b2f48c85
+# ╠═44c7cc8e-a02b-437a-8da0-89f94cac878f
+# ╠═96a0bd4f-cfe1-4dc3-8059-ee270e979ddb
 # ╠═a205623b-bd86-4cec-923f-7a87ede6d408
-# ╠═6cb2892e-066d-448c-bc93-618220f0acc6
-# ╠═12c5ce26-4a91-4b1b-b86e-0465c1c155a3
-# ╠═ece4ada0-9944-40e1-b90d-8c1cd34209f6
-# ╠═31c843d2-e4ad-47b0-b90e-409b9bdb0f4c
-# ╠═4c85cfd1-cb1b-449d-a101-e537abe25e86
-# ╠═dca2c405-93dc-460c-8a06-9892154d503a
-# ╠═6010a66c-d23c-4127-afae-62b6fddcb541
+# ╠═e78ffe7d-3f9f-471c-925c-4feae33231b8
+# ╠═db04ef60-3490-49c3-a5c1-f198c4015b06
+# ╠═ebc1b905-eef4-4c66-abb6-b070d19f17d9
+# ╠═672e5876-0f0d-483a-9936-604b3fc7f97a
 # ╠═231edaa6-8ef3-4a85-b48e-e0e1829d124d
 # ╠═64e635f8-f5fd-4935-b44e-b02ebdd96b64
-# ╠═f388ca37-0167-4459-858b-619f1d2ce2d7
+# ╠═78dbaf44-0468-417a-8c69-90c139e2e2ad
+# ╠═0400ee95-e5f2-48f3-bc57-8f3eb24a2e21
 # ╠═bb01e67d-fbca-461e-b592-508bc5480b94
-# ╠═c959c1ae-2c46-412d-b23b-fadb87d4d3be
+# ╠═195f8556-e4e8-4b85-86d1-f70b5a6ce0bf
+# ╠═6dd3369b-5b76-45b3-aafa-966aee2c175e
 # ╠═088c0c0f-0722-4498-8306-8286069fc24b
 # ╠═29cbe2b2-34fb-45dc-849b-2f678b3f8797
 # ╠═14bf7364-ce16-467e-894b-43d5ad1d91dc
 # ╠═98713f9d-123a-4eda-8a8c-72c6ada1a3a4
 # ╠═caef921f-f06c-471b-a56a-8415ac2d4fa6
 # ╠═05a0e4f4-8a1b-4f3c-84b0-c2491840d20c
+# ╠═2465e19f-36f8-4a7d-93ed-d6b872532c40
 # ╠═1bc4ae12-6f10-499a-b20f-35d5bd297378
 # ╠═935485a4-947e-42ad-ae92-9146c3f551ff
 # ╠═16e6bf4c-05ee-466d-95d6-e679e4410bc1
 # ╠═6accd799-2058-4756-9e31-c0b8b6bc6130
 # ╠═32e40a19-ebab-47a6-b4ca-9300c2b04dab
 # ╠═93ee192a-7374-43f4-a1a1-a1265fda42a4
+# ╠═07922786-3664-4308-a939-6d9cd9cffb33
 # ╠═f1504c87-b24f-4550-9a89-c7759b635218
 # ╠═8b500dc4-98de-46af-9a83-f5ff7e8190ee
 # ╠═d0f14e55-10ad-4ddb-a743-54a3ca28aa85
 # ╠═95897aaf-d2bf-4edd-9cf3-8bf7353fd089
-# ╠═b0490a91-8a34-4fee-b819-de4f6ecb7a27
 # ╠═9d6944b7-7794-4912-b8ab-ce91672cf0de
 # ╠═a0b9918a-1ea2-463a-8587-2b4ca0f1230c
 # ╠═6c4c9478-1392-442c-9a26-b654b64c1b14

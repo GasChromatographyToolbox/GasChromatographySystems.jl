@@ -205,7 +205,7 @@ function update_system(sys)
 			if typeof(sys.modules[i]) == ModuleColumn
 				new_modules[i] = ModuleColumn(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].flow)
 			elseif typeof(sys.modules[i]) == ModuleTM
-				new_modules[i] = ModuleTM(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].flow)
+				new_modules[i] = ModuleTM(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].flow)
 			end
 		end
 	end
@@ -411,7 +411,7 @@ function solve_balance(sys)
 	return sol
 end
 
-function flow_restriction(t, module_, options)
+#=function flow_restriction(t, module_, options)
 	if typeof(module_.temperature) <: TemperatureProgram
 		T_itp = GasChromatographySimulator.temperature_interpolation(module_.temperature.timesteps, module_.temperature.temperaturesteps, module_.temperature.gradient_function, module_.length)
 	elseif typeof(module_.temperature) <: Number
@@ -427,6 +427,16 @@ function flow_restrictions(sys)
 	for i=1:ne(sys.g)
 		f(t) = flow_restriction(t, sys.modules[i], sys.options)
 		kappas[i] = f
+	end
+	return kappas
+end=#
+
+function flow_restrictions(sys)
+	kappas = Array{Function}(undef, ne(sys.g))
+	for i=1:ne(sys.g)
+		T_itp = module_temperature(sys.modules[i], sys)[5]
+		κ(t) = GasChromatographySimulator.flow_restriction(sys.modules[i].length, t, T_itp, sys.modules[i].diameter, sys.options.mobile_phase; ng=sys.options.ng, vis=sys.options.vis)
+		kappas[i] = κ
 	end
 	return kappas
 end
@@ -652,7 +662,79 @@ function common_solutes(db, sys)
 	return common_solutes
 end
 
-function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1)
+function module_temperature(module_::ModuleColumn, sys; Tcold_abs=true)
+	if typeof(module_.temperature) <: TemperatureProgram # temperature is a TemperatureProgram
+		time_steps = module_.temperature.timesteps
+		temp_steps = module_.temperature.temperaturesteps	
+		gf = module_.temperature.gradient_function
+		a_gf = module_.temperature.a_gradient_function
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
+	elseif typeof(module_.temperature) <: Number # temperature is a constant value
+		time_steps = common_timesteps(sys)
+		temp_steps = module_.temperature.*ones(length(time_steps))
+		gf(x) = zero(x).*ones(length(time_steps))
+		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
+	end
+	return time_steps, temp_steps, gf, a_gf, T_itp
+end
+
+function module_temperature(module_::ModuleTM, sys; Tcold_abs=true)
+	if typeof(module_.temperature) <: TemperatureProgram # temperature is a TemperatureProgram
+		time_steps = module_.temperature.timesteps
+		temp_steps = module_.temperature.temperaturesteps	
+		gf = module_.temperature.gradient_function
+		a_gf = module_.temperature.a_gradient_function
+		T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
+	elseif typeof(module_.temperature) <: Number # temperature is a constant value
+		time_steps = common_timesteps(sys)
+		temp_steps = module_.temperature.*ones(length(time_steps))
+		gf(x) = zero(x).*ones(length(time_steps))
+		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
+		T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
+	end
+	T_itp(x,t) = if Tcold_abs == true # cool jet always at Tcold
+		therm_mod(t, module_.shift, module_.PM, module_.ratio, module_.Tcold, T_itp_(x, t) .+ module_.Thot .- 273.15) .+ 273.15 
+	else # cool jet always at T_itp_ + Tcold
+		therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15) .+ 273.15 
+	end
+	return time_steps, temp_steps, gf, a_gf, T_itp
+end
+
+function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1, Tcold_abs=true)
+	E = collect(edges(sys.g))
+	srcE = src.(E) # source indices
+	dstE = dst.(E) # destination indices
+	if interp == true # linear interpolation of pressure functions with step width dt
+		p_func = interpolate_pressure_functions(sys; dt=dt)
+	else
+		p_func = pressure_functions(sys)
+	end
+	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
+	for i=1:ne(sys.g)
+		# column parameters
+		col = GasChromatographySimulator.Column(sys.modules[i].length, sys.modules[i].diameter, [sys.modules[i].diameter], sys.modules[i].film_thickness, [sys.modules[i].film_thickness], sys.modules[i].stationary_phase, sys.options.mobile_phase)
+
+		# program parameters
+		pin_steps = sys.pressurepoints[srcE[i]].pressure_steps
+		pout_steps = sys.pressurepoints[dstE[i]].pressure_steps
+		pin_itp = p_func[srcE[i]]
+		pout_itp = p_func[dstE[i]]	
+		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys; Tcold_abs=Tcold_abs)
+		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
+
+		# substance parameters
+		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].stationary_phase, sys.options.mobile_phase, selected_solutes, NaN.*ones(length(selected_solutes)), NaN.*ones(length(selected_solutes)))
+
+		# option parameters
+		opt = GasChromatographySimulator.Options(sys.options.alg, sys.options.abstol, sys.options.reltol, sys.options.Tcontrol, sys.options.odesys, sys.options.ng, sys.options.vis, sys.options.control, sys.options.k_th)
+
+		parameters[i] = GasChromatographySimulator.Parameters(col, prog, sub, opt)
+	end
+	return parameters
+end
+
+#=function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1)
 	E = collect(edges(sys.g))
 	srcE = src.(E)
 	dstE = dst.(E)
@@ -691,7 +773,7 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		parameters[i] = GasChromatographySimulator.Parameters(col, prog, sub, opt)
 	end
 	return parameters
-end
+end=#
 
 # estimate possible paths in the graphs
 function all_paths(g) # brute force method using multiple random walk and only using unique results
@@ -1090,5 +1172,132 @@ function GCxGC_FM_simp(L1, d1, df1, sp1, TP1, F1, L2, d2, df2, sp2, TP2, F2, pin
 end
 
 example_GCxGC_FM_simp() = GCxGC_FM_simp(30.0, 0.25, 0.25, "Rxi17SilMS", default_TP(), 1.0, 2.0, 0.25, 0.25, "Wax", default_TP(), 2.0, NaN, 0.0)
+
+# thermal modulation
+
+# definitions for the periodic smoothed rectangle function
+# attention to the used values
+
+# general smooth rectangle function
+function smooth_rectangle(x, a, b, m)
+	# a ... mid-position of rising flank
+	# b ... mid-position of falling flank
+	# m ... width of the flank
+	if x.>a-6*m && x.<=a+6*m
+		f = 1/2 .*(1 .+erf.((x.-a)./sqrt.(2 .*m.^2)))
+	elseif x.>a+6*m && x.<=b-6*m
+		f = 1
+	elseif x.>b-6*m && x<=b+6*m
+		f = 1 .- 1/2 .*(1 .+erf.((x.-b)./sqrt.(2 .*m.^2)))
+	else
+		f = 0
+	end
+	return f
+end
+
+# smooth rectangle with mitpoint of the rising flank at 'xstart', after 'width' the falling flank, minimum values 'min' and maximum values 'max'. 
+function smooth_rectangle(x, xstart, width, min, max; flank=20)
+	a = xstart #- Δx₁/2
+	b = xstart + width#/2
+	m = width/flank
+	val = (max-min)*smooth_rectangle(x, a, b, m) + min
+	return val
+end
+
+# periodic repeated smoothed rectangle function with period 'PM', a shift by 'shift', 'ratio' of time of Tcold to time of Thot. A small shift is incorporated to move the falling flank from the beginning to the end
+function therm_mod(t, shift, PM, ratio, Tcold, Thot; flank=20) 
+	width = (1-ratio)*PM
+	tmod = mod(t+shift-width/2, PM)
+	tstart = ratio*PM
+	return smooth_rectangle.(tmod+2/3*width, tstart, width, Tcold, Thot; flank=flank)
+end
+
+# thermal modulator module
+struct ModuleTM<:GasChromatographySystems.AbstractModule
+	# Module
+	# thermal modulator
+	name::String
+	length::Float64
+	diameter#::Fd # Function
+	a_diameter::Array{Float64,1} # Parameters of diameter function, just for information
+	film_thickness#::Fdf # Function
+	a_film_thickness::Array{Float64,1} # Parameters of film_thickness function, just for information
+	stationary_phase::String
+	temperature # a number (constant temperature) or a TemperatureProgram structure
+	shift::Float64
+	PM::Float64 # a number, modulation periode 
+	ratio::Float64 # a number, ratio of the duration between cold and hot jet, approx. as rectangular function
+	Thot::Float64 # heating with hot jet
+	Tcold::Float64 # cooling with cold jet
+	flow # an number (constant flow) or a Function
+end
+
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold)
+	TM = ModuleTM(name, L, d, [d], df, [df], sp, tp, shift, pm, ratio, Thot, Tcold, NaN)
+	return TM
+end
+
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F)
+	TM = ModuleTM(name, L, d, [d], df, [df], sp, tp, shift, pm, ratio, Thot, Tcold, F)
+	return TM
+end
+
+# definition GCxGC system with thermal modulator
+function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shiftM, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=GasChromatographySystems.Options(ng=true))
+
+	TPs = [TP1, TP2, TPM]
+	
+	g = SimpleDiGraph(9)
+	add_edge!(g, 1, 2) # 1st-D GC
+	add_edge!(g, 2, 3) # modulator
+	add_edge!(g, 3, 4) # hot/cold 1
+	add_edge!(g, 4, 5) # modulator
+	add_edge!(g, 5, 6) # hot/cold 2 
+	add_edge!(g, 6, 7) # modulator
+	add_edge!(g, 7, 8) # 2nd-D GC
+	add_edge!(g, 8, 9) # TL
+	
+	# common time steps
+	com_timesteps = []
+	for i=1:length(TPs)
+		if typeof(TPs[i]) <: TemperatureProgram
+			com_timesteps = common_time_steps(com_timesteps, TPs[i].timesteps)
+		end
+	end
+	if isempty(com_timesteps)
+		com_timesteps = [0.0, 36000.0]
+	end
+	
+	# pressure points
+	if length(pin) == 1
+		pins = pin*1000.0.*ones(length(com_timesteps))
+	else
+	end
+	nans = NaN.*ones(length(com_timesteps))
+	if pout == 0.0
+		pouts = eps(Float64).*ones(length(com_timesteps))
+	else 
+		pouts = pout*1000.0.*ones(length(com_timesteps))
+	end
+	pp = Array{PressurePoint}(undef, nv(g))
+	pp[1] = PressurePoint("p1", com_timesteps, pins) # inlet 
+	for i=2:(nv(g)-1)
+		pp[i] = PressurePoint("p$(i)", com_timesteps, nans)
+	end
+	pp[end] = PressurePoint("p$(nv(g))", com_timesteps, pouts) # outlet
+	# modules
+	modules = Array{AbstractModule}(undef, ne(g))
+	modules[1] = ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6)
+	modules[2] = ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM)
+	modules[3] = ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shiftM, PM, ratioM, HotM, ColdM, NaN)
+	modules[4] = ModuleColumn("mod loop", LM[3], dM*1e-3, dfM*1e-6, spM, TPM)
+	modules[5] = ModuleTM("TM2", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, shiftM, PM, ratioM, HotM, ColdM, NaN)
+	modules[6] = ModuleColumn("mod out", LM[5], dM*1e-3, dfM*1e-6, spM, TPM, NaN)
+	modules[7] = ModuleColumn("GC column 2", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN)
+	modules[8] = ModuleColumn("TL", LTL, dTL*1e-3, dfTL*1e-6, spTL, TPTL, NaN)
+	# system
+	sys = update_system(System(g, pp, modules, opt))
+	return sys
+end
 
 end # module

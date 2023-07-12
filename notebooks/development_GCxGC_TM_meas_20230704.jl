@@ -204,6 +204,8 @@ begin
 	hotjet = 0.35
 	coldjet = PM - hotjet
 	
+	#sys = GCxGC_TM(30.0, 0.25, 0.25, "ZB1ms", GCxGC_TP, 0.1, 0.1, 0.1, "Stabilwax", GCxGC_TP, 0.48, 0.1, 0.1, "Stabilwax", 280.0, [0.30, 0.01, 0.90, 0.01, 0.30], 0.1, 0.1, "Stabilwax", 0.0, PM, coldjet/PM, 80.0, -80.0, GCxGC_TP, 0.8, NaN, 0.0)
+	# old:
 	sys = GCxGC_TM(31.5, 0.25, 0.25, "ZB1ms", GCxGC_TP, 0.1, 0.1, 0.1, "Stabilwax", GCxGC_TP, 0.25, 0.1, 0.1, "Stabilwax", 280.0, [0.60, 0.01, 0.30, 0.01, 0.50], 0.1, 0.1, "Stabilwax", 0.0, PM, coldjet/PM, 80.0, -80.0, GCxGC_TP, 0.65, NaN, 0.0)
 end
 
@@ -211,7 +213,7 @@ end
 GasChromatographySystems.plot_graph(sys)
 
 # ╔═╡ b9e3acb8-a7ec-40ef-ba58-932f79b08fb0
-function flow_restriction(t, module_::GasChromatographySystems.ModuleColumn, options)
+#=function flow_restriction(t, module_::GasChromatographySystems.ModuleColumn, options)
 	if typeof(module_.temperature) <: GasChromatographySystems.TemperatureProgram
 		T_itp = GasChromatographySimulator.temperature_interpolation(module_.temperature.timesteps, module_.temperature.temperaturesteps, module_.temperature.gradient_function, module_.length)
 	elseif typeof(module_.temperature) <: Number
@@ -220,52 +222,27 @@ function flow_restriction(t, module_::GasChromatographySystems.ModuleColumn, opt
 	end
 	κ = GasChromatographySimulator.flow_restriction(module_.length, t, T_itp, module_.diameter, options.mobile_phase; ng=options.ng, vis=options.vis)
 	return κ
-end
-
-# ╔═╡ 95f57b5b-652c-40c2-b66d-137bb7b2d878
-function modulator_temperature(x, t, module_::ModuleTM)
-	if typeof(module_.temperature) <: GasChromatographySystems.TemperatureProgram
-		T_itp_ = GasChromatographySimulator.temperature_interpolation(module_.temperature.timesteps, module_.temperature.temperaturesteps, module_.temperature.gradient_function, module_.length)
-	elseif typeof(module_.temperature) <: Number
-		gf(x) = [zero(x), zero(x)]
-		T_itp_ = GasChromatographySimulator.temperature_interpolation([0.0, 3600.0], [module_.temperature, module_.temperature], gf, module_.length)
-	end
-	T_itp(x, t) = therm_mod(t, module_.shift, module_.PM, module_.ratio, module_.Tcold, T_itp_(x, t) .+ module_.Thot .- 273.15) .+ 273.15 # cool jet always at Tcold
-	#T_itp(x, t) = therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15) .+ 273.15 # cool jet always at T_itp_ + Tcold
-	return T_itp(x, t)
-end
+end=#
 
 # ╔═╡ 9605b6ad-7cdc-47ee-9edf-c3ce531ae9a2
-function flow_restriction(t, module_::ModuleTM, options)
+#=function flow_restriction(t, module_::ModuleTM, options)
 	T_itp(x, t) = modulator_temperature(x, t, module_)
 	κ = GasChromatographySimulator.flow_restriction(module_.length, t, T_itp, module_.diameter, options.mobile_phase; ng=options.ng, vis=options.vis)
 	return κ
-end
+end=#
 
 # ╔═╡ 06487ba0-8752-40a8-b5d8-07fb08514ffe
-function flow_restrictions(sys)
+#=function flow_restrictions(sys)
 	kappas = Array{Function}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
 		f(t) = flow_restriction(t, sys.modules[i], sys.options)
 		kappas[i] = f
 	end
 	return kappas
-end
+end=#
 
 # ╔═╡ a5c2b339-4879-4367-9d03-ada1e7e6dd46
 sys
-
-# ╔═╡ 607265de-c784-4ed0-8e89-ebb206785b0b
-begin
-	TM_itp(x, t) = modulator_temperature(x, t, sys.modules[3])
-	Plots.plot(500.0:0.01:600.0, TM_itp.(0.0, 500.0:0.01:600.0).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
-end
-
-# ╔═╡ c366df65-59a4-427a-beee-bf0bef5fb409
-begin
-	κ = flow_restrictions(sys)
-	Plots.plot(0.0:0.01:100.0, κ[3].(0.0:0.01:100.0), title="flow restriction at modulator point", xlabel="time in s", ylabel="flow restriction in Pa s K m⁻³", label="")
-end
 
 # ╔═╡ bdbd8cc9-29fb-43ce-850b-8d18980808d3
 md"""
@@ -286,8 +263,88 @@ selected_solutes_ = GasChromatographySystems.common_solutes(db, sys).Name
 # ╔═╡ 43f27a81-dca0-4188-baf4-3f8140d9e57c
 selected_solutes = selected_solutes_[[14,16,17]]
 
+# ╔═╡ 2ec6f339-c7c4-41c1-869e-8cd94d993952
+#=function modulator_temperature(x, t, module_::ModuleTM)
+	if typeof(module_.temperature) <: GasChromatographySystems.TemperatureProgram
+		T_itp_ = GasChromatographySimulator.temperature_interpolation(module_.temperature.timesteps, module_.temperature.temperaturesteps, module_.temperature.gradient_function, module_.length)
+	elseif typeof(module_.temperature) <: Number
+		gf(x) = [zero(x), zero(x)]
+		T_itp_ = GasChromatographySimulator.temperature_interpolation([0.0, 3600.0], [module_.temperature, module_.temperature], gf, module_.length)
+	end
+	T_itp(x, t) = therm_mod(t, module_.shift, module_.PM, module_.ratio, module_.Tcold, T_itp_(x, t) .+ module_.Thot .- 273.15) .+ 273.15 # cool jet always at Tcold
+	#T_itp(x, t) = therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15) .+ 273.15 # cool jet always at T_itp_ + Tcold
+	return T_itp(x, t)
+end=#
+
+# ╔═╡ ac60e9eb-0dfb-4a8d-a6bb-5289110b40cd
+begin
+
+	function module_temperature(module_::GasChromatographySystems.ModuleColumn, sys; Tcold_abs=true)
+		if typeof(module_.temperature) <: GasChromatographySystems.TemperatureProgram # temperature is a TemperatureProgram
+			time_steps = module_.temperature.timesteps
+			temp_steps = module_.temperature.temperaturesteps	
+			gf = module_.temperature.gradient_function
+			a_gf = module_.temperature.a_gradient_function
+			T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
+		elseif typeof(module_.temperature) <: Number # temperature is a constant value
+			time_steps = GasChromatographySystems.common_timesteps(sys)
+			temp_steps = module_.temperature.*ones(length(time_steps))
+			gf(x) = zero(x).*ones(length(time_steps))
+			a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
+			T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
+		end
+		return time_steps, temp_steps, gf, a_gf, T_itp
+	end
+
+	function module_temperature(module_::ModuleTM, sys; Tcold_abs=true)
+		if typeof(module_.temperature) <: GasChromatographySystems.TemperatureProgram # temperature is a TemperatureProgram
+			time_steps = module_.temperature.timesteps
+			temp_steps = module_.temperature.temperaturesteps	
+			gf = module_.temperature.gradient_function
+			a_gf = module_.temperature.a_gradient_function
+			T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
+		elseif typeof(module_.temperature) <: Number # temperature is a constant value
+			time_steps = GasChromatographySystems.common_timesteps(sys)
+			temp_steps = module_.temperature.*ones(length(time_steps))
+			gf(x) = zero(x).*ones(length(time_steps))
+			a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
+			T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
+		end
+		T_itp(x,t) = if Tcold_abs == true # cool jet always at Tcold
+			therm_mod(t, module_.shift, module_.PM, module_.ratio, module_.Tcold, T_itp_(x, t) .+ module_.Thot .- 273.15) .+ 273.15 
+		else # cool jet always at T_itp_ + Tcold
+			therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15) .+ 273.15 
+		end
+		return time_steps, temp_steps, gf, a_gf, T_itp
+	end
+end
+
+# ╔═╡ 54c85e34-941d-41a1-9780-cf156f82d765
+# not essential function
+function flow_restrictions(sys)
+	kappas = Array{Function}(undef, ne(sys.g))
+	for i=1:ne(sys.g)
+		T_itp = module_temperature(sys.modules[i], sys)[5]
+		κ(t) = GasChromatographySimulator.flow_restriction(sys.modules[i].length, t, T_itp, sys.modules[i].diameter, sys.options.mobile_phase; ng=sys.options.ng, vis=sys.options.vis)
+		kappas[i] = κ
+	end
+	return kappas
+end
+
+# ╔═╡ c366df65-59a4-427a-beee-bf0bef5fb409
+begin
+	κ = flow_restrictions(sys)
+	Plots.plot(0.0:0.01:100.0, κ[3].(0.0:0.01:100.0), title="flow restriction at modulator point", xlabel="time in s", ylabel="flow restriction in Pa s K m⁻³", label="")
+end
+
+# ╔═╡ 607265de-c784-4ed0-8e89-ebb206785b0b
+begin
+	TM_itp = module_temperature(sys.modules[3], sys)[5]
+	Plots.plot(500.0:0.01:600.0, TM_itp.(0.0, 500.0:0.01:600.0).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
+end
+
 # ╔═╡ 7277a646-fd70-4032-9691-569eddeafec6
-function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1)
+function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1, Tcold_abs=true)
 	E = collect(edges(sys.g))
 	srcE = src.(E) # source indices
 	dstE = dst.(E) # destination indices
@@ -306,28 +363,29 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		pout_steps = sys.pressurepoints[dstE[i]].pressure_steps
 		pin_itp = p_func[srcE[i]]
 		pout_itp = p_func[dstE[i]]	
-		if typeof(sys.modules[i].temperature) <: GasChromatographySystems.TemperatureProgram # temperature is a TemperatureProgram
-			time_steps = sys.modules[i].temperature.timesteps
-			temp_steps = sys.modules[i].temperature.temperaturesteps	
-			gf = sys.modules[i].temperature.gradient_function
-			a_gf = sys.modules[i].temperature.a_gradient_function
-			T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, sys.modules[i].length)
-		elseif typeof(sys.modules[i].temperature) <: Number # temperature is a constant value
-			time_steps = GasChromatographySystems.common_timesteps(sys)
-			temp_steps = sys.modules[i].temperature.*ones(length(time_steps))
-			gf(x) = zero(x).*ones(length(time_steps))
-			a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
-			T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, sys.modules[i].length)
-		end
-		T_itp(x, t) = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleColumn
-			T_itp_(x,t) 
-		elseif typeof(sys.modules[i]) == ModuleTM
-			# cool jet always at Tcold
-			therm_mod(t, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Tcold, T_itp_(x, t) .+ sys.modules[i].Thot .- 273.15) .+ 273.15 
-			# cool jet always at T_itp_ + Tcold
-			#therm_mod(t, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, T_itp_(x, t) .+ sys.modules[i].Tcold .- 273.15, T_itp_(x, t) .+ sys.modules[i].Thot .- 273.15) .+ 273.15 
-			##modulator_temperature(x, t, sys.modules[i])
-		end
+#		if typeof(sys.modules[i].temperature) <: GasChromatographySystems.TemperatureProgram # temperature is a TemperatureProgram
+#			time_steps = sys.modules[i].temperature.timesteps
+#			temp_steps = sys.modules[i].temperature.temperaturesteps	
+#			gf = sys.modules[i].temperature.gradient_function
+#			a_gf = sys.modules[i].temperature.a_gradient_function
+#			T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, sys.modules[i].length)
+#		elseif typeof(sys.modules[i].temperature) <: Number # temperature is a constant value
+#			time_steps = GasChromatographySystems.common_timesteps(sys)
+#			temp_steps = sys.modules[i].temperature.*ones(length(time_steps))
+#			gf(x) = zero(x).*ones(length(time_steps))
+#			a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
+#			T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, sys.modules[i].length)
+#		end
+#		T_itp(x, t) = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleColumn
+#			T_itp_(x,t) 
+#		elseif typeof(sys.modules[i]) == ModuleTM
+#			# cool jet always at Tcold
+#			therm_mod(t, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Tcold, T_itp_(x, t) .+ sys.modules[i].Thot .- 273.15) .+ 273.15 
+#			# cool jet always at T_itp_ + Tcold
+#			#therm_mod(t, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, T_itp_(x, t) .+ sys.modules[i].Tcold .- 273.15, T_itp_(x, t) .+ sys.modules[i].Thot .- 273.15) .+ 273.15 
+#			##modulator_temperature(x, t, sys.modules[i])
+#		end
+		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys; Tcold_abs=Tcold_abs)
 		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
 
 		# substance parameters
@@ -342,7 +400,7 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 end
 
 # ╔═╡ 793560f7-d364-4c68-81ec-994441a41059
-par = graph_to_parameters(sys, db, selected_solutes)
+par = graph_to_parameters(sys, db, selected_solutes; Tcold_abs=true)
 
 # ╔═╡ 6993afed-4519-4c8a-9cfc-87c72723c444
 begin
@@ -409,6 +467,7 @@ sim[2][1][2]
 #savefig(p_chrom_before, "peak_before_modulator_new.svg")
 
 # ╔═╡ 82c69944-c4e0-4699-87c0-29500b33ba78
+# not essential function
 function chrom_before_modulation(pl; nτ=6)
 	tstart = Array{Float64}(undef, length(pl.Name))
 	tend = Array{Float64}(undef, length(pl.Name))
@@ -439,7 +498,7 @@ begin
 end
 
 # ╔═╡ ce958d12-3dad-4e3c-ab57-f84136610870
-begin
+#=begin
 
 	function change_initial(par::GasChromatographySimulator.Parameters, init_t, init_τ)
 		# copys the parameters `par` and changes the values of par.sub[i].τ₀ and par.sub[i].t₀ to init_τ[i] resp. init_t[i]
@@ -484,7 +543,7 @@ begin
 		newpar = GasChromatographySimulator.Parameters(par.col, par.prog, newsub, par.opt)
 		return newpar
 	end
-end
+end=#
 
 # ╔═╡ 70597ee8-760d-4c21-af6c-981922208d10
 md"""
@@ -559,6 +618,7 @@ begin
 end
 
 # ╔═╡ 3388fdf6-dff9-4d44-9db3-5bf77a57980d
+# this splicing function is with separating focussed and unfocussed peak segments
 function slicing(tR, τR, PM, ratio, shift, par::GasChromatographySimulator.Parameters, prev_par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(τR)), abstol=1e-18, reltol=1e-14)
 	tcold = PM*ratio
 	thot = PM*(1-ratio)
@@ -571,6 +631,10 @@ function slicing(tR, τR, PM, ratio, shift, par::GasChromatographySimulator.Para
 	A_unfocussed = Array{Float64}(undef, sum(n_slice))
 	g(x,p) = 1/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
 	ii = 1
+	Name = Array{String}(undef, sum(n_slice))
+	CAS = Array{String}(undef, sum(n_slice))
+	Ann_focussed = Array{String}(undef, sum(n_slice))
+	Ann_unfocussed = Array{String}(undef, sum(n_slice))
 	for i=1:length(n_slice)
 		for j=1:n_slice[i]
 			t₀ = init_t_start[i]+(j-1)*PM # initial start time
@@ -585,34 +649,44 @@ function slicing(tR, τR, PM, ratio, shift, par::GasChromatographySimulator.Para
 			prob_unfocussed = IntegralProblem(g, t₀+tcold, t₀+tcold+thot, p)
 			A_focussed[ii] = solve(prob_focussed, QuadGKJL()).u
 			A_unfocussed[ii] = solve(prob_unfocussed, QuadGKJL()).u
+			# Areas in the same order as sub_TM_focussed rep. sub_TM_unfocussed
+			Name[ii] = sub_TM_focussed[ii].name
+			CAS[ii] = sub_TM_focussed[ii].CAS
+			Ann_focussed[ii] = sub_TM_focussed[ii].ann
+			Ann_unfocussed[ii] = sub_TM_unfocussed[ii].ann
 			ii = ii + 1
 		end
 	end
 	newopt = GasChromatographySimulator.Options(par.opt.alg, abstol, reltol, par.opt.Tcontrol, par.opt.odesys, par.opt.ng, par.opt.vis, par.opt.control, par.opt.k_th)
 	newpar_focussed = GasChromatographySimulator.Parameters(par.col, par.prog, sub_TM_focussed, newopt)
 	newpar_unfocussed = GasChromatographySimulator.Parameters(par.col, par.prog, sub_TM_unfocussed, newopt)
+
+	df_A_foc = DataFrame(Name=Name, CAS=CAS, Annotations=Ann_focussed, A=A_focussed)
+	df_A_unfoc = DataFrame(Name=Name, CAS=CAS, Annotations=Ann_unfocussed, A=A_unfocussed)
 	
-	return newpar_focussed, newpar_unfocussed, A_focussed, A_unfocussed
+	return newpar_focussed, newpar_unfocussed, df_A_foc, df_A_unfoc
 end
 
 # ╔═╡ e4172084-2dd7-4daf-b2b9-cc84891c06f2
 par_slice_1st_TM, par_slice_unfoc_1st_TM, A_slice_1st_TM, A_slice_unfoc_1st_TM = slicing(sim[2][1][2].tR, sim[2][1][2].τR, sys.modules[3].PM, sys.modules[3].ratio, sys.modules[3].shift, par[3], par[2]; nτ=6) # competly slicing up the peaks at the modulator
 
-# ╔═╡ d98aca0b-321b-4623-aa99-4ea144a98726
+# ╔═╡ 3c22e8aa-376d-4eec-9650-3bb102d4a0b8
 # identfy the common index of a substances CAS number and Annotations in a peaklist 
-function common_index(pl, sub)
-	ii_CAS = findall(sub.CAS.==pl.CAS)
-	ii_ann = findall(occursin.(split.(sub.ann, ", ")[1], pl.Annotations))
+function common_index(pl, CAS, Annotation)
+	ii_CAS = findall(CAS.==pl.CAS)
+	ii_ann = findall(occursin.(Annotation, pl.Annotations))
 	ii = intersect(ii_CAS, ii_ann)[1]
 	return ii
 end
 
 # ╔═╡ 846c3cab-90d4-4e73-9ce5-c1b41f937cdf
-function add_A_to_pl!(pl, A, par)
-	sort_A = Array{Float64}(undef, length(par.sub))
-	for i=1:length(par.sub)
-		ii = common_index(pl, par.sub[i])
-		sort_A[ii] = A[i]
+function add_A_to_pl!(pl, df_A)
+	# add the areas in the dataframe df_A to the peaklist, same CAS and Annotations are used to identify the correct solute
+	sort_A = Array{Float64}(undef, length(df_A.A))
+	for i=1:length(df_A.A)
+		ii = common_index(pl, df_A.CAS[i], join(split(df_A.Annotations[i], ", ")[1:end-1], ", "))
+		#ii = common_index(pl, df_A.CAS[i], split(df_A.Annotations[i], ", ")[1])
+		sort_A[ii] = df_A.A[i]
 	end
 	pl[!, :A] = sort_A
 	return pl
@@ -622,8 +696,11 @@ end
 begin
 	sol_1st_TM = GasChromatographySimulator.simulate(par_slice_1st_TM)
 	
-	add_A_to_pl!(sol_1st_TM[1], A_slice_1st_TM, par_slice_1st_TM)
+	add_A_to_pl!(sol_1st_TM[1], A_slice_1st_TM)
 end
+
+# ╔═╡ 629d4ad1-9961-4d2c-bb41-3c3832bc20fd
+sol_1st_TM[1].tR .- 1876.0 .- sys.modules[3].ratio*sys.modules[3].PM
 
 # ╔═╡ dbc9af08-1dc3-4323-933a-ba981d962086
 md"""
@@ -656,7 +733,7 @@ A_slice_unfoc_1st_TM
 begin
 	sol_1st_unfoc_TM = GasChromatographySimulator.simulate(par_slice_unfoc_1st_TM)
 	
-	add_A_to_pl!(sol_1st_unfoc_TM[1], A_slice_unfoc_1st_TM, par_slice_unfoc_1st_TM)
+	add_A_to_pl!(sol_1st_unfoc_TM[1], A_slice_unfoc_1st_TM)
 end
 
 # ╔═╡ 3c20b2b4-ca9a-4b90-abb4-4cc6fd25a733
@@ -691,16 +768,27 @@ begin
 end
 
 # ╔═╡ 402e9e25-3d5b-46c2-8b5e-4a472fb357f7
-traces(sol_1st_TM[2], par_slice_1st_TM, 30)
+traces(sol_1st_TM[2], par_slice_1st_TM, 1)
 
 # ╔═╡ 9c5ec167-212d-413a-a2bc-fb00d015af51
 begin
 	p_Tt = Plots.plot(xlabel="time in s", ylabel="temperature in °C", legend=false)
-	for i=1:30
+	for i=1:length(sol_1st_TM[2])
 		trace = traces(sol_1st_TM[2], newpar, i)
 		Plots.plot!(p_Tt, trace.t, trace.T.-273.15)
 	end
 	p_Tt
+end
+
+# ╔═╡ 740e977e-4cf8-496d-bb1a-000871bc4211
+begin
+	p_τt = Plots.plot(xlabel="time in s", ylabel="τ in s", legend=false)
+	for i=1:length(sol_1st_TM[2])
+		trace = traces(sol_1st_TM[2], newpar, i)
+		Plots.plot!(p_τt, trace.t, sqrt.(trace.τ²))
+	end
+	p_τt
+	# Ableitung der Rechteckfuntion (Temperatur modulation) ist immer NULL -> der schlagartige Temperaturanstieg wird bei der Peakbreitensimulation nicht berücksichtigt
 end
 
 # ╔═╡ 67a4dff7-2634-4ae2-adb0-515807988b17
@@ -721,14 +809,19 @@ md"""
 end=#
 
 # ╔═╡ 9c6573e8-bc0f-4c40-9eea-9733726fbd76
-function chrom_after_modulation(pl, par; nτ=6)
+function chrom_after_modulation(pl, par; nτ=6, width_sim=false)
 	tstart = Array{Float64}(undef, length(pl.Name))
 	tend = Array{Float64}(undef, length(pl.Name))
 	t = Array{Array{Float64}}(undef, length(pl.Name))
 	c = Array{Array{Float64}}(undef, length(pl.Name))
 	τR = Array{Float64}(undef, length(pl.Name))
 	for i=1:length(pl.Name)
-		τR[i] = par.col.L/pl.uR[i] 
+		# Ableitung der Rechteckfuntion (Temperatur modulation) ist immer NULL -> der schlagartige Temperaturanstieg wird bei der Peakbreitensimulation nicht berücksichtigt, um dies zu berücksichtigen wird für width_sim=false die Peakbreite abgeschätz von der Länge des Modulator Spots und der Geschwindigkeit der Substanz bei Elution (im Hot Jet)
+		τR[i] = if width_sim == true
+			pl.τR[i]
+		else
+			par.col.L/pl.uR[i] 
+		end
 		tstart[i] = pl.tR[i] - nτ * τR[i]
 		tend[i] = pl.tR[i] + nτ * τR[i]	
 	end
@@ -786,14 +879,14 @@ function rect(x, w, h)
 	# rect starting at x=0
 	# w ... width 
 	# h ... height
-	res = if abs(x-w/2) > w/2
+	rec = if abs(x-w/2) > w/2
 		0
 	elseif abs(x-w/2) == w/2
 		h/2
 	elseif abs(x-w/2) < w/2
 		h
 	end
-	return res
+	return rec
 end
 
 # ╔═╡ 47bd51af-7f68-4967-aac2-c80e4ee73ff7
@@ -830,9 +923,9 @@ end
 
 # ╔═╡ 095ee9ba-d974-4625-a47c-3634d91c6a5d
 begin
-	plotly()
+	gr()
 	# focussed peaks
-	t_TM1, c_TM1s, c_TM1 = chrom_after_modulation(sol_1st_TM[1], par_slice_1st_TM)
+	t_TM1, c_TM1s, c_TM1 = chrom_after_modulation(sol_1st_TM[1], par_slice_1st_TM, width_sim=false)
 	p_chrom_TM1 = Plots.plot(t_TM1, c_TM1, xlabel="time in s")
 	# unfocussed peaks 
 	t_unfoc, c_unfoc, h_unfoc, t_unfoc_sum, c_unfoc_sum = rec_chrom_after_modulation(sol_1st_unfoc_TM[1])
@@ -856,8 +949,10 @@ md"""
 """
 
 # ╔═╡ 6a3f4043-63ba-44ef-b9ce-a391bc697fe6
-function change_initial(par_, prev_par, prev_pl; prev_TM=true)
-	if prev_TM == true # if the previous module is a thermal modulator, than the new initial peak width is approximated as length of modulator spot divided by the velocity of the solute at the end of the modulator spot 
+function change_initial(par_, prev_par, prev_pl; prev_TM=false)
+	if prev_TM == true 
+		# Ableitung der Rechteckfuntion (Temperatur modulation) ist immer NULL -> der schlagartige Temperaturanstieg wird bei der Peakbreitensimulation nicht berücksichtigt
+		# if the previous module is a thermal modulator, than the new initial peak width is approximated as length of modulator spot divided by the velocity of the solute at the end of the modulator spot
 		τ0_ = prev_par.col.L./prev_pl.uR
 	else
 		τ0_ = prev_pl.τR
@@ -865,7 +960,7 @@ function change_initial(par_, prev_par, prev_pl; prev_TM=true)
 	new_sub = Array{GasChromatographySimulator.Substance}(undef, length(prev_par.sub))
 	for i=1:length(prev_par.sub)
 		# filter for correct CAS and annotation (slice number)
-		ii_ = common_index(prev_pl, prev_par.sub[i])
+		ii_ = common_index(prev_pl, prev_par.sub[i].CAS, join(split(prev_par.sub[i].ann, ", ")[1:end-1], ", "))
 		new_sub[ii_] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, prev_par.sub[i].ann, prev_par.sub[i].Cag, prev_pl.tR[ii_], τ0_[ii_])
 	end
 	# here changes of options could be applied
@@ -874,6 +969,7 @@ function change_initial(par_, prev_par, prev_pl; prev_TM=true)
 end
 
 # ╔═╡ bac5d026-0b84-412f-98bb-8ddedb2b92d9
+# combining all the step-by-step simulations 
 function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), nτ=6, abstol=1e-14, reltol=1e-9)
 	#par_sys = graph_to_parameters(sys, db_dataframe, selected_solutes)
 	E = collect(edges(sys.g))
@@ -963,7 +1059,7 @@ newpar_loop = change_initial(par[4], par_slice_1st_TM, sol_1st_TM[1], prev_TM=tr
 # ╔═╡ 74121702-9f4a-410b-961b-7865ab3af941
 begin
 	sol_loop = GasChromatographySimulator.simulate(newpar_loop)
-	add_A_to_pl!(sol_loop[1], sol_1st_TM[1].A, newpar_loop)
+	add_A_to_pl!(sol_loop[1], sol_1st_TM[1])
 end
 
 # ╔═╡ 5d0cb969-8a98-4d28-aa5c-233723755f41
@@ -1006,7 +1102,7 @@ newpar_loop_unfoc = change_initial(par[4], par_slice_unfoc_1st_TM, sol_1st_unfoc
 # ╔═╡ 093e0c79-5f78-4616-b765-48b46d64eec5
 begin
 	sol_loop_unfoc = GasChromatographySimulator.simulate(newpar_loop_unfoc)
-	add_A_to_pl!(sol_loop_unfoc[1], sol_1st_unfoc_TM[1].A, newpar_loop_unfoc)
+	add_A_to_pl!(sol_loop_unfoc[1], sol_1st_unfoc_TM[1])
 end
 
 # ╔═╡ 66eaa639-416c-4167-9e00-14dcbf583a4c
@@ -1049,12 +1145,6 @@ begin
 	end
 	p_chrom_loop
 end
-
-# ╔═╡ bc9d802e-b043-473a-99b6-9c7c3a47276d
-length.(t_loop_unfoc)
-
-# ╔═╡ be1f9966-064f-4765-ad41-9bede129e484
-length.(c_loop_unfoc)
 
 # ╔═╡ 53aff8ef-4585-4d03-921b-7f19827dc04e
 #savefig(p_chrom_loop, "Chrom_after_loop_new.svg")
@@ -1146,7 +1236,7 @@ function warning_2nd_TM(ΔtR_loop, τR_foc_loop, PM, ratio)
 end
 
 # ╔═╡ f071a5bc-922d-4a17-81c1-2e809ff380a5
-warning_2nd_TM(ΔtR_loop.+3, τR_foc, sys.modules[5].PM, sys.modules[5].ratio)
+warning_2nd_TM(ΔtR_loop, τR_foc, sys.modules[5].PM, sys.modules[5].ratio)
 
 # ╔═╡ bb24116c-5828-40ce-9e8e-673dceb19a66
 init_t_start_foc = (fld.(tR_foc.-nτ.*τR_foc, PM)).*PM .+ shift
@@ -1212,12 +1302,19 @@ A_TM2
 par
 
 # ╔═╡ 96a0bd4f-cfe1-4dc3-8059-ee270e979ddb
-par_2nd_TM = GasChromatographySimulator.Parameters(par[5].col, par[5].prog, sub_TM2, GasChromatographySimulator.Options(par[5].opt.alg, 1e-18, 1e-14, par[5].opt.Tcontrol, par[5].opt.odesys, par[5].opt.ng, par[5].opt.vis, par[5].opt.control, par[5].opt.k_th))
+par_2nd_TM_ = GasChromatographySimulator.Parameters(par[5].col, par[5].prog, sub_TM2, GasChromatographySimulator.Options(par[5].opt.alg, 1e-18, 1e-14, par[5].opt.Tcontrol, par[5].opt.odesys, par[5].opt.ng, par[5].opt.vis, par[5].opt.control, par[5].opt.k_th))
 
 # ╔═╡ a205623b-bd86-4cec-923f-7a87ede6d408
-function slicing_2nd(tR_foc, τR_foc, A_foc, tR_unfoc, τR_unfoc, A_unfoc, PM, ratio, shift, par::GasChromatographySimulator.Parameters, prev_par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(τR_foc)), abstol=1e-18, reltol=1e-14)
+function slicing_2nd(pl_foc, pl_unfoc, PM, ratio, shift, par::GasChromatographySimulator.Parameters, prev_par::GasChromatographySimulator.Parameters, prev_par_unfoc::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(τR_foc)), abstol=1e-18, reltol=1e-14)
+	
 	tcold = PM*ratio
 	thot = PM*(1-ratio)
+	tR_foc = pl_foc.tR
+	tR_unfoc = pl_unfoc.tR
+	τR_foc = pl_foc.τR
+	τR_unfoc = pl_unfoc.τR
+	A_foc = pl_foc.A
+	A_unfoc = pl_unfoc.A
 	# focussed peaks
 	init_t_start_foc = (fld.(tR_foc.-nτ.*τR_foc, PM)).*PM .+ shift # start time of the peaks, rounded down to multiple of PM
 	init_t_end_foc = (fld.(tR_foc.+nτ.*τR_foc, PM)).*PM .+ shift # end time of the peaks, rounded down to multiple of PM
@@ -1235,30 +1332,42 @@ function slicing_2nd(tR_foc, τR_foc, A_foc, tR_unfoc, τR_unfoc, A_unfoc, PM, r
 	#---------
 	sub_TM2 = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice_foc))
 	#sub_TM_unfocussed = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice))
-	A_TM2 = Array{Float64}(undef, sum(n_slice))
+	A_TM2 = Array{Float64}(undef, sum(n_slice_foc))
 	#A_unfocussed = Array{Float64}(undef, sum(n_slice))
 	#g(x,p) = 1/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
 	#ii = 1
+	Name = Array{String}(undef, sum(n_slice_foc))
+	CAS = Array{String}(undef, sum(n_slice_foc))
+	Ann = Array{String}(undef, sum(n_slice_foc))
 	for i=1:length(n_slice_foc)
 		#for j=1:n_slice_foc[i] # n_slice_foc[i] should always be = 1
-			t₀ = init_t_start[i]#+(j-1)*PM # initial start time
+			t₀ = init_t_start_foc[i]#+(j-1)*PM # initial start time
 			
-			sub_TM2[i] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "TM2_slice_f1, "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀, τ₀[i])
+			sub_TM2[i] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, "TM2_f1, "*prev_par.sub[i].ann, prev_par.sub[i].Cag, t₀, τ₀[i])
 
-			A_TM2[i] = A_foc[i] + A_unfoc[i]
+			ii_foc = common_index(pl_foc, prev_par.sub[i].CAS, join(split(prev_par.sub[i].ann, ", ")[1:end-1], ", ")) # find the correct index of the areas  
+			ii_unfoc = common_index(pl_unfoc, prev_par_unfoc.sub[i].CAS, join(split(prev_par_unfoc.sub[i].ann, ", ")[1:end-1], ", ")) 
+			A_TM2[i] = A_foc[ii_foc] + A_unfoc[ii_unfoc]
+			Name[i] = sub_TM2[i].name
+			CAS[i] = sub_TM2[i].CAS
+			Ann[i] = sub_TM2[i].ann
 		#end
 	end
 	newopt = GasChromatographySimulator.Options(par.opt.alg, abstol, reltol, par.opt.Tcontrol, par.opt.odesys, par.opt.ng, par.opt.vis, par.opt.control, par.opt.k_th)
 	newpar_TM2 = GasChromatographySimulator.Parameters(par.col, par.prog, sub_TM2, newopt)
+
+	df_A_TM2 = DataFrame(Name = Name, CAS = CAS, Annotations = Ann, A = A_TM2)
 	
-	return newpar_TM2, A_TM2
+	return newpar_TM2, df_A_TM2
 end
+
+# ╔═╡ 768be212-504b-4530-8456-8a719ff2707f
+par_2nd_TM, df_A_2nd_TM = slicing_2nd(sol_loop[1], sol_loop_unfoc[1], sys.modules[5].PM, sys.modules[5].ratio, sys.modules[5].shift, par[5], newpar_loop, newpar_loop_unfoc)
 
 # ╔═╡ e78ffe7d-3f9f-471c-925c-4feae33231b8
 begin
 	sol_2nd_TM = GasChromatographySimulator.simulate(par_2nd_TM)
-	#add_A_to_pl!(sol_TM2[1], A_TM2, par_TM2)
-	sol_2nd_TM[1][!,:A] = A_TM2
+	add_A_to_pl!(sol_2nd_TM[1], df_A_2nd_TM)
 	sol_2nd_TM[1]
 end
 
@@ -1274,7 +1383,7 @@ p_chrom_TM1
 begin
 	plotly()
 	# focussed peaks
-	t_TM2, c_TM2s, c_TM2 = chrom_after_modulation(sol_2nd_TM[1], par_2nd_TM)
+	t_TM2, c_TM2s, c_TM2 = chrom_after_modulation(sol_2nd_TM[1], par_2nd_TM, width_sim=false)
 	p_chrom_TM2 = Plots.plot(t_TM2, c_TM2, xlabel="time in s")
 	# unfocussed peaks 
 	#t_unfoc, c_unfoc, h_unfoc, t_unfoc_sum, c_unfoc_sum = rec_chrom_after_modulation(sol_1st_unfoc_TM[1])
@@ -1304,17 +1413,15 @@ sol_2nd_TM[1]
 # ╔═╡ bb01e67d-fbca-461e-b592-508bc5480b94
 begin
 	sol_mod_out = GasChromatographySimulator.simulate(newpar_mod_out)
-	add_A_to_pl!(sol_mod_out[1], sol_2nd_TM[1].A, newpar_mod_out)
+	add_A_to_pl!(sol_mod_out[1], sol_2nd_TM[1])
 end
+
+# ╔═╡ 71875c85-58b3-46bc-ad5a-787bfb6efcc3
+filter([:Name] => x -> x == "(S)-(+)-Carvone", sol_mod_out[1])
 
 # ╔═╡ 195f8556-e4e8-4b85-86d1-f70b5a6ce0bf
 md"""
 #### Chromatogram after Connection to GC2
-"""
-
-# ╔═╡ 6dd3369b-5b76-45b3-aafa-966aee2c175e
-md"""
-# TODO - Check Area Assignment
 """
 
 # ╔═╡ 088c0c0f-0722-4498-8306-8286069fc24b
@@ -1350,7 +1457,7 @@ newpar_gc2 = change_initial(par[7], newpar_mod_out, sol_mod_out[1], prev_TM=fals
 # ╔═╡ caef921f-f06c-471b-a56a-8415ac2d4fa6
 begin
 	sol_gc2 = GasChromatographySimulator.simulate(newpar_gc2)
-	add_A_to_pl!(sol_gc2[1], sol_mod_out[1].A, newpar_gc2)
+	add_A_to_pl!(sol_gc2[1], sol_mod_out[1])
 end 
 
 # ╔═╡ 05a0e4f4-8a1b-4f3c-84b0-c2491840d20c
@@ -1395,7 +1502,7 @@ newpar_tl = change_initial(par[8], newpar_gc2, sol_gc2[1], prev_TM=false)
 # ╔═╡ 32e40a19-ebab-47a6-b4ca-9300c2b04dab
 begin
 	sol_tl = GasChromatographySimulator.simulate(newpar_tl)
-	add_A_to_pl!(sol_tl[1], sol_gc2[1].A, newpar_tl)
+	add_A_to_pl!(sol_tl[1], sol_gc2[1])
 end 
 
 # ╔═╡ 93ee192a-7374-43f4-a1a1-a1265fda42a4
@@ -1406,6 +1513,12 @@ sol_tl[1].tR .- sol_gc2[1].tR
 md"""
 #### Chromatogram after TL - Detector
 """
+
+# ╔═╡ 0205e873-f3b5-4100-a49b-5824fc5eecf3
+sol_tl[1].tR[10].-fld.(sol_tl[1].tR[10], PM).*PM
+
+# ╔═╡ ec41da66-1aba-4e38-8c69-1cc236157279
+hh = (GasChromatographySimulator.chromatogram([sol_tl[1].tR[10]], [sol_tl[1].tR[10]], [sol_tl[1].τR[10]])[1].*sol_tl[1].A[10])
 
 # ╔═╡ 8b500dc4-98de-46af-9a83-f5ff7e8190ee
 sim[2][1][2].Name, sim[2][1][2].tR, sim[2][1][2].τR
@@ -1467,7 +1580,7 @@ end
 begin
 	gr()
 	t_tl, c_tls, c_tl = chrom_after_loop(sol_tl[1])
-	p_chrom_tl = Plots.plot(t_tl, c_tl, xlabel="time in s")
+	p_chrom_tl_proj1 = Plots.plot(t_tl, c_tl, xlabel="time in s")
 	for i=1:length(c_tls)
 		#if sol_tl[1].Name[i] == selected_solutes[1]
 		#	color = :blue
@@ -1476,16 +1589,16 @@ begin
 		#else
 		#	color = :orange
 		#end
-		Plots.plot!(p_chrom_tl, t_tl, c_tls[i], label=sol_tl[1].Name[i], c=dot_color(sol_tl[1].Name[i], selected_solutes))
+		Plots.plot!(p_chrom_tl_proj1, t_tl, c_tls[i], label=sol_tl[1].Name[i], c=dot_color(sol_tl[1].Name[i], selected_solutes))
 		#Plots.scatter!(p_chrom_tl, (sol_tl[1].tR[i], heights_tl[i]), msize=2, c=color)
 	end
 	fit = fit_gauss_D1(sol_tl[1], sim[2][1][2])
 	for i=1:length(fit.Name)
-		Plots.scatter!(p_chrom_tl, fit.tRs[i], fit.heights[i], msize=2, c=dot_color(fit.Name[i], selected_solutes))
-		Plots.plot!(p_chrom_tl, t_tl, model_g(t_tl, fit.fits[i].param), c=dot_color(fit.Name[i], selected_solutes), linestyle=:dash)
+		Plots.scatter!(p_chrom_tl_proj1, fit.tRs[i], fit.heights[i], msize=2, c=dot_color(fit.Name[i], selected_solutes))
+		Plots.plot!(p_chrom_tl_proj1, t_tl, model_g(t_tl, fit.fits[i].param), c=dot_color(fit.Name[i], selected_solutes), linestyle=:dash)
 	end
-	Plots.plot!(p_chrom_tl, xticks=0:4:3000, legend=false)
-	p_chrom_tl
+	Plots.plot!(p_chrom_tl_proj1, xticks=0:4:3000, legend=false)
+	p_chrom_tl_proj1
 end
 
 # ╔═╡ d0f14e55-10ad-4ddb-a743-54a3ca28aa85
@@ -1493,6 +1606,58 @@ fit.Name
 
 # ╔═╡ 95897aaf-d2bf-4edd-9cf3-8bf7353fd089
 fit.fits
+
+# ╔═╡ fdc6cf54-526f-4535-810d-4fba304cefb3
+function fit_gauss_D2(pl_D2, PM)
+	heights = heights_of_peaks(pl_D2)
+	tR = pl_D2.tR .- fld.(pl_D2.tR, PM).*PM
+	Name = unique(pl_D2.Name)
+	nsub = length(Name)
+
+	@. model_g(x,p) = p[3]/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
+	
+	sort_heights = Array{Array{Float64}}(undef, nsub)
+	sort_tR = Array{Array{Float64}}(undef, nsub)
+	fits = Array{LsqFit.LsqFitResult}(undef, nsub)
+	for i=1:nsub
+		ii_name = findall(Name[i].==pl_D2.Name)
+		#ii = findfirst(Name[i].==pl_D1.Name)
+		sort_heights[i] = heights[ii_name]
+		sort_tR[i] = tR[ii_name]
+		mean_tR = sum(sort_tR[i])/length(sort_tR[i])
+		fits[i] = curve_fit(model_g, sort_tR[i], sort_heights[i], [mean_tR, mean_tR/10, 1.0])
+	end
+	return DataFrame(Name=Name, tRs=sort_tR, heights=sort_heights, fits=fits)
+end
+
+# ╔═╡ aecb6572-cf17-428d-845f-ba3cf2f0a5d4
+begin
+	plotly()
+p_chrom_tl_proj2 = Plots.plot(legend=false, xlabel="time in s")
+	for i=1:length(c_tls)
+		Plots.plot!(p_chrom_tl_proj2, t_tl.-fld.(t_tl, PM).*PM, c_tls[i], c=dot_color(sol_tl[1].Name[i], selected_solutes))
+	end
+		fit_2D = fit_gauss_D2(sol_tl[1], PM)
+		
+		for i=1:length(fit_2D.Name)
+			Plots.scatter!(p_chrom_tl_proj2, fit_2D.tRs[i], fit_2D.heights[i], msize=2, c=dot_color(fit_2D.Name[i], selected_solutes))
+		end
+	p_chrom_tl_proj2
+end
+
+# ╔═╡ c8bc0ebc-feee-4bb9-8336-41c24eaf71d6
+begin
+	plotly()
+	p_test = Plots.plot(legend=false, xlabel="time in s")
+	for i=1:length(fit_2D.Name)-1
+			Plots.scatter!(p_test, fit_2D.tRs[i], fit_2D.heights[i], msize=2, c=dot_color(fit_2D.Name[i], selected_solutes))
+			Plots.plot!(p_test, t_tl.-fld.(t_tl, PM).*PM, model_g(t_tl.-fld.(t_tl, PM).*PM, fit_2D.fits[i].param), c=dot_color(fit_2D.Name[i], selected_solutes), linestyle=:dash)
+	end
+	p_test
+end
+
+# ╔═╡ bf4f1950-4f14-43e6-88cc-635fb079ab13
+fit_gauss_D2(sol_tl[1], PM)
 
 # ╔═╡ 78a325ce-a934-4afb-bb31-e1eb98e5349a
 sol_final = sol_tl;
@@ -1512,14 +1677,30 @@ md"""
 
 # ╔═╡ 63ec7d6b-df9f-40b8-a988-bbcc2adc52bf
 md"""
-Before 1st thermal modulator:
+Before 1st thermal modulator (after GC1 and mod in):
 $(embed_display(p_chrom_before_mark))
 
-After 1ste thermal modulator:
+After 1st thermal modulator:
 $(embed_display(p_chrom_TM1))
 
 After loop, before 2nd thermal modulator:
 $(embed_display(p_chrom_loop_mark))
+
+After 2nd thermal modulator:
+$(embed_display(p_chrom_TM2))
+
+After mod outlet:
+$(embed_display(p_chrom_mod_out))
+
+After GC2:
+
+$(embed_display(p_chrom_gc2))
+
+After TL, at detector:
+$(embed_display(p_chrom_tl_proj1))
+
+Projection on 2nd dimension:
+$(embed_display(p_chrom_tl_proj2))
 """
 
 # ╔═╡ 915d8972-5423-4dde-8039-9a912bd0ae61
@@ -1530,6 +1711,9 @@ slice_tR2 = sol_final[1].tR .- fld.(sol_final[1].tR, PM).*PM
 
 # ╔═╡ a5eb5c69-de38-4dbb-83f7-4b751d26562d
 sliced_results = DataFrame(Name=sol_final[1].Name, tR1=slice_tR1, tR2=slice_tR2, A=sol_final[1].A)
+
+# ╔═╡ 7f6d4227-ef9d-47a0-88a6-acb487dcccda
+filter([:Name] => x -> x == "pulegone", sliced_results)
 
 # ╔═╡ c78ea8fb-d145-4862-973b-06bd13c03f52
 findall(selected_solutes[3].==sliced_results.Name)
@@ -1552,6 +1736,16 @@ begin
 	approx_max[!,:tR2] = tR2_max
 	approx_max[!,:A] = A_max
 	approx_max
+end
+
+# ╔═╡ 9c3223ab-1dcc-40b6-8996-c8dbc22a2c6a
+begin
+	gr()
+	_offset_D2 = 0.0
+	p_sliced = Plots.scatter(slice_tR1, slice_tR2.+_offset_D2, ylims=(0.0, 6.0))
+	Plots.scatter!(p_sliced, sim[2][1][1].tR, 2.0.*ones(length(sim[2][1][1].tR)))
+	Plots.scatter!(p_sliced, approx_max.tR1, approx_max.tR2, c=:black, mshape=:cross)
+	plot_GCxGC!(p_sliced, pl_simp, sys_simp)
 end
 
 # ╔═╡ ae9bb1ec-fc67-46de-91fe-6e3f47844ce0
@@ -1600,6 +1794,15 @@ end
 md"""
 ### (deactivated) Result from new function
 """
+
+# ╔═╡ 18cc22ce-0f7c-4683-ab2a-cae5a25ad9c4
+begin
+	slice_tR1_ = fld.(sim_[2][1][end].tR, PM).*PM
+	slice_tR2_ = sim_[2][1][end].tR .- fld.(sim_[2][1][end].tR, PM).*PM
+	p_sliced_ = Plots.scatter(slice_tR1_, slice_tR2_, ylims=(0.0, 6.0))
+	Plots.scatter!(p_sliced_, sim_[2][1][1].tR, 2.0.*ones(length(sim_[2][1][1].tR)))
+	plot_GCxGC!(p_sliced_, pl_simp, sys_simp)
+end
 
 # ╔═╡ f2522fe2-e5e4-44bc-8e5a-528b86dfc290
 begin
@@ -1707,149 +1910,6 @@ begin
 	p_chrom_2_
 end
 
-# ╔═╡ 5558e8e6-bb35-497b-9d61-ba0f3518e75e
-md"""
-## Simplified GCxGC
-"""
-
-# ╔═╡ 0ccf11db-c934-4592-95ae-d28bd856f97f
-function GCxGC_TM_simp(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, F, pin, pout; opt=GasChromatographySystems.Options(ng=true))
-	# ? make two versions
-	# 1. defining flow over the columns (calculate pin)
-	# 2. defining inlet pressure (calculate F)
-	Ls = [L1, L2]
-	ds = [d1, d2]
-	dfs = [df1, df2]
-	sps = [sp1, sp2]
-	TPs = [TP1, TP2]
-	n = 2
-	g = SimpleDiGraph(n+1)
-	for i=1:n
-		add_edge!(g, i, i+1) 
-	end
-	# common time steps
-	com_timesteps = []
-	for i=1:length(TPs)
-		if typeof(TPs[i]) <: GasChromatographySystems.TemperatureProgram
-			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, TPs[i].timesteps)
-		end
-	end
-	if isempty(com_timesteps)
-		com_timesteps = [0.0, 36000.0]
-	end
-	# pressure points
-	pp = Array{GasChromatographySystems.PressurePoint}(undef, n+1)
-	pins = pin*1000.0.*ones(length(com_timesteps))
-	nans = NaN.*ones(length(com_timesteps))
-	if pout == 0.0
-		pouts = eps(Float64).*ones(length(com_timesteps))
-	else 
-		pouts = pout*1000.0.*ones(length(com_timesteps))
-	end
-	pp[1] = GasChromatographySystems.PressurePoint("p1", com_timesteps, pins) # inlet
-	pp[2] = GasChromatographySystems.PressurePoint("p2", com_timesteps, nans) #
-	pp[3] = GasChromatographySystems.PressurePoint("p3", com_timesteps, pouts) # outlet
-	# modules
-	modules = Array{GasChromatographySystems.AbstractModule}(undef, n)
-	modules[1] = GasChromatographySystems.ModuleColumn("GC1", Ls[1], ds[1]*1e-3, dfs[1]*1e-6, sps[1], TPs[1], F/60e6)
-	modules[2] = GasChromatographySystems.ModuleColumn("GC2", Ls[2], ds[2]*1e-3, dfs[2]*1e-6, sps[2], TPs[2], NaN/60e6)
-	# system
-	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))
-	# add test for the defined pressures and flows
-	return sys
-end
-
-# ╔═╡ 21d1659a-e50f-4908-8b7b-bcee33f7acae
-sys_simp = GCxGC_TM_simp(30.0, 0.25, 0.25, "ZB1ms", GCxGC_TP, 3.02, 0.1, 0.1, "Stabilwax", GCxGC_TP, 1.0, NaN, 0.0)
-
-# ╔═╡ 9bb3302a-16c7-442c-b6a1-9ee1b9d20587
-par_simp = graph_to_parameters(sys_simp, db, selected_solutes)
-
-# ╔═╡ 04ce95ea-affb-45e1-b09c-dfd412a7291b
-paths_simp = GasChromatographySystems.all_paths(sys_simp.g, 1)[2]
-
-# ╔═╡ b360f18a-fb8a-4e66-b13f-67e14d008238
-sim_simp = GasChromatographySystems.simulate_along_paths(sys_simp, paths_simp, par_simp)
-
-# ╔═╡ 3e0f5a36-4db1-4ded-863b-2f0bfe01108a
-pl_simp = GasChromatographySystems.peaklist_GCxGC(sim_simp[2][1][1], sim_simp[2][1][end])
-
-# ╔═╡ 690988a3-e9f0-4c01-adb1-399ffbe2f093
-pl = GasChromatographySystems.peaklist_GCxGC(sim[2][1][1], sim[2][1][end])
-
-# ╔═╡ e41444ed-8012-4263-aa49-1e15399538a4
-begin
-	Plots.scatter(pl_simp.tR1, pl_simp.tR2.-pl_simp.tR1, xlabel="1st dim time in s", ylabel="2nd dim time in s")
-	Plots.scatter!(pl_simp.tR2, pl_simp.tR2.-pl_simp.tR1)
-end
-
-# ╔═╡ 1f1fe7e1-d27d-485c-ad65-022b0862cc16
-md"""
-### Result from old function
-"""
-
-# ╔═╡ b5598366-a6d2-49b3-b71f-1aefe5b9ef26
-p_gcxgc = GasChromatographySystems.plot_GCxGC(pl, sys)
-
-# ╔═╡ 5c0103b4-5d18-4100-8fa6-a7e8fdbc7ef1
-function plot_GCxGC(pl_GCxGC, sys, PM; categories = String[])
-	t1end = sum(GasChromatographySystems.common_timesteps(sys))
-	t2end = PM
-	p_gcxgc = Plots.scatter(pl_GCxGC.tR1 .+ (pl.tR2.-pl.tR1) .- mod.(pl.tR2.-pl.tR1, PM), mod.(pl.tR2.-pl.tR1, PM), xlims=(0.0,t1end), ylims=(0.0, t2end), label="", xlabel=string(sys.modules[1].stationary_phase, ", t¹ in s"), ylabel=string(sys.modules[2].stationary_phase, ", t² in s"))
-	if !isempty(categories)
-		for i=1:length(categories) 
-			pl_f = filter([:Cat] => x -> categories[i] in x, pl_GCxGC)
-			Plots.scatter!(p_gcxgc, pl_f.tR1 .+ (pl_f.tR2.-pl_f.tR1) .- mod.(pl_f.tR2.-pl_f.tR1, PM), mod.(pl_f.tR2.-pl_f.tR1, PM), label=categories[i], legend=:bottomright)
-		end
-	end
-	return p_gcxgc
-end
-
-# ╔═╡ f74033df-d0d0-4641-9109-f0ff7b07abd9
-plot_GCxGC(pl, sys, 6.0)
-
-# ╔═╡ 6e970b15-ff40-427c-9dd2-517e7ede00f8
-function plot_GCxGC!(p_gcxgc, pl_GCxGC, sys; categories = String[])
-	t1end = sum(GasChromatographySystems.common_timesteps(sys))
-	t2end = ceil(maximum(pl_GCxGC.tR2.-pl_GCxGC.tR1))
-	Plots.scatter!(p_gcxgc, pl_GCxGC.tR1, pl_GCxGC.tR2.-pl_GCxGC.tR1, xlims=(0.0,t1end), ylims=(0.0, t2end), label="", xlabel=string(sys.modules[1].stationary_phase, ", t¹ in s"), ylabel=string(sys.modules[2].stationary_phase, ", t² in s"))
-	if !isempty(categories)
-		for i=1:length(categories) 
-			pl_f = filter([:Cat] => x -> categories[i] in x, pl_GCxGC)
-			Plots.scatter!(p_gcxgc, pl_f.tR1, pl_f.tR2.-pl_f.tR1, label=categories[i], legend=:bottomright)
-		end
-	end
-	return p_gcxgc
-end
-
-# ╔═╡ 9c3223ab-1dcc-40b6-8996-c8dbc22a2c6a
-begin
-	gr()
-	_offset_D2 = 0.0
-	p_sliced = Plots.scatter(slice_tR1, slice_tR2.+_offset_D2, ylims=(0.0, 6.0))
-	Plots.scatter!(p_sliced, sim[2][1][1].tR, 2.0.*ones(length(sim[2][1][1].tR)))
-	Plots.scatter!(p_sliced, approx_max.tR1, approx_max.tR2, c=:black, mshape=:cross)
-	plot_GCxGC!(p_sliced, pl_simp, sys_simp)
-end
-
-# ╔═╡ 18cc22ce-0f7c-4683-ab2a-cae5a25ad9c4
-begin
-	slice_tR1_ = fld.(sim_[2][1][end].tR, PM).*PM
-	slice_tR2_ = sim_[2][1][end].tR .- fld.(sim_[2][1][end].tR, PM).*PM
-	p_sliced_ = Plots.scatter(slice_tR1_, slice_tR2_, ylims=(0.0, 6.0))
-	Plots.scatter!(p_sliced_, sim_[2][1][1].tR, 2.0.*ones(length(sim_[2][1][1].tR)))
-	plot_GCxGC!(p_sliced_, pl_simp, sys_simp)
-end
-
-# ╔═╡ 6ad69424-5cd5-4ac2-ae15-c3220b6ce449
-plot_GCxGC!(p_gcxgc, pl_simp, sys_simp)
-
-# ╔═╡ e5d6f0da-f249-4c09-b259-427fe240af34
-mod.(pl.tR2.-pl.tR1, PM)
-
-# ╔═╡ 2ca1ac9f-a4f7-48d3-ad4a-43dc01d97b18
-(pl.tR2.-pl.tR1) .- mod.(pl.tR2.-pl.tR1, PM)
-
 # ╔═╡ e2eaa21a-fbac-4d00-8663-c69ee4e0a8a9
 md"""
 ## Measurement
@@ -1880,9 +1940,6 @@ function comparison_meas_sim(meas, pl_sim)
 	end
 	return comp
 end
-
-# ╔═╡ 6244a106-9527-4088-92d1-98ce746edd6f
-comp = comparison_meas_sim(meas, pl_sim)
 
 # ╔═╡ 301cf349-817d-41e2-bae4-4a4a285e9fd3
 begin
@@ -2038,9 +2095,9 @@ md"""
 # ╠═522a7582-0ff1-42d6-960a-adb952a225d2
 # ╠═ca604ac6-fdb1-41d7-83d2-a0c9b2440dad
 # ╠═b9e3acb8-a7ec-40ef-ba58-932f79b08fb0
-# ╠═95f57b5b-652c-40c2-b66d-137bb7b2d878
 # ╠═9605b6ad-7cdc-47ee-9edf-c3ce531ae9a2
 # ╠═06487ba0-8752-40a8-b5d8-07fb08514ffe
+# ╠═54c85e34-941d-41a1-9780-cf156f82d765
 # ╠═a5c2b339-4879-4367-9d03-ada1e7e6dd46
 # ╠═607265de-c784-4ed0-8e89-ebb206785b0b
 # ╠═c366df65-59a4-427a-beee-bf0bef5fb409
@@ -2048,6 +2105,8 @@ md"""
 # ╠═4adbf7e9-232d-4889-92c6-75e8bde0d88d
 # ╠═fc36ffe3-b1df-42c8-ad14-e3b90f27a272
 # ╠═43f27a81-dca0-4188-baf4-3f8140d9e57c
+# ╠═2ec6f339-c7c4-41c1-869e-8cd94d993952
+# ╠═ac60e9eb-0dfb-4a8d-a6bb-5289110b40cd
 # ╠═7277a646-fd70-4032-9691-569eddeafec6
 # ╠═793560f7-d364-4c68-81ec-994441a41059
 # ╠═6993afed-4519-4c8a-9cfc-87c72723c444
@@ -2060,7 +2119,7 @@ md"""
 # ╠═f1bf21dd-07ee-4e4e-beb5-7d9225b3fc6b
 # ╠═ceb6ba3f-aece-4ee3-b757-5904fa04c7ac
 # ╠═3e8d2e43-1fa9-40e4-a132-7228664b7546
-# ╠═bac5d026-0b84-412f-98bb-8ddedb2b92d9
+# ╟─bac5d026-0b84-412f-98bb-8ddedb2b92d9
 # ╠═e3e34deb-9249-4811-b74a-44a4c2d06ac2
 # ╠═54e20666-b217-415d-b2fd-305980588668
 # ╠═ac3db64b-82c8-455a-97aa-6bbddcc03830
@@ -2075,9 +2134,10 @@ md"""
 # ╟─325a8e2e-ae2f-4dd9-a32b-00c7adf47461
 # ╠═3388fdf6-dff9-4d44-9db3-5bf77a57980d
 # ╠═e4172084-2dd7-4daf-b2b9-cc84891c06f2
+# ╠═629d4ad1-9961-4d2c-bb41-3c3832bc20fd
 # ╠═f436afe9-0440-4149-be61-b426e243b34d
 # ╠═846c3cab-90d4-4e73-9ce5-c1b41f937cdf
-# ╠═d98aca0b-321b-4623-aa99-4ea144a98726
+# ╠═3c22e8aa-376d-4eec-9650-3bb102d4a0b8
 # ╠═dbc9af08-1dc3-4323-933a-ba981d962086
 # ╠═abd7f65e-a6cb-4c2e-8e86-b1b6eda73d55
 # ╠═755ce0aa-efe7-42fa-b5f9-f0b9da949829
@@ -2091,6 +2151,7 @@ md"""
 # ╠═f087274e-5147-48f9-8200-4d6ed90397c9
 # ╠═402e9e25-3d5b-46c2-8b5e-4a472fb357f7
 # ╠═9c5ec167-212d-413a-a2bc-fb00d015af51
+# ╠═740e977e-4cf8-496d-bb1a-000871bc4211
 # ╠═06c3c74b-4ced-405e-89be-a05092fab027
 # ╠═67a4dff7-2634-4ae2-adb0-515807988b17
 # ╠═84111543-21e2-4891-9050-0c102cd46a52
@@ -2116,8 +2177,6 @@ md"""
 # ╠═6b6e1ada-aa27-4156-967a-49e5f076727f
 # ╠═093e0c79-5f78-4616-b765-48b46d64eec5
 # ╠═66eaa639-416c-4167-9e00-14dcbf583a4c
-# ╠═bc9d802e-b043-473a-99b6-9c7c3a47276d
-# ╠═be1f9966-064f-4765-ad41-9bede129e484
 # ╠═bb483a0e-72d7-405e-bf47-c5fa878e0994
 # ╠═53aff8ef-4585-4d03-921b-7f19827dc04e
 # ╠═b31fa530-922f-4862-b1cf-04d2ec34b1c1
@@ -2154,6 +2213,7 @@ md"""
 # ╠═44c7cc8e-a02b-437a-8da0-89f94cac878f
 # ╠═96a0bd4f-cfe1-4dc3-8059-ee270e979ddb
 # ╠═a205623b-bd86-4cec-923f-7a87ede6d408
+# ╠═768be212-504b-4530-8456-8a719ff2707f
 # ╠═e78ffe7d-3f9f-471c-925c-4feae33231b8
 # ╠═db04ef60-3490-49c3-a5c1-f198c4015b06
 # ╠═ebc1b905-eef4-4c66-abb6-b070d19f17d9
@@ -2163,8 +2223,8 @@ md"""
 # ╠═78dbaf44-0468-417a-8c69-90c139e2e2ad
 # ╠═0400ee95-e5f2-48f3-bc57-8f3eb24a2e21
 # ╠═bb01e67d-fbca-461e-b592-508bc5480b94
+# ╠═71875c85-58b3-46bc-ad5a-787bfb6efcc3
 # ╠═195f8556-e4e8-4b85-86d1-f70b5a6ce0bf
-# ╠═6dd3369b-5b76-45b3-aafa-966aee2c175e
 # ╠═088c0c0f-0722-4498-8306-8286069fc24b
 # ╠═29cbe2b2-34fb-45dc-849b-2f678b3f8797
 # ╠═14bf7364-ce16-467e-894b-43d5ad1d91dc
@@ -2180,6 +2240,11 @@ md"""
 # ╠═93ee192a-7374-43f4-a1a1-a1265fda42a4
 # ╠═07922786-3664-4308-a939-6d9cd9cffb33
 # ╠═f1504c87-b24f-4550-9a89-c7759b635218
+# ╠═0205e873-f3b5-4100-a49b-5824fc5eecf3
+# ╠═ec41da66-1aba-4e38-8c69-1cc236157279
+# ╠═aecb6572-cf17-428d-845f-ba3cf2f0a5d4
+# ╠═c8bc0ebc-feee-4bb9-8336-41c24eaf71d6
+# ╠═bf4f1950-4f14-43e6-88cc-635fb079ab13
 # ╠═8b500dc4-98de-46af-9a83-f5ff7e8190ee
 # ╠═d0f14e55-10ad-4ddb-a743-54a3ca28aa85
 # ╠═95897aaf-d2bf-4edd-9cf3-8bf7353fd089
@@ -2190,6 +2255,7 @@ md"""
 # ╠═08d9257e-6d49-4cf6-97a9-f8b546d9e933
 # ╠═df1c6430-8ea8-4bdd-a9be-078a0357fe05
 # ╠═c2074cee-177c-4ece-bf67-0262e504536a
+# ╠═fdc6cf54-526f-4535-810d-4fba304cefb3
 # ╠═78a325ce-a934-4afb-bb31-e1eb98e5349a
 # ╠═a76b6b3e-a41c-413e-9b4d-920823e9edda
 # ╠═c784c310-3945-4911-8742-932e836f0db0
@@ -2198,6 +2264,7 @@ md"""
 # ╠═915d8972-5423-4dde-8039-9a912bd0ae61
 # ╠═556c157c-321d-4eb8-b2ef-ee8c4fe0f038
 # ╠═a5eb5c69-de38-4dbb-83f7-4b751d26562d
+# ╠═7f6d4227-ef9d-47a0-88a6-acb487dcccda
 # ╠═c78ea8fb-d145-4862-973b-06bd13c03f52
 # ╠═80a012dd-738e-4332-857a-90203867a03f
 # ╠═9c3223ab-1dcc-40b6-8996-c8dbc22a2c6a
@@ -2227,27 +2294,9 @@ md"""
 # ╠═20d112f4-f5cc-4e6b-89c5-a0b3ad4ff4c5
 # ╠═fd4026bf-7085-4a63-a074-c1bbf49bde2a
 # ╠═622a22d0-ecac-402f-96a5-79c6dc1683d3
-# ╠═5558e8e6-bb35-497b-9d61-ba0f3518e75e
-# ╠═21d1659a-e50f-4908-8b7b-bcee33f7acae
-# ╠═0ccf11db-c934-4592-95ae-d28bd856f97f
-# ╠═9bb3302a-16c7-442c-b6a1-9ee1b9d20587
-# ╠═04ce95ea-affb-45e1-b09c-dfd412a7291b
-# ╠═b360f18a-fb8a-4e66-b13f-67e14d008238
-# ╠═3e0f5a36-4db1-4ded-863b-2f0bfe01108a
-# ╠═690988a3-e9f0-4c01-adb1-399ffbe2f093
-# ╠═e41444ed-8012-4263-aa49-1e15399538a4
-# ╠═1f1fe7e1-d27d-485c-ad65-022b0862cc16
-# ╠═b5598366-a6d2-49b3-b71f-1aefe5b9ef26
-# ╠═6ad69424-5cd5-4ac2-ae15-c3220b6ce449
-# ╠═5c0103b4-5d18-4100-8fa6-a7e8fdbc7ef1
-# ╠═f74033df-d0d0-4641-9109-f0ff7b07abd9
-# ╠═6e970b15-ff40-427c-9dd2-517e7ede00f8
-# ╠═e5d6f0da-f249-4c09-b259-427fe240af34
-# ╠═2ca1ac9f-a4f7-48d3-ad4a-43dc01d97b18
 # ╠═e2eaa21a-fbac-4d00-8663-c69ee4e0a8a9
 # ╠═e9f8df08-7538-4dd4-8bbb-4a6649ae5b1a
 # ╠═f55d7b20-2966-4a52-95fd-2f11a10d387a
-# ╠═6244a106-9527-4088-92d1-98ce746edd6f
 # ╠═301cf349-817d-41e2-bae4-4a4a285e9fd3
 # ╠═2aea4d11-3e6b-4c1e-9f0c-e6427e4257cf
 # ╠═ffa85cd8-3fea-4aa6-8ea5-2ac37f0cce39

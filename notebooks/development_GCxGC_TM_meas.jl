@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.19
+# v0.19.26
 
 using Markdown
 using InteractiveUtils
@@ -133,8 +133,8 @@ function update_system(sys)
 			new_tp = GasChromatographySystems.TemperatureProgram(new_timesteps, new_temperaturesteps[ii])
 			if typeof(sys.modules[i]) == GasChromatographySystems.ModuleColumn
 				new_modules[i] = GasChromatographySystems.ModuleColumn(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].flow)
-			elseif typeof(sys.modules[i]) == ModuleTM
-				new_modules[i] = ModuleTM(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].flow)
+			elseif typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM
+				new_modules[i] = GasChromatographySystems.ModuleTM(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].flow)
 			end
 		end
 	end
@@ -189,7 +189,7 @@ function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, 
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
 	modules[1] = GasChromatographySystems.ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6)
 	modules[2] = GasChromatographySystems.ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM)
-	modules[3] = ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shiftM, PM, ratioM, HotM, ColdM, NaN)
+	modules[3] = GasChromatographySystems.ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shiftM, PM, ratioM, HotM, ColdM, NaN)
 	modules[4] = GasChromatographySystems.ModuleColumn("mod loop", LM[3], dM*1e-3, dfM*1e-6, spM, TPM)
 	#modules[5] = ModuleTM("TM2", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, shiftM, PM, ratioM, HotM, ColdM, NaN)
 	modules[5] = GasChromatographySystems.ModuleColumn("TM2c", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, NaN) # simulate 2nd Modulator point with the oven temperature -> single stage modulator
@@ -369,7 +369,7 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 end
 
 # ╔═╡ 793560f7-d364-4c68-81ec-994441a41059
-par = graph_to_parameters(sys, db, selected_solutes)
+par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes)
 
 # ╔═╡ d40361fe-9e0c-4df8-a09c-0c5bf143dbf6
 par[3].prog.T_itp(0.0, 0.0)
@@ -782,12 +782,12 @@ sol_1st_TM[1].ann
 sol_1st_TM[1]
 
 # ╔═╡ 402e9e25-3d5b-46c2-8b5e-4a472fb357f7
-traces(sol_1st_TM[2], newpar, 37)
+traces(sol_1st_TM[2], newpar, 27)
 
 # ╔═╡ 9c5ec167-212d-413a-a2bc-fb00d015af51
 begin
 	p_Tt = Plots.plot(xlabel="time in s", ylabel="temperature in °C", legend=false)
-	for i=33:41
+	for i=23:29
 		trace = traces(sol_1st_TM[2], newpar, i)
 		Plots.plot!(p_Tt, trace.t, trace.T.-273.15)
 	end

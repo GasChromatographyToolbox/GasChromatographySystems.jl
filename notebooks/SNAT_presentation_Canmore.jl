@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.19
+# v0.19.26
 
 using Markdown
 using InteractiveUtils
@@ -209,6 +209,15 @@ GasChromatographySystems.substitute_unknown_flows(sys)
 
 # ╔═╡ 02d8a178-410c-42f5-8784-596df16218b1
 # ATTENETION Notebook chrashes with this GasChromatographySystems.solve_balance(sys)
+
+# ╔═╡ 92e7ea3c-64a4-4282-bdb2-596986a87278
+sol_bal = GasChromatographySystems.solve_balance(sys);
+
+# ╔═╡ 16857ed2-4794-4346-94b7-114ad2a4a294
+typeof(sol_bal)
+
+# ╔═╡ 7fb06668-5d56-4304-baea-fa8d32a36d82
+#sol_bal[1]
 
 # ╔═╡ 556e42d6-d0b0-4c0a-9044-f5462fd7de23
 function plot_graph_with_flow(sys, t; lay = Spring(), color=:lightblue, node_size=80, arrow_size=20, arrow_shift=0.8, dataaspect=false, nlabels_fontsize=14, elabels_fontsize=14, elabels_distance = 20)
@@ -659,9 +668,9 @@ t_D2_
 # ╠═71e7d4bb-faa8-43da-9bab-41046ca38ade
 # ╠═5548429b-da44-4abd-bb4d-00d9ab66649d
 # ╠═07fb0cea-e5aa-43be-900e-c7ff91f6e639
-# ╠═31190533-2581-42f9-b352-23ae1cd54f10
+# ╟─31190533-2581-42f9-b352-23ae1cd54f10
 # ╠═deb6198d-6e0a-471b-9ab3-30bd21ca37a1
-# ╠═0e3164b6-d583-477f-843f-f6d3d8a390d4
+# ╟─0e3164b6-d583-477f-843f-f6d3d8a390d4
 # ╠═4bd3f0ea-03dd-4dd7-a8d8-99f20bcdb27a
 # ╠═a0314b36-7840-4fbe-8084-12d7c4fd5f9c
 # ╠═9596cd2b-2e05-4247-a889-e64186fcca9a
@@ -671,6 +680,9 @@ t_D2_
 # ╠═efb6cb49-811b-4a29-8eac-93c79a10b765
 # ╠═2bb93f4d-3d7b-47ad-86e6-3a958a915a7e
 # ╠═02d8a178-410c-42f5-8784-596df16218b1
+# ╠═92e7ea3c-64a4-4282-bdb2-596986a87278
+# ╠═16857ed2-4794-4346-94b7-114ad2a4a294
+# ╠═7fb06668-5d56-4304-baea-fa8d32a36d82
 # ╠═556e42d6-d0b0-4c0a-9044-f5462fd7de23
 # ╠═d6e02463-f9df-4658-ba6c-865f2640c3b9
 # ╠═803485e0-fd65-4794-98ae-b79fb13d9518

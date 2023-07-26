@@ -43,20 +43,11 @@ md"""
 - Tcold is absolute (`Tcold_abs=true`)
 """
 
-# ╔═╡ 470c8573-a0f5-4ab2-9385-c256491f648d
-spatial = false
-
-# ╔═╡ b7b00dda-40d3-40d8-86e5-377d48b189fc
-flank = Inf
-
-# ╔═╡ 14a1a970-3cfe-4086-94d2-d0c7ed6dab15
-algTM = "simplifiedTM"
+# ╔═╡ 1948baf0-1217-485a-8c8b-6e826bd5ef50
+optTM = GasChromatographySystems.ModuleTMopt(Tcold_abs=true, spatial=false, alg="simplifiedTM", tflank=Inf, sflank=Inf)
 
 # ╔═╡ 8a51f65b-d8f1-407b-835f-1bb1048902bc
 ng = true
-
-# ╔═╡ 9297b636-6daa-40e9-b312-e05f5e5da5fd
-Tcold_abs = true
 
 # ╔═╡ 13d4415d-3dc4-4eed-aded-c3561b77a9eb
 md"""
@@ -87,19 +78,19 @@ md"""
 # ╔═╡ d0379590-edf3-4017-b8b8-07bd6080f757
 begin
 	# 1st D 
-	L1 = 30.6 # m
+	L1 = 30.0 # m
 	d1 = 0.25 # mm
 	df1 = 0.25 # µm
 	sp1 = "ZB1ms"
 	
 	# modulator
-	LM = [0.3, 0.005, 0.9, 0.005, 0.3]#[0.3, 0.005, 0.9, 0.005, 0.3]
+	LM = [0.24, 0.005, 0.9, 0.005, 0.3]#[0.3, 0.005, 0.9, 0.005, 0.3]
 	dM = 0.1
 	dfM = 0.1
 	spM = "Stabilwax"
 
 	# 2nd D
-	L2 = 0.72#0.56 # m
+	L2 = 0.245#0.56 # m
 	d2 = 0.1 # mm
 	df2 = 0.1 # µm
 	sp2 = "Stabilwax"
@@ -122,13 +113,18 @@ md"""
 # ╔═╡ de542d7e-bd0d-47a4-8977-5ab1e64a26f4
 begin
 	PM = 4.0
-	shift1 = 0.0
-	shift2 = 0.0
+	shift = 3.0
 	thot = 0.35
 	ratio = (PM-thot)/PM
 	Thot = 25.0
 	Tcold = -70#-100.0
 end
+
+# ╔═╡ bbb30f9e-0904-4147-b86b-a366040cf798
+ratio*PM-shift
+
+# ╔═╡ 521692a5-1afc-4909-b39f-62ab310e663b
+(1+ratio)/2*PM-shift
 
 # ╔═╡ daf7484b-ac12-4515-8e26-adbc8e214cbc
 md"""
@@ -149,14 +145,14 @@ md"""
 
 # ╔═╡ 5883701b-96f6-431e-b29b-b5cc0be940e0
 begin
-	sys = GasChromatographySystems.GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TTL, LM, dM, dfM, spM, shift1, shift2, PM, ratio, Thot, Tcold, TPM, F, pin, pout)
+	sys = GasChromatographySystems.GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TTL, LM, dM, dfM, spM, shift, PM, ratio, Thot, Tcold, TPM, F, pin, pout; optTM=optTM)
 end
 
 # ╔═╡ 6afa596b-70dd-4b01-899b-5d9ef1349491
-GasChromatographySystems.plot_flow_over_time(sys; Tcold_abs=Tcold_abs, spatial=spatial, dt=30.0)
+GasChromatographySystems.plot_flow_over_time(sys; dt=30.0)
 
 # ╔═╡ 7ddfe44e-fde9-422f-98de-27b80e8517be
-GasChromatographySystems.plot_pressure_over_time(sys; Tcold_abs=Tcold_abs, spatial=spatial, dt=30.0)
+GasChromatographySystems.plot_pressure_over_time(sys; dt=30.0)
 
 # ╔═╡ 03b1cae0-cf56-4e0f-b0ad-fdfa736e0fa8
 md"""
@@ -175,7 +171,7 @@ end
 selected_solutes_ = GasChromatographySystems.common_solutes(db, sys).Name
 
 # ╔═╡ 262fba99-1b75-4803-8f34-a0619de559a9
-selected_solutes = selected_solutes_[Not([1, 29, 30])]#[[14,16,17]]
+selected_solutes = selected_solutes_[[14,16,17]]#[Not([1, 29, 30])]#[[14,16,17]]
 
 # ╔═╡ 80edd747-485b-4f8f-a593-9a3b1c96b82d
 # 1 -> Warning "Peak width of focussed peaks > modulation period. Simulation is aborted."
@@ -188,7 +184,7 @@ md"""
 """
 
 # ╔═╡ 5f3c1ce1-50bb-44ba-abac-d3ccc82fdb51
-par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes; Tcold_abs=Tcold_abs, spatial=spatial, tflank=flank, ng=ng)
+par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes; ng=ng)
 
 # ╔═╡ e2e1ee2a-f98d-47fd-8c22-cc441f2d12c2
 begin
@@ -199,19 +195,22 @@ end
 begin
 	TM_itp = par[3].prog.T_itp
 	Plots.plot(0.0:0.01:sys.modules[3].PM, TM_itp.(sys.modules[3].length/2, 0.0:0.01:sys.modules[3].PM).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
-	Plots.plot!([0.0, 0.0], [TM_itp(sys.modules[3].length/2,0.0), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM)].-273.15, c=:black, label="")
-	Plots.plot!([ratio*PM, ratio*PM], [TM_itp(sys.modules[3].length/2,0.0), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM)].-273.15, c=:black, linestyle=:dash, label="")
-	Plots.plot!([PM, PM], [TM_itp(sys.modules[3].length/2,0.0), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM)].-273.15, c=:black, label="")
+	Plots.plot!([-shift, -shift], [TM_itp(sys.modules[3].length/2,-shift), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM-shift)].-273.15, c=:black, label="")
+	Plots.plot!([ratio*PM-shift, ratio*PM-shift], [TM_itp(sys.modules[3].length/2,ratio*PM-shift-eps()), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM-shift)].-273.15, c=:black, linestyle=:dash, label="")
+	Plots.plot!([PM-shift, PM-shift], [TM_itp(sys.modules[3].length/2,PM-shift), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM-shift)].-273.15, c=:black, label="")
 end
+
+# ╔═╡ 4a22896f-d1b7-4b69-87d6-cfee69cb91ff
+TM_itp(sys.modules[3].length/2,ratio*PM-shift)-273.15
 
 # ╔═╡ b8a6cdec-457b-4fb0-b6f8-60f713f4a015
 begin
 	Plots.plot(xlabel="position x in m", ylabel="temperature in °C", title="temperature at modulator point", legend=false)
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, sys.modules[3].ratio*sys.modules[3].PM).-273.15, label="t=$(sys.modules[3].ratio*sys.modules[3].PM)s")
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, (1+3*sys.modules[3].ratio)/4*sys.modules[3].PM).-273.15, label="t=$((1+3*sys.modules[3].ratio)/4*sys.modules[3].PM)s")
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, (1+sys.modules[3].ratio)/2*sys.modules[3].PM).-273.15, label="t=$((1+sys.modules[3].ratio)/2*sys.modules[3].PM)s")
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, 3.95).-273.15, label="t=3.95s")
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, sys.modules[3].PM).-273.15, label="t=$(sys.modules[3].PM)s")
+	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, sys.modules[3].ratio*sys.modules[3].PM-sys.modules[3].shift).-273.15, label="t=$(sys.modules[3].ratio*sys.modules[3].PM-sys.modules[3].shift)s")
+	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, (1+3*sys.modules[3].ratio)/4*sys.modules[3].PM-sys.modules[3].shift).-273.15, label="t=$((1+3*sys.modules[3].ratio)/4*sys.modules[3].PM-sys.modules[3].shift)s")
+	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, (1+sys.modules[3].ratio)/2*sys.modules[3].PM-sys.modules[3].shift).-273.15, label="t=$((1+sys.modules[3].ratio)/2*sys.modules[3].PM-sys.modules[3].shift)s")
+	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, 3.95-sys.modules[3].shift).-273.15, label="t=$(3.95-sys.modules[3].shift)s")
+	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, sys.modules[3].PM-sys.modules[3].shift).-273.15, label="t=$(sys.modules[3].PM-sys.modules[3].shift)s")
 end
 
 # ╔═╡ e72a6c41-2b14-45cb-81e7-263610c3c8ae
@@ -224,21 +223,50 @@ end
 paths = GasChromatographySystems.all_paths(sys.g, 1)[2]
 
 # ╔═╡ 2b41aa34-d994-440b-a8e1-dd6337008a48
-sim = GasChromatographySystems.simulate_along_paths(sys, paths, par; algTM=algTM)
+sim = GasChromatographySystems.simulate_along_paths(sys, paths, par)
 
-# ╔═╡ baf56852-3559-4f11-a688-8d2724ed7fe5
-md"""
-## Determine tR1 and tR2
-"""
+# ╔═╡ 6b7f9f70-2391-4797-ada2-9da8f22c411e
+sim[2][1][2]
 
-# ╔═╡ 22d1d757-ef2f-40a5-945a-c153de565781
-#fit_envel = GasChromatographySystems.fit_envelope(sim[2][1][8], sim[2][1][2])
+# ╔═╡ 97a0d1ed-544e-4309-aeea-738a8cf3d40e
+GasChromatographySystems.chrom(sim[2][1][2])[1]
 
-# ╔═╡ dff26d84-0a03-448f-94e1-cabd3ff7cc44
-#fit_D1 = GasChromatographySystems.fit_gauss_D1(sim[2][1][8], sim[2][1][2], PM)
+# ╔═╡ 99536ef6-4838-40f2-9b98-6a3c0698205f
+sim[2][1][2].tR.-6.0.*sim[2][1][2].τR
 
-# ╔═╡ a70a7f0a-53a8-47ec-ace2-ae59f1aa3fbd
-#fit_D2 = GasChromatographySystems.fit_gauss_D2(sim[2][1][8], PM)
+# ╔═╡ 6b62b3ce-f218-4e43-a1cf-db1102b17a7b
+sim[2][1][2].tR.+6.0.*sim[2][1][2].τR
+
+# ╔═╡ 5fbd3c2f-0da2-46e9-8627-29f9ae4ea82f
+(cld.(sim[2][1][2].tR.-6.0.*sim[2][1][2].τR, PM)).*PM .- shift
+
+# ╔═╡ f8b6d8e5-04b0-4884-a53e-265c529a8e9b
+(fld.(sim[2][1][2].tR.+6.0.*sim[2][1][2].τR, PM)).*PM .- shift
+
+# ╔═╡ 4cd94a73-ffa7-4fe2-96ee-9aab520638ed
+new_par, df_A = GasChromatographySystems.slicing(sim[2][1][2], PM, ratio, shift, par[3])
+
+# ╔═╡ c6f20b3d-789a-4bd3-b106-a090ae875ba6
+begin
+	plotly()
+	Plots.plot(2000.0:0.01:2200.0, TM_itp.(sys.modules[3].length/2, 2000.0:0.01:2200.0).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
+	Plots.plot!(2000.0:0.01:2200.0, par[1].prog.T_itp(0.0, 2000.0:0.01:2200.0).-273.15, label="")
+end
+
+# ╔═╡ 1dfc5e74-b92c-41fc-bcb9-b5a27467c6bc
+fld.(2099, PM).*PM .- shift
+
+# ╔═╡ 827cee6e-278a-47cd-b84c-ed4bb5b71bc3
+fld.(2100, PM).*PM
+
+# ╔═╡ 5745aa59-9074-4f01-9f44-6db0066b4b9e
+fld.(2099+ shift, PM).*PM .- shift
+
+# ╔═╡ 1abe950b-db23-44ac-bfca-e039da5d0b56
+PM*ratio
+
+# ╔═╡ 534ca3c8-a90d-40dd-beae-f14e8d4fd5c4
+GasChromatographySystems.approximate_modulator(new_par, df_A, sys.modules[3].PM, sys.modules[3].ratio, sys.modules[3].shift)
 
 # ╔═╡ bbb75e0b-ccab-4c32-9e33-0d8915dba95d
 md"""
@@ -254,95 +282,10 @@ md"""
 #collect_chrom(sim[2][1], sys; markings=true)
 
 # ╔═╡ d912d940-5b39-4bb9-a136-1f5e67ad7d82
-#GasChromatographySystems.chrom(sim[2][1][4])[1]
+GasChromatographySystems.chrom(sim[2][1][end])[1]
 
 # ╔═╡ f1f1ffdb-bc7e-48fd-b688-21f375ab21eb
 #GasChromatographySystems.chrom_marked(sim[2][1][4], PM, ratio, shift1; nτ=6)[1]
-
-# ╔═╡ 363533f9-0bc4-4ea9-82ad-b8b22a42e323
-md"""
-### Enveloping curve
-"""
-
-# ╔═╡ 7c2c251b-5cc7-4dc6-b385-d6a408628acc
-tall, call, ts, cs = GasChromatographySystems.chrom(sim[2][1][end]; nτ=6)[2:end]
-
-# ╔═╡ bd810db6-ed39-482e-8107-af3169ff09be
-#=begin
-	gr()
-	@. model_g(x,p) = p[3]/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
-	p_envel = GasChromatographySystems.collect_chrom(sim[2][1], sys; markings=true)[end]
-	t1, t2 = p_envel[1][1][:x_extrema]
-	t = t1:(t2-t1)/1000:t2
-	ymax = Array{Float64}(undef, length(fit_envel.Name))
-	for i=1:length(fit_envel.Name)
-		ymax[i] = model_g(fit_envel.fits[i].param[1], fit_envel.fits[i].param)
-		Plots.scatter!(p_envel, fit_envel.tRs[i], fit_envel.heights[i], msize=2, c=i+1)
-		Plots.plot!(p_envel, t, model_g(t, fit_envel.fits[i].param), c=i+1, linestyle=:dash)
-		Plots.plot!(p_envel, [fit_envel.fits[i].param[1], fit_envel.fits[i].param[1]], [0.0, ymax[i]], c=i+1, linestyle=:dot)
-		Plots.scatter!(p_envel, (fit_envel.fits[i].param[1], ymax[i]), c=i+1, shape=:diamond)
-	end
-	Plots.plot!(p_envel, xticks=0:4:3000, legend=false, ylims=(-0.01*maximum(ymax), 1.1*maximum(ymax)), title="Enveloping curve")
-	p_envel
-end=#
-
-# ╔═╡ 7a81859f-7c0c-4115-9cca-367753898427
-md"""
-### Projection on 1st dimension
-"""
-
-# ╔═╡ 8cbc706f-1d3f-49ac-8f1c-d281b2318dc1
-#=begin
-	plotly()
-	p_proj1stD = Plots.plot(legend=false, xlabel="time in s")
-
-	mins_ = minimum.(fit_D1.tRs)
-	maxs_ = maximum.(fit_D1.tRs)
-	for i=1:length(fit_envel.Name)
-		ymax = model_g(fit_D1.fits[i].param[1], fit_D1.fits[i].param)
-		for j=1:length(fit_D1.tRs[i]) 
-			Plots.plot!(p_proj1stD, [fit_D1.tRs[i][j], fit_D1.tRs[i][j]], [0.0, fit_envel.heights[i][j]], c=i+1, linewidth=10, linealpha=0.5)
-		end
-		Plots.scatter!(p_proj1stD, fit_D1.tRs[i], fit_D1.heights[i], msize=2, c=i+1)
-
-		tt = mins_[i]:(maxs_[i]-mins_[i])/1000.0:maxs_[i]
-		Plots.plot!(p_proj1stD, tt, model_g(tt, fit_D1.fits[i].param), c=i+1, linestyle=:dash)
-
-		Plots.plot!(p_proj1stD, [fit_D1.fits[i].param[1], fit_D1.fits[i].param[1]], [0.0, ymax], c=i+1, linestyle=:dot)
-		Plots.scatter!(p_proj1stD, (fit_D1.fits[i].param[1], ymax), c=i+1, shape=:diamond)
-	end
-	Plots.plot!(p_proj1stD, xticks=0:4:3000, legend=false, title="Projection 1st D")
-	p_proj1stD
-end=#
-
-# ╔═╡ 2491363c-4d1a-4baf-8c47-f85f550d59f8
-md"""
-### Projection on 2nd dimension
-"""
-
-# ╔═╡ fd5310bd-005a-4bf5-b6b7-79b137a101f7
-#=begin
-	plotly()
-	p_proj2ndD = Plots.plot(legend=false, xlabel="time in s", title="Projection 2nd D")
-
-	for i=1:length(cs)
-		Plots.plot!(p_proj2ndD, ts[i].-fld.(ts[i], PM).*PM, cs[i], c=findfirst(sim[2][1][end].Name[i].==selected_solutes)+1)
-	end
-	mins = minimum.(fit_D2.tRs)
-	maxs = maximum.(fit_D2.tRs)
-	for i=1:length(fit_D2.Name)
-		ymax = model_g(fit_D2.fits[i].param[1], fit_D2.fits[i].param)
-		col = findfirst(fit_D2.Name[i].==selected_solutes)+1
-		Plots.scatter!(p_proj2ndD, fit_D2.tRs[i], fit_D2.heights[i], msize=2, c=col)
-
-		tt = 0.9*mins[i]:(1.1*maxs[i]-0.9*mins[i])/1000.0:1.1*maxs[i]
-		Plots.plot!(p_proj2ndD, tt, model_g(tt, fit_D2.fits[i].param), c=col, linestyle=:dash)
-
-		Plots.plot!(p_proj2ndD, [fit_D2.fits[i].param[1], fit_D2.fits[i].param[1]], [0.0, ymax], c=col, linestyle=:dot)
-		Plots.scatter!(p_proj2ndD, (fit_D2.fits[i].param[1], ymax), c=col, shape=:diamond)
-	end
-	p_proj2ndD
-end=#
 
 # ╔═╡ 7739a83c-d001-47cd-aee2-36917106c2ad
 md"""
@@ -358,7 +301,7 @@ md"""
 """
 
 # ╔═╡ e5d4fb3a-f05f-4533-9666-08be32ef19ef
-pl_GCxGC = GasChromatographySystems.peaklist_GCxGC_weighted_mean(sim[2][1][8], PM)
+pl_GCxGC = GasChromatographySystems.peaklist_GCxGC_weighted_mean(sim[2][1][8], PM, shift)
 
 # ╔═╡ 5f67ab8d-3b3d-4bbd-81c8-04eec158ef6e
 begin
@@ -376,6 +319,25 @@ begin
 	Plots.plot!(p_heatmap, xlims=(x1, x2), ylims=(y1, y2))
 
 	Plots.plot(p_contour, p_heatmap, size=(900,800), legend=false)
+end
+
+# ╔═╡ ab0c7a5a-7b6b-4b01-a283-dc4b157092ef
+GasChromatographySystems.peaklist_GCxGC(sim[2][1][8], sim[2][1][2], PM, shift)
+
+# ╔═╡ 1ba0ed9d-577d-4239-a5e2-d915b46236cc
+sim[2][1][8].tR
+
+# ╔═╡ c32ff404-452e-4bc5-85c4-539f0c42433c
+fld.(sim[2][1][8].tR .+ shift, PM).*PM .- shift
+
+# ╔═╡ c5a1f69a-ffe7-41aa-a96d-68be222d141e
+sim[2][1][8].tR .- (fld.(sim[2][1][8].tR.+ shift, PM).*PM.- shift)
+
+# ╔═╡ 7d649d71-824b-47b3-ad6b-b8bc391d170f
+begin
+	plotly()
+	Plots.plot(1800.0:0.01:1820.0, TM_itp.(sys.modules[3].length/2, 1800.0:0.01:1820.0).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
+	Plots.plot!(1800.0:0.01:1820.0, par[1].prog.T_itp(0.0, 1800.0:0.01:1820.0).-273.15, label="")
 end
 
 # ╔═╡ 93e2068d-760e-403e-a6fa-984a237ad6c3
@@ -460,8 +422,11 @@ pl_GCxGC
 # ╔═╡ 3ed4ad21-c8e4-428a-b6d3-b37cfdbd0778
 compare = GasChromatographySystems.comparison_meas_sim(meas, pl_GCxGC)
 
-# ╔═╡ a8de50cb-e4a6-41dc-9f7b-e88d742c0efa
-sum(collect(skipmissing(compare.relΔtR2_percent)))/length(collect(skipmissing(compare.relΔtR2_percent)))
+# ╔═╡ 664d11de-c597-43ab-8af6-810ed818900d
+pwd()
+
+# ╔═╡ 4b532d62-07f0-4f27-b25e-d5c6241f43dc
+#CSV.write(joinpath(pwd(), "test5.csv"), compare)
 
 # ╔═╡ e17c92b0-2db3-4e29-b56f-c7b5650c9d95
 sum(abs.(collect(skipmissing(compare.relΔtR1_percent))))/length(collect(skipmissing(compare.relΔtR1_percent)))
@@ -542,11 +507,8 @@ md"""
 # ╠═113c6e70-2168-11ee-3f7f-2775a67bab90
 # ╠═98217474-a16f-406a-83a7-17fee89c951a
 # ╠═22091a27-80e1-4e98-abe7-4b9652cb832c
-# ╠═470c8573-a0f5-4ab2-9385-c256491f648d
-# ╠═b7b00dda-40d3-40d8-86e5-377d48b189fc
-# ╠═14a1a970-3cfe-4086-94d2-d0c7ed6dab15
+# ╠═1948baf0-1217-485a-8c8b-6e826bd5ef50
 # ╠═8a51f65b-d8f1-407b-835f-1bb1048902bc
-# ╠═9297b636-6daa-40e9-b312-e05f5e5da5fd
 # ╟─13d4415d-3dc4-4eed-aded-c3561b77a9eb
 # ╟─ddde4e3d-4e72-4315-9555-5f8b3375b04c
 # ╠═55194da2-9c5b-464b-bfe1-a65c48bc7801
@@ -554,10 +516,12 @@ md"""
 # ╟─09438575-8370-475f-b2df-fda5155e8c82
 # ╠═d0379590-edf3-4017-b8b8-07bd6080f757
 # ╠═23b71d48-26bd-496d-9c10-e2d3ce2bc13c
-# ╠═a8de50cb-e4a6-41dc-9f7b-e88d742c0efa
 # ╟─0e349acc-46b4-4734-abb7-668ec1225c53
 # ╠═de542d7e-bd0d-47a4-8977-5ab1e64a26f4
-# ╟─a2d062a4-bd59-4ab7-9316-dc769b2c3c09
+# ╠═4a22896f-d1b7-4b69-87d6-cfee69cb91ff
+# ╠═bbb30f9e-0904-4147-b86b-a366040cf798
+# ╠═521692a5-1afc-4909-b39f-62ab310e663b
+# ╠═a2d062a4-bd59-4ab7-9316-dc769b2c3c09
 # ╟─b8a6cdec-457b-4fb0-b6f8-60f713f4a015
 # ╟─e72a6c41-2b14-45cb-81e7-263610c3c8ae
 # ╟─daf7484b-ac12-4515-8e26-adbc8e214cbc
@@ -575,27 +539,34 @@ md"""
 # ╠═5f3c1ce1-50bb-44ba-abac-d3ccc82fdb51
 # ╠═b284207c-70b5-4da5-94e9-0fe70680b0e3
 # ╠═2b41aa34-d994-440b-a8e1-dd6337008a48
-# ╟─baf56852-3559-4f11-a688-8d2724ed7fe5
-# ╠═22d1d757-ef2f-40a5-945a-c153de565781
-# ╠═dff26d84-0a03-448f-94e1-cabd3ff7cc44
-# ╠═a70a7f0a-53a8-47ec-ace2-ae59f1aa3fbd
+# ╠═6b7f9f70-2391-4797-ada2-9da8f22c411e
+# ╠═97a0d1ed-544e-4309-aeea-738a8cf3d40e
+# ╠═99536ef6-4838-40f2-9b98-6a3c0698205f
+# ╠═6b62b3ce-f218-4e43-a1cf-db1102b17a7b
+# ╠═5fbd3c2f-0da2-46e9-8627-29f9ae4ea82f
+# ╠═f8b6d8e5-04b0-4884-a53e-265c529a8e9b
+# ╠═4cd94a73-ffa7-4fe2-96ee-9aab520638ed
+# ╠═c6f20b3d-789a-4bd3-b106-a090ae875ba6
+# ╠═1dfc5e74-b92c-41fc-bcb9-b5a27467c6bc
+# ╠═827cee6e-278a-47cd-b84c-ed4bb5b71bc3
+# ╠═5745aa59-9074-4f01-9f44-6db0066b4b9e
+# ╠═1abe950b-db23-44ac-bfca-e039da5d0b56
+# ╠═534ca3c8-a90d-40dd-beae-f14e8d4fd5c4
 # ╟─bbb75e0b-ccab-4c32-9e33-0d8915dba95d
 # ╟─b586403d-12ac-4b38-b4de-f974fe71b5dc
 # ╠═7e945bad-0a59-4a5e-8c63-cef21ee847d0
 # ╠═d912d940-5b39-4bb9-a136-1f5e67ad7d82
 # ╠═f1f1ffdb-bc7e-48fd-b688-21f375ab21eb
-# ╟─363533f9-0bc4-4ea9-82ad-b8b22a42e323
-# ╠═7c2c251b-5cc7-4dc6-b385-d6a408628acc
-# ╠═bd810db6-ed39-482e-8107-af3169ff09be
-# ╟─7a81859f-7c0c-4115-9cca-367753898427
-# ╟─8cbc706f-1d3f-49ac-8f1c-d281b2318dc1
-# ╟─2491363c-4d1a-4baf-8c47-f85f550d59f8
-# ╟─fd5310bd-005a-4bf5-b6b7-79b137a101f7
 # ╟─7739a83c-d001-47cd-aee2-36917106c2ad
 # ╠═582499db-7b5a-4054-92c2-d0e2a97cd91f
 # ╟─5f67ab8d-3b3d-4bbd-81c8-04eec158ef6e
 # ╟─f268df70-af5a-482f-85e6-84216681ecf4
 # ╠═e5d4fb3a-f05f-4533-9666-08be32ef19ef
+# ╠═ab0c7a5a-7b6b-4b01-a283-dc4b157092ef
+# ╠═1ba0ed9d-577d-4239-a5e2-d915b46236cc
+# ╠═c32ff404-452e-4bc5-85c4-539f0c42433c
+# ╠═c5a1f69a-ffe7-41aa-a96d-68be222d141e
+# ╠═7d649d71-824b-47b3-ad6b-b8bc391d170f
 # ╟─93e2068d-760e-403e-a6fa-984a237ad6c3
 # ╠═9bc833db-7538-4520-9a80-ab49f9bbeb81
 # ╠═b872f155-d36f-4a2d-9741-342a108d6b5f
@@ -608,9 +579,11 @@ md"""
 # ╟─b7c2070b-16bf-41f5-b021-160e54a53a21
 # ╠═189034b6-09e5-4e6b-80b3-e442ad30705c
 # ╟─3ed4ad21-c8e4-428a-b6d3-b37cfdbd0778
+# ╠═664d11de-c597-43ab-8af6-810ed818900d
+# ╠═4b532d62-07f0-4f27-b25e-d5c6241f43dc
 # ╠═e17c92b0-2db3-4e29-b56f-c7b5650c9d95
 # ╠═c190dd0f-6f09-4d18-9aa5-6b40beddfbf3
-# ╟─fb7236b5-98fd-4aac-86ed-5e7118b19ed6
+# ╠═fb7236b5-98fd-4aac-86ed-5e7118b19ed6
 # ╠═a2cc7971-bd69-4623-86a1-7e7d43c6b05c
 # ╟─6cf28744-7748-4d88-bfd7-f8e428732228
 # ╠═e82034ef-57fa-4f78-b663-7465a97ff127

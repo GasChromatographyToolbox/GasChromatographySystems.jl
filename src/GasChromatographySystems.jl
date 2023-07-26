@@ -76,6 +76,20 @@ function ModuleColumn(name, L, d, df, sp, tp, flow)
 end
 
 # add a thermal modulator module
+struct ModuleTMopt
+	Tcold_abs::Bool # Tcold as absolute value (`true`) or as relative difference to the program temperature (`false`) 
+	spatial::Bool # model modulation spot also as smoothed rectangle over the length (`true`) or as uniform (`false`)
+	sflank::Float64 # flank factor for the spatial smoothed rectangle, values between 12 and Inf? 
+	tflank::Float64 # flank factor for the temporal smoothed rectangle, values between 12 and Inf?
+	alg # solver algorithm for the simulation, typical `Vern9()`, `OwrenZen5()`. With the option "simplifiedTM" no solving of ODEs is used for the modulator spot but an approximation is used, assuming a rectangle modulation.
+	abstol::Float64 # absolute tolerance for the solving of the ODEs, typical value 1e-10
+	reltol::Float64 # relativ tolerance for solving of the ODEs, typical value 1e-8
+	dtinit::Float64 # initial step width for the solving of the ODEs, typical value `module length * 1e-6
+end
+
+function ModuleTMopt(; Tcold_abs=true, spatial=false, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6)
+	ModuleTMopt(Tcold_abs, spatial, sflank, tflank, alg, abstol, reltol, dtinit)
+end
 
 struct ModuleTM<:GasChromatographySystems.AbstractModule
 	# Module
@@ -94,15 +108,28 @@ struct ModuleTM<:GasChromatographySystems.AbstractModule
 	Thot::Float64 # heating with hot jet
 	Tcold::Float64 # cooling with cold jet
 	flow # an number (constant flow) or a Function
+	opt::ModuleTMopt
 end
 
-function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold)
-	TM = ModuleTM(name, L, d, [d], df, [df], sp, tp, shift, pm, ratio, Thot, Tcold, NaN)
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, opt::ModuleTMopt)
+	TM = ModuleTM(name, L, d, [d], df, [df], sp, tp, shift, pm, ratio, Thot, Tcold, NaN, opt)
 	return TM
 end
 
-function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F)
-	TM = ModuleTM(name, L, d, [d], df, [df], sp, tp, shift, pm, ratio, Thot, Tcold, F)
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F, opt::ModuleTMopt)
+	TM = ModuleTM(name, L, d, [d], df, [df], sp, tp, shift, pm, ratio, Thot, Tcold, F, opt)
+	return TM
+end
+
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold; Tcold_abs=true, spatial=false, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6)
+	opt = ModuleTMopt(; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit)
+	TM = ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, NaN, opt)
+	return TM
+end
+
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, spatial=false, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6)
+	opt = ModuleTMopt(; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit)
+	TM = ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F, opt)
 	return TM
 end
 
@@ -210,7 +237,7 @@ function update_system(sys)
 			if typeof(sys.modules[i]) == ModuleColumn
 				new_modules[i] = ModuleColumn(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].flow)
 			elseif typeof(sys.modules[i]) == ModuleTM
-				new_modules[i] = ModuleTM(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].flow)
+				new_modules[i] = ModuleTM(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].flow, sys.modules[i].opt)
 			end
 		end
 	end
@@ -237,25 +264,6 @@ function flow_balance(g, i_n, F)
 	end
 	return balance
 end
-
-#=function flow_balance(g, i_n, P², κ)
-	#@variables P²[1:nv(g)], κ[1:ne(g)]
-	E = collect(edges(g))
-	srcE = src.(E) # source nodes of the edges
-	dstE = dst.(E) # destination nodes of the edges
-	# find edges, where node `i_n` is the source
-	i_src = findall(srcE.==i_n)
-	# find edges, where node `i_n` is the destination
-	i_dst = findall(dstE.==i_n)
-	balance = 0
-	for j=1:length(i_dst) # ingoing flows
-		balance = balance + (P²[srcE[i_dst[j]]]-P²[dstE[i_dst[j]]])/κ[i_dst[j]]
-	end
-	for j=1:length(i_src) # outgoing flows
-		balance = balance - (P²[srcE[i_src[j]]]-P²[dstE[i_src[j]]])/κ[i_src[j]]
-	end
-	return balance
-end=#
 
 function inlet_vertices(g)
 	v = vertices(g)
@@ -416,30 +424,10 @@ function solve_balance(sys)
 	return sol
 end
 
-#=function flow_restriction(t, module_, options)
-	if typeof(module_.temperature) <: TemperatureProgram
-		T_itp = GasChromatographySimulator.temperature_interpolation(module_.temperature.timesteps, module_.temperature.temperaturesteps, module_.temperature.gradient_function, module_.length)
-	elseif typeof(module_.temperature) <: Number
-		gf(x) = [zero(x), zero(x)]
-		T_itp = GasChromatographySimulator.temperature_interpolation([0.0, 3600.0], [module_.temperature, module_.temperature], gf, module_.length)
-	end
-	κ = GasChromatographySimulator.flow_restriction(module_.length, t, T_itp, module_.diameter, options.mobile_phase; ng=options.ng, vis=options.vis)
-	return κ
-end
-
 function flow_restrictions(sys)
 	kappas = Array{Function}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
-		f(t) = flow_restriction(t, sys.modules[i], sys.options)
-		kappas[i] = f
-	end
-	return kappas
-end=#
-
-function flow_restrictions(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20)
-	kappas = Array{Function}(undef, ne(sys.g))
-	for i=1:ne(sys.g)
-		T_itp = module_temperature(sys.modules[i], sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)[5]
+		T_itp = module_temperature(sys.modules[i], sys)[5]
 		κ(t) = GasChromatographySimulator.flow_restriction(sys.modules[i].length, t, T_itp, sys.modules[i].diameter, sys.options.mobile_phase; ng=sys.options.ng, vis=sys.options.vis)
 		kappas[i] = κ
 	end
@@ -461,14 +449,14 @@ function pressures_squared(sys)
 	return p²
 end
 
-function solve_pressure(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20)
+function solve_pressure(sys)
 	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
 	#balance = flow_balance(sys)
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
 	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
 	solutions = solve_balance(sys)
 	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
-	κs = GasChromatographySystems.flow_restrictions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+	κs = GasChromatographySystems.flow_restrictions(sys)
 	p²s = GasChromatographySystems.pressures_squared(sys)
 	p_solution = Array{Function}(undef, length(i_unknown_p))
 	for i=1:length(i_unknown_p)
@@ -479,8 +467,8 @@ function solve_pressure(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20)
 	return p_solution, i_unknown_p
 end
 
-function pressure_functions(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20)
-	pres, unk = solve_pressure(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+function pressure_functions(sys)
+	pres, unk = solve_pressure(sys)
 	#p²s = pressures_squared(sys)
 	p_func = Array{Any}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
@@ -494,7 +482,7 @@ function pressure_functions(sys; Tcold_abs=true, spatial=true, sflank=40, tflank
 	return p_func
 end
 
-function interpolate_pressure_functions(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20, dt=1)
+function interpolate_pressure_functions(sys; dt=1)
 	tsteps = GasChromatographySystems.common_timesteps(sys)
 	tend = sum(tsteps)
 	if all(degree(sys.g).<3) # no split/merge nodes, straight graph -> pressure at nodes is linear
@@ -502,7 +490,7 @@ function interpolate_pressure_functions(sys; Tcold_abs=true, spatial=true, sflan
 	else
 		trange = 0:dt:tend
 	end
-	p_func = GasChromatographySystems.pressure_functions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+	p_func = GasChromatographySystems.pressure_functions(sys)
 	p_itp = Array{Any}(undef, length(p_func))
 	for i=1:length(p_func)
 		if all(isnan.(sys.pressurepoints[i].pressure_steps))
@@ -514,8 +502,8 @@ function interpolate_pressure_functions(sys; Tcold_abs=true, spatial=true, sflan
 	return p_itp
 end
 
-function flow_functions(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20)
-	p_func = pressure_functions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+function flow_functions(sys)
+	p_func = pressure_functions(sys)
 	F_func = Array{Function}(undef, ne(sys.g))
 	E = collect(edges(sys.g))
 	srcE = src.(E)
@@ -523,7 +511,7 @@ function flow_functions(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20)
 	for i=1:ne(sys.g)
 		pin(t) = p_func[srcE[i]](t)
 		pout(t) = p_func[dstE[i]](t)
-		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)[5]
+		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
 		f(t) = GasChromatographySimulator.flow(t, T_itp, pin, pout, sys.modules[i].length, sys.modules[i].diameter, sys.options.mobile_phase; ng=sys.options.ng, vis=sys.options.vis, control=sys.options.control)
 		F_func[i] = f
 	end
@@ -573,9 +561,9 @@ function plot_graph(sys; lay = Spring(), color=:lightblue, node_size=40, arrow_s
 	return fig
 end
 
-function plot_graph_with_flow(sys, t; lay = Spring(), color=:lightblue, node_size=80, arrow_size=20, arrow_shift=0.8, dataaspect=false, nlabels_fontsize=14, elabels_fontsize=14, elabels_distance = 20, Tcold_abs=true, spatial=true, sflank=40, tflank=20)
-	p_func = pressure_functions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
-	F_func = flow_functions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+function plot_graph_with_flow(sys, t; lay = Spring(), color=:lightblue, node_size=80, arrow_size=20, arrow_shift=0.8, dataaspect=false, nlabels_fontsize=14, elabels_fontsize=14, elabels_distance = 20)
+	p_func = pressure_functions(sys)
+	F_func = flow_functions(sys)
 	fig, ax, p = GraphMakie.graphplot(sys.g, 
 						layout=lay,
 						nlabels = [sys.pressurepoints[i].name*"\n$(trunc(Int, p_func[i](t)/1000))kPa" for i in 1:nv(sys.g)],
@@ -597,9 +585,9 @@ function plot_graph_with_flow(sys, t; lay = Spring(), color=:lightblue, node_siz
 	return fig
 end
 
-function plot_flow_over_time(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20, dt=60.0)
+function plot_flow_over_time(sys; dt=60.0)
 	#plotly()
-	F_func = flow_functions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+	F_func = flow_functions(sys)
 	com_timesteps = GasChromatographySystems.common_timesteps(sys)
 	trange = 0:dt:sum(com_timesteps)
 	p_flow = Plots.plot(xlabel="time in s", ylabel="flow in mL/min")
@@ -609,9 +597,9 @@ function plot_flow_over_time(sys; Tcold_abs=true, spatial=true, sflank=40, tflan
 	return p_flow
 end
 
-function plot_pressure_over_time(sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20, dt=60.0)
+function plot_pressure_over_time(sys; dt=60.0)
 	#plotly()
-	p_func = pressure_functions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+	p_func = pressure_functions(sys)
 	com_timesteps = GasChromatographySystems.common_timesteps(sys)
 	trange = 0:dt:sum(com_timesteps)
 	p_pres = Plots.plot(xlabel="time in s", ylabel="pressure in Pa(a)", legend=:topleft)
@@ -662,7 +650,7 @@ function common_solutes(db, sys)
 	return common_solutes
 end
 
-function module_temperature(module_::ModuleColumn, sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20)
+function module_temperature(module_::ModuleColumn, sys)
 	if typeof(module_.temperature) <: TemperatureProgram # temperature is a TemperatureProgram
 		time_steps = module_.temperature.timesteps
 		temp_steps = module_.temperature.temperaturesteps	
@@ -679,7 +667,7 @@ function module_temperature(module_::ModuleColumn, sys; Tcold_abs=true, spatial=
 	return time_steps, temp_steps, gf, a_gf, T_itp
 end
 
-function module_temperature(module_::GasChromatographySystems.ModuleTM, sys; Tcold_abs=true, spatial=true, sflank=40, tflank=20)
+function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 	if typeof(module_.temperature) <: GasChromatographySystems.TemperatureProgram # temperature is a TemperatureProgram
 		time_steps = module_.temperature.timesteps
 		temp_steps = module_.temperature.temperaturesteps
@@ -693,28 +681,29 @@ function module_temperature(module_::GasChromatographySystems.ModuleTM, sys; Tco
 		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
 		T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.length)
 	end
-	T_itp(x,t) = if Tcold_abs == true # cool jet always at Tcold
-		therm_mod(t, module_.shift, module_.PM, module_.ratio, module_.Tcold, T_itp_(x, t) .+ module_.Thot .- 273.15; flank=tflank) .+ 273.15 
+	T_itp(x,t) = if module_.opt.Tcold_abs == true # cool jet always at Tcold
+		therm_mod(t, module_.shift, module_.PM, module_.ratio, module_.Tcold, T_itp_(x, t) .+ module_.Thot .- 273.15; flank=module_.opt.tflank) .+ 273.15 
 	else # cool jet always at T_itp_ + Tcold
-		therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15; flank=tflank) .+ 273.15 
+		therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15; flank=module_.opt.tflank) .+ 273.15 
 	end
 	
-	spot(x,t) = if spatial == true
-		GasChromatographySystems.smooth_rectangle(x, 0.0, sys.modules[5].length, T_itp_(x, t), T_itp(x,t); flank=sflank)
+	spot(x,t) = if module_.opt.spatial == true
+		GasChromatographySystems.smooth_rectangle(x, 0.0, sys.modules[5].length, T_itp_(x, t), T_itp(x,t); flank=module_.opt.sflank)
 	else
 		T_itp(x,t)
 	end
 	return time_steps, temp_steps, gf, a_gf, spot
 end
 
-function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1, Tcold_abs=true, spatial=true, sflank=40, tflank=20, ng=true)
+function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1, ng=true)
+	# ng should be taken from the separat module options 
 	E = collect(edges(sys.g))
 	srcE = src.(E) # source indices
 	dstE = dst.(E) # destination indices
 	if interp == true # linear interpolation of pressure functions with step width dt
-		p_func = interpolate_pressure_functions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank, dt=dt)
+		p_func = interpolate_pressure_functions(sys; dt=dt)
 	else
-		p_func = pressure_functions(sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+		p_func = pressure_functions(sys)
 	end
 	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
@@ -726,16 +715,19 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		pout_steps = sys.pressurepoints[dstE[i]].pressure_steps
 		pin_itp = p_func[srcE[i]]
 		pout_itp = p_func[dstE[i]]	
-		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank)
+		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
 		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
 
 		# substance parameters
 		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].stationary_phase, sys.options.mobile_phase, selected_solutes, NaN.*ones(length(selected_solutes)), NaN.*ones(length(selected_solutes)))
 
 		# option parameters
-		opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM && spatial == true && ng == false
-			GasChromatographySimulator.Options(alg=sys.options.alg, abstol=sys.options.abstol, reltol=sys.options.reltol, Tcontrol=sys.options.Tcontrol, odesys=sys.options.odesys, ng=false, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+		opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM && sys.modules[i].opt.spatial == true
+			GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.options.Tcontrol, odesys=sys.options.odesys, ng=false, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+		elseif typeof(sys.modules[i]) == ModuleTM
+			GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.options.Tcontrol, odesys=sys.options.odesys, ng=true, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
 		else
+			# put options for ModuleColumn in separat options structure?
 			GasChromatographySimulator.Options(alg=sys.options.alg, abstol=sys.options.abstol, reltol=sys.options.reltol, Tcontrol=sys.options.Tcontrol, odesys=sys.options.odesys, ng=sys.options.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
 		end
 
@@ -743,47 +735,6 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 	end
 	return parameters
 end
-
-#=function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1)
-	E = collect(edges(sys.g))
-	srcE = src.(E)
-	dstE = dst.(E)
-	if interp == true
-		p_func = interpolate_pressure_functions(sys; dt=dt)
-	else
-		p_func = pressure_functions(sys)
-	end
-	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
-	for i=1:ne(sys.g)
-		col = GasChromatographySimulator.Column(sys.modules[i].length, sys.modules[i].diameter, [sys.modules[i].diameter], sys.modules[i].film_thickness, [sys.modules[i].film_thickness], sys.modules[i].stationary_phase, sys.options.mobile_phase)
-
-		pin_steps = sys.pressurepoints[srcE[i]].pressure_steps
-		pout_steps = sys.pressurepoints[dstE[i]].pressure_steps
-		pin_itp = p_func[srcE[i]]
-		pout_itp = p_func[dstE[i]]	
-		if typeof(sys.modules[i].temperature) <: TemperatureProgram
-			time_steps = sys.modules[i].temperature.timesteps
-			temp_steps = sys.modules[i].temperature.temperaturesteps	
-			gf = sys.modules[i].temperature.gradient_function
-			a_gf = sys.modules[i].temperature.a_gradient_function
-			T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, sys.modules[i].length)		
-		elseif typeof(sys.modules[i].temperature) <: Number
-			time_steps = common_timesteps(sys)
-			temp_steps = sys.modules[i].temperature.*ones(length(time_steps))
-			gf(x) = zero(x).*ones(length(time_steps))
-			a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
-			T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, sys.modules[i].length)
-		end
-		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
-
-		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].stationary_phase, sys.options.mobile_phase, selected_solutes, NaN.*ones(length(selected_solutes)), NaN.*ones(length(selected_solutes)))
-
-		opt = GasChromatographySimulator.Options(sys.options.alg, sys.options.abstol, sys.options.reltol, sys.options.Tcontrol, sys.options.odesys, sys.options.ng, sys.options.vis, sys.options.control, sys.options.k_th)
-
-		parameters[i] = GasChromatographySimulator.Parameters(col, prog, sub, opt)
-	end
-	return parameters
-end=#
 
 # estimate possible paths in the graphs
 function all_paths(g) # brute force method using multiple random walk and only using unique results
@@ -825,10 +776,6 @@ end
 
 # simulate along the paths
 function index_parameter(g, path)
-	#i_par = Array{Int}(undef, length(path))
-	#for i=1:length(path)
-	#	i_par[i] = findall(src.(path)[i].==src.(edges(g)))[findfirst(findall(src.(path)[i].==src.(edges(g))).==findall(dst.(path)[i].==dst.(edges(g))))]
-	#end
 	return findall(x->x in path, collect(edges(g)))
 end
 
@@ -836,8 +783,8 @@ function common_edges(path1, path2)
 	return path2[findall(x->x in path2, path1)]
 end
 
-function positive_flow(sys; kwargs...)
-	F_func = flow_functions(sys; kwargs...)
+function positive_flow(sys)
+	F_func = flow_functions(sys)
 	tend = sum(common_timesteps(sys))
 	t = 0:tend/2:tend # !!!perhaps use interval arithmatic to test, if the flow is positive over the interval 0:tend!!!???
 	#ipar = index_parameter(sys.g, path)
@@ -873,32 +820,6 @@ function change_initial(par::GasChromatographySimulator.Parameters, init_t, init
 	return newpar
 end
 
-#=function change_initial(par::GasChromatographySimulator.Parameters, pl)
-	# copys the parameters `par` and changes the values of par.sub[i].τ₀ and par.sub[i].t₀ to pl.tR[], pl.τR[]
-	CAS_pl = [GasChromatographySimulator.CAS_identification(name).CAS for name in pl.Name] # CAS-numbers of the peaklist entries
-	newsub = Array{GasChromatographySimulator.Substance}(undef, length(par.sub))
-	for i=1:length(par.sub)
-		ii = findfirst(par.sub[i].CAS.==CAS_pl)
-		newsub[i] = GasChromatographySimulator.Substance(par.sub[i].name, par.sub[i].CAS, par.sub[i].Tchar, par.sub[i].θchar, par.sub[i].ΔCp, par.sub[i].φ₀, par.sub[i].ann, par.sub[i].Cag, pl.tR[ii], pl.τR[ii])
-	end
-	newpar = GasChromatographySimulator.Parameters(par.col, par.prog, newsub, par.opt)
-	return newpar
-end
-
-function change_initial(par_::GasChromatographySimulator.Parameters, prev_par::GasChromatographySimulator.Parameters, prev_pl)
-	# change initials, using the substance parameters from the previous parameter set (parameter set of the previous segment/module, should have the same stationary phase!)
-	# this version is needed for an increase of the number of substances due to slicing at a modulator relative the the 
-	new_sub = Array{GasChromatographySimulator.Substance}(undef, length(prev_par.sub))
-	for i=1:length(prev_par.sub)
-		# filter for correct CAS and annotation (slice number)
-		ii_ = common_index(prev_pl, prev_par.sub[i].CAS, join(split(prev_par.sub[i].ann, ", ")[1:end-1], ", "))
-		new_sub[ii_] = GasChromatographySimulator.Substance(prev_par.sub[i].name, prev_par.sub[i].CAS, prev_par.sub[i].Tchar, prev_par.sub[i].θchar, prev_par.sub[i].ΔCp, prev_par.sub[i].φ₀, prev_par.sub[i].ann, prev_par.sub[i].Cag, prev_pl.tR[ii_], prev_pl.τR[ii_])
-	end
-	# here changes of options could be applied
-	new_par = GasChromatographySimulator.Parameters(par_.col, par_.prog, new_sub, par_.opt)
-	return new_par
-end=#
-
 function change_initial(par::GasChromatographySimulator.Parameters, prev_pl)
 	new_sub = Array{GasChromatographySimulator.Substance}(undef, length(prev_pl.CAS))
 	for i=1:length(prev_pl.CAS)
@@ -931,238 +852,7 @@ function simulate_along_paths(sys, paths, db_dataframe, selected_solutes; t₀=z
 	return path_pos, peaklists, solutions, new_par_sys
 end
 
-#=function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)))
-	#par_sys = graph_to_parameters(sys, db_dataframe, selected_solutes)
-	E = collect(edges(sys.g))
-	peaklists = Array{Array{DataFrame,1}}(undef, length(paths))
-	solutions = Array{Array{Any,1}}(undef, length(paths))
-	path_pos = Array{String}(undef, length(paths))
-	new_par_sys = Array{GasChromatographySimulator.Parameters}(undef, length(par_sys))
-	visited_E = falses(length(E))
-	for i=1:length(paths)
-		i_par = GasChromatographySystems.index_parameter(sys.g, paths[i])
-		if GasChromatographySystems.path_possible(sys, paths[i]) == true
-			path_pos[i] = "path is possible"
-			peaklists_ = Array{DataFrame}(undef, length(i_par))
-			solutions_ = Array{Any}(undef, length(i_par))
-			for j=1:length(i_par)
-				if (i>1) && (all(visited_E[1:i_par[j]].==true))
-					# look in all previous paths for the correct result -> the simulation correlated to the same edge and where this edge is connected to only previouse visited edges
-					i_path = 0
-					i_edge = 0
-					for k=1:i-1 # previous paths
-						i_par_previous = GasChromatographySystems.index_parameter(sys.g, paths[k])
-						if length(i_par_previous) < j
-							j0 = length(i_par_previous)
-						else
-							j0 = j
-						end
-						if all(x->x in i_par_previous[1:j0], i_par[1:j]) == true # all edges up to j are the same between the two paths
-							i_path = k
-							i_edge = findfirst(i_par[j].==i_par_previous)
-						end
-					end
-					peaklists_[j] = peaklists[i_path][i_edge]
-					solutions_[j] = solutions[i_path][i_edge]
-				else
-					if j == 1
-						new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], t₀, τ₀)
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-					else
-						if refocus[i_par[j]] == true
-							new_par_sys[i_par[j]] = change_initial_focussed(par_sys[i_par[j]], peaklists_[j-1]; τ₀=τ₀_focus)
-						else
-							new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], peaklists_[j-1])
-						end
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-					end
-				end
-			end
-			visited_E[i_par] .= true
-			peaklists[i] = peaklists_
-			solutions[i] = solutions_
-		else
-			neg_flow_modules = sys.modules[findall(paths[i][findall(GasChromatographySystems.positive_flow(sys)[i_par].==false)].==edges(sys.g))]
-			str_neg_flow = "path not possible: "
-			for j=1:length(neg_flow_modules)
-				str_neg_flow = str_neg_flow*"Flow in module >$(neg_flow_modules[j].name)< becomes negative during the program. "
-			end
-			path_pos[i] = str_neg_flow
-		end
-	end
-	return path_pos, peaklists, solutions, new_par_sys
-end=#
-
-#=function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, abstolTM=1e-10, reltolTM=1e-8, algTM=Vern9(), refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)))
-	
-	E = collect(edges(sys.g))
-	peaklists = Array{Array{DataFrame,1}}(undef, length(paths))
-	solutions = Array{Array{Any,1}}(undef, length(paths))
-	path_pos = Array{String}(undef, length(paths))
-	new_par_sys = Array{GasChromatographySimulator.Parameters}(undef, length(par_sys))
-	visited_E = falses(length(E))
-
-	# i -> path number
-	# j -> segment/module number
-	for i=1:length(paths)
-		i_par = GasChromatographySystems.index_parameter(sys.g, paths[i])
-		if GasChromatographySystems.path_possible(sys, paths[i]) == true
-			path_pos[i] = "path is possible"
-			peaklists_ = Array{DataFrame}(undef, length(i_par))
-			solutions_ = Array{Any}(undef, length(i_par))
-			#As_ = Array{DataFrame}(undef, length(i_par))
-			for j=1:length(i_par)
-				if (i>1) && (all(visited_E[1:i_par[j]].==true))
-					# was the segment already simulated in a previous simulated path?
-					# look in all previous paths for the correct result -> the simulation correlated to the same edge and where this edge is connected to only previouse visited edges
-					i_path = 0
-					i_edge = 0
-					for k=1:i-1 # previous paths
-						i_par_previous = GasChromatographySystems.index_parameter(sys.g, paths[k])
-						if length(i_par_previous) < j
-							j0 = length(i_par_previous)
-						else
-							j0 = j
-						end
-						if all(x->x in i_par_previous[1:j0], i_par[1:j]) == true # all edges up to j are the same between the two paths
-							i_path = k
-							i_edge = findfirst(i_par[j].==i_par_previous)
-						end
-					end
-					# re-use the results
-					peaklists_[j] = peaklists[i_path][i_edge]
-					solutions_[j] = solutions[i_path][i_edge]
-				else # new simulated segments
-					if j == 1 # first segment, directly after injection, it is assumed to be a segment of type `ModuleColumn`
-						new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], t₀, τ₀)
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-						peaklists_[j][!,:A] = ones(length(peaklists_[j].Name)) # add a relativ area factor, splitting of `A` at split points is not accounted for yet, is only used for the slicing of peaks at modulators
-					elseif typeof(sys.modules[i_par[j]]) == GasChromatographySystems.ModuleTM
-						if refocus[i_par[j]] == true
-							τ₀=τ₀_focus
-						else
-							τ₀=peaklists_[j-1].τR # PM?
-						end
-						
-						new_par_sys[i_par[j]], df_A = slicing(peaklists_[j-1], sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift, par_sys[i_par[j]]; nτ=nτ, τ₀=τ₀, abstol=abstolTM, reltol=reltolTM, alg=algTM)
-						
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-						add_A_to_pl!(peaklists_[j], df_A)
-					else # ModuleColumn
-						#if length(par_sys[i_par[j]].sub) < length(new_par_sys[i_par[j-1]].sub)
-							# number of peaks increased previously due to slicing in a modulator
-							new_par_sys[i_par[j]] = change_initial(par_sys[i_par[j]], peaklists_[j-1])
-						#else
-						#	new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], peaklists_[j-1])
-						#end
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-						add_A_to_pl!(peaklists_[j], peaklists_[j-1])
-					end
-				end
-			end
-			visited_E[i_par] .= true
-			peaklists[i] = peaklists_
-			solutions[i] = solutions_
-		else # path not possible
-			neg_flow_modules = sys.modules[findall(paths[i][findall(GasChromatographySystems.positive_flow(sys)[i_par].==false)].==edges(sys.g))]
-			str_neg_flow = "path not possible: "
-			for j=1:length(neg_flow_modules)
-				str_neg_flow = str_neg_flow*"Flow in module >$(neg_flow_modules[j].name)< becomes negative during the program. "
-			end
-			path_pos[i] = str_neg_flow
-		end
-	end
-	return path_pos, peaklists, solutions, new_par_sys
-end=#
-
-#=function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, abstolTM=1e-10, reltolTM=1e-8, algTM=Vern9(), refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), kwargsTM...)
-	
-	E = collect(edges(sys.g))
-	peaklists = Array{Array{DataFrame,1}}(undef, length(paths))
-	solutions = Array{Array{Any,1}}(undef, length(paths))
-	path_pos = Array{String}(undef, length(paths))
-	new_par_sys = Array{GasChromatographySimulator.Parameters}(undef, length(par_sys))
-	visited_E = falses(length(E))
-
-	# i -> path number
-	# j -> segment/module number
-	for i=1:length(paths)
-		i_par = GasChromatographySystems.index_parameter(sys.g, paths[i])
-		if GasChromatographySystems.path_possible(sys, paths[i]) == true
-			path_pos[i] = "path is possible"
-			peaklists_ = Array{DataFrame}(undef, length(i_par))
-			solutions_ = Array{Any}(undef, length(i_par))
-			#As_ = Array{DataFrame}(undef, length(i_par))
-			for j=1:length(i_par)
-				if (i>1) && (all(visited_E[1:i_par[j]].==true))
-					# was the segment already simulated in a previous simulated path?
-					# look in all previous paths for the correct result -> the simulation correlated to the same edge and where this edge is connected to only previouse visited edges
-					i_path = 0
-					i_edge = 0
-					for k=1:i-1 # previous paths
-						i_par_previous = GasChromatographySystems.index_parameter(sys.g, paths[k])
-						if length(i_par_previous) < j
-							j0 = length(i_par_previous)
-						else
-							j0 = j
-						end
-						if all(x->x in i_par_previous[1:j0], i_par[1:j]) == true # all edges up to j are the same between the two paths
-							i_path = k
-							i_edge = findfirst(i_par[j].==i_par_previous)
-						end
-					end
-					# re-use the results
-					peaklists_[j] = peaklists[i_path][i_edge]
-					solutions_[j] = solutions[i_path][i_edge]
-				else # new simulated segments
-					if j == 1 # first segment, directly after injection, it is assumed to be a segment of type `ModuleColumn`
-						new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], t₀, τ₀)
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-						peaklists_[j][!,:A] = ones(length(peaklists_[j].Name)) # add a relativ area factor, splitting of `A` at split points is not accounted for yet, is only used for the slicing of peaks at modulators
-					elseif typeof(sys.modules[i_par[j]]) == GasChromatographySystems.ModuleTM
-						if refocus[i_par[j]] == true
-							τ₀=τ₀_focus
-						else
-							τ₀=peaklists_[j-1].τR # PM?
-						end
-						
-						new_par_sys[i_par[j]], df_A = GasChromatographySystems.slicing(peaklists_[j-1], sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift, par_sys[i_par[j]]; nτ=nτ, τ₀=τ₀, abstol=abstolTM, reltol=reltolTM, alg=algTM)
-						if algTM == "simplifiedTM"
-							peaklists_[j], solutions_[j] = approximate_modulator(new_par_sys[i_par[j]], df_A, sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift)
-						else
-							#kwargsTM = (dtmax = dtmaxTM, )
-							peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]]; kwargsTM...)
-							GasChromatographySystems.add_A_to_pl!(peaklists_[j], df_A)
-						end
-						if maximum(peaklists_[j].τR) > sys.modules[i_par[j]].PM
-							return @warn "Peak width of focussed peaks > modulation period. Simulation is aborted."
-						end
-					else # ModuleColumn
-						new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], peaklists_[j-1])
-						#else
-						#	new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], peaklists_[j-1])
-						#end
-						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-						GasChromatographySystems.add_A_to_pl!(peaklists_[j], peaklists_[j-1])
-					end
-				end
-			end
-			visited_E[i_par] .= true
-			peaklists[i] = peaklists_
-			solutions[i] = solutions_
-		else # path not possible
-			neg_flow_modules = sys.modules[findall(paths[i][findall(GasChromatographySystems.positive_flow(sys)[i_par].==false)].==edges(sys.g))]
-			str_neg_flow = "path not possible: "
-			for j=1:length(neg_flow_modules)
-				str_neg_flow = str_neg_flow*"Flow in module >$(neg_flow_modules[j].name)< becomes negative during the program. "
-			end
-			path_pos[i] = str_neg_flow
-		end
-	end
-	return path_pos, peaklists, solutions, new_par_sys
-end=#
-
-function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, abstolTM=1e-10, reltolTM=1e-8, algTM=Vern9(), refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), kwargsTM...)
+function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), kwargsTM...)
 	
 	E = collect(edges(sys.g))
 	peaklists = Array{Array{DataFrame,1}}(undef, length(paths))
@@ -1213,13 +903,13 @@ function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].
 						else
 							τ₀=peaklists_[j-1].τR # PM?
 						end
-						new_par_sys[i_par[j]], df_A = GasChromatographySystems.slicing(peaklists_[j-1], sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift, par_sys[i_par[j]]; nτ=nτ, τ₀=τ₀, abstol=abstolTM, reltol=reltolTM, alg=algTM)
-						if algTM == "simplifiedTM"
+						new_par_sys[i_par[j]], df_A = GasChromatographySystems.slicing(peaklists_[j-1], sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift, par_sys[i_par[j]]; nτ=nτ, τ₀=τ₀, abstol=sys.modules[i_par[j]].opt.abstol, reltol=sys.modules[i_par[j]].opt.reltol, alg=sys.modules[i_par[j]].opt.alg)
+						if sys.modules[i_par[j]].opt.alg == "simplifiedTM"
 							peaklists_[j], solutions_[j] = approximate_modulator(new_par_sys[i_par[j]], df_A, sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift)
 						else
 							sol = Array{Any}(undef, length(new_par_sys[i_par[j]].sub))
 							for i_sub=1:length(new_par_sys[i_par[j]].sub)
-								dt = new_par_sys[i_par[j]].col.L/1e6
+								dt = sys.modules[i_par[j]].opt.dtinit
 								sol[i_sub] = GasChromatographySimulator.solving_odesystem_r(new_par_sys[i_par[j]].col, new_par_sys[i_par[j]].prog, new_par_sys[i_par[j]].sub[i_sub], new_par_sys[i_par[j]].opt; kwargsTM..., dt=dt)
 								tR = sol[i_sub].u[end][1]
 								while (fld(tR, sys.modules[i_par[j]].PM) > fld(new_par_sys[i_par[j]].sub[i_sub].t₀, sys.modules[i_par[j]].PM) && dt > eps()) || (sol[i_sub].retcode != ReturnCode.Success && dt > eps()) # solute elutes not in the same modulation periode or the solving failed
@@ -1270,7 +960,7 @@ function approximate_modulator(par, df_A, PM, ratio, shift)
 	sort_df_A = sort(df_A, :t0)
 
 	# start time as multiple of modulation period
-	t₀ = fld.(sort_df_A.t0, PM).*PM .+ shift # shift?
+	t₀ = fld.(sort_df_A.t0 .+ shift, PM).*PM .- shift
 	
 	A = sort_df_A.A
 
@@ -1605,7 +1295,7 @@ function therm_mod(t, shift, PM, ratio, Tcold, Thot; flank=20)
 end
 
 # definition GCxGC system with thermal modulator
-function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shiftM1, shiftM2, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=GasChromatographySystems.Options(ng=true))
+function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=GasChromatographySystems.Options(ng=true), optTM=ModuleTMopt())
 
 	TPs = [TP1, TP2, TPM]
 	
@@ -1651,9 +1341,9 @@ function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, 
 	modules = Array{AbstractModule}(undef, ne(g))
 	modules[1] = ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6)
 	modules[2] = ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM)
-	modules[3] = ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shiftM1, PM, ratioM, HotM, ColdM, NaN)
+	modules[3] = ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
 	modules[4] = ModuleColumn("mod loop", LM[3], dM*1e-3, dfM*1e-6, spM, TPM)
-	modules[5] = ModuleTM("TM2", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, shiftM2, PM, ratioM, HotM, ColdM, NaN)
+	modules[5] = ModuleTM("TM2", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
 	modules[6] = ModuleColumn("mod out", LM[5], dM*1e-3, dfM*1e-6, spM, TPM, NaN)
 	modules[7] = ModuleColumn("GC column 2", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN)
 	modules[8] = ModuleColumn("TL", LTL, dTL*1e-3, dfTL*1e-6, spTL, TPTL, NaN)
@@ -1662,8 +1352,8 @@ function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, 
 	return sys
 end
 
-function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = default_TP(), L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), LTL = 0.25, dTL = 0.1, dfTL = 0.1, spTL = "Stabilwax", TPTL = 280.0, LM = [0.30, 0.01, 0.90, 0.01, 0.30], dM = 0.1, dfM = 0.1, spM = "Stabilwax", shiftM1 = 0.0, shiftM2 = 0.0, PM = 4.0, ratioM = 0.9125, HotM = 30.0, ColdM = -120.0, TPM = default_TP(), F = 0.8, pin = NaN, pout = 0.0, opt=GasChromatographySystems.Options(ng=true))
-	sys = GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shiftM1, shiftM2, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=opt)
+function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = default_TP(), L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), LTL = 0.25, dTL = 0.1, dfTL = 0.1, spTL = "Stabilwax", TPTL = 280.0, LM = [0.30, 0.01, 0.90, 0.01, 0.30], dM = 0.1, dfM = 0.1, spM = "Stabilwax", shift = 0.0, PM = 4.0, ratioM = 0.9125, HotM = 30.0, ColdM = -120.0, TPM = default_TP(), F = 0.8, pin = NaN, pout = 0.0, opt=GasChromatographySystems.Options(ng=true), optTM=ModuleTMopt())
+	sys = GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=opt, optTM=optTM)
 	return sys
 end
 
@@ -1680,8 +1370,8 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 	AR = pl.A
 	tcold = PM*ratio
 	thot = PM*(1-ratio)
-	init_t_start = (fld.(tR.-nτ.*τR, PM)).*PM .+ shift # start time of the peaks, rounded to multiple of PM
-	init_t_end = (fld.(tR.+nτ.*τR, PM)).*PM .+ shift # end time of the peaks, rounded to multiple of PM
+	init_t_start = (fld.(tR .+ shift .- nτ.*τR, PM)).*PM .- shift # start time of the peaks, rounded down to multiple of PM
+	init_t_end = (fld.(tR .+ shift .+ nτ.*τR, PM)).*PM .- shift # end time of the peaks, rounded down to multiple of PM
 	n_slice = Int.((init_t_end .- init_t_start)./PM .+ 1) # number of slices for every substance
 	sub_TM_focussed = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice))
 	A_focussed = Array{Float64}(undef, sum(n_slice))
@@ -1752,9 +1442,9 @@ function common_index(pl, CAS, Annotation)
 end
 
 ## further functions for evaluation of GCxGC_TM results
-function peaklist_GCxGC(pl_end, pl_1D, PM)
-	fit_D1 = fit_gauss_D1(pl_end, pl_1D, PM)
-	fit_D2 = fit_gauss_D2(pl_end, PM)
+function peaklist_GCxGC(pl_end, pl_1D, PM, shift)
+	fit_D1 = fit_gauss_D1(pl_end, pl_1D, PM, shift)
+	fit_D2 = fit_gauss_D2(pl_end, PM, shift)
 	tR1 = Array{Float64}(undef, length(fit_D1.Name))
 	tR2 = Array{Float64}(undef, length(fit_D1.Name))
 	for i=1:length(fit_D1.Name)
@@ -1765,10 +1455,10 @@ function peaklist_GCxGC(pl_end, pl_1D, PM)
 	return DataFrame(Name=fit_D1.Name, tR1=tR1, tR2=tR2)
 end
 
-function peaklist_GCxGC_weighted_mean(pl_end, PM)
+function peaklist_GCxGC_weighted_mean(pl_end, PM, shift)
 	heights = GasChromatographySystems.heights_of_peaks(pl_end)
-	tR1 = fld.(pl_end.tR, PM).*PM
-	tR2 = pl_end.tR .- fld.(pl_end.tR, PM).*PM
+	tR1 = fld.(pl_end.tR .+ shift, PM).*PM .- shift
+	tR2 = pl_end.tR .- (fld.(pl_end.tR .+ shift, PM).*PM .- shift)
 	Name = unique(pl_end.Name)
 	nsub = length(Name)
 	
@@ -1817,9 +1507,9 @@ function fit_envelope(pl_D2, pl_D1)
 	return DataFrame(Name=Name, tRs=sort_tR, heights=sort_heights, fits=fits)
 end
 
-function fit_gauss_D1(pl_D2, pl_D1, PM) # shift?
+function fit_gauss_D1(pl_D2, pl_D1, PM, shift) # shift?
 	heights = heights_of_peaks(pl_D2)
-	tR = fld.(pl_D2.tR, PM).*PM
+	tR = fld.(pl_D2.tR .+ shift, PM).*PM .- shift
 	Name = unique(pl_D2.Name)
 	nsub = length(Name)
 
@@ -1838,9 +1528,9 @@ function fit_gauss_D1(pl_D2, pl_D1, PM) # shift?
 	return DataFrame(Name=Name, tRs=sort_tR, heights=sort_heights, fits=fits)
 end
 
-function fit_gauss_D2(pl_D2, PM) # shift ?
+function fit_gauss_D2(pl_D2, PM, shift) # shift ?
 	heights = heights_of_peaks(pl_D2)
-	tR = pl_D2.tR .- fld.(pl_D2.tR, PM).*PM
+	tR = pl_D2.tR .- (fld.(pl_D2.tR .+ shift, PM).*PM .- shift)
 	Name = unique(pl_D2.Name)
 	nsub = length(Name)
 
@@ -1903,8 +1593,8 @@ function chrom_marked(pl, PM, ratio, shift; nτ=6)
 	# add modulation period
 	n = unique(fld.(t_sum, PM + shift))
 	for i=1:length(n)
-		Plots.plot!(p_chrom, [n[i]*PM+shift, n[i]*PM+shift], [0.0, 1.1*maximum(c_sum)], c=:black, label="")
-		Plots.plot!(p_chrom, [n[i]*PM+shift+PM*ratio, n[i]*PM+shift+PM*ratio], [0.0, 1.1*maximum(c_sum)], c=:black, linestyle=:dash, label="")
+		Plots.plot!(p_chrom, [n[i]*PM-shift, n[i]*PM-shift], [0.0, 1.1*maximum(c_sum)], c=:black, label="")
+		Plots.plot!(p_chrom, [n[i]*PM-shift+PM*ratio, n[i]*PM-shift+PM*ratio], [0.0, 1.1*maximum(c_sum)], c=:black, linestyle=:dash, label="")
 	end
 	Plots.plot!(p_chrom, ylims=(-0.02*maximum(c_sum), 1.02*maximum(c_sum)), xlims=(minimum(t_sum), maximum(t_sum)))
 	return p_chrom, t_sum, c_sum, t, c
@@ -1932,7 +1622,7 @@ function collect_chrom(pl_array, sys; markings=true)
 end
 
 function chrom_slicing(t, c, PM, shift) # correctly account for the shift!!!
-	n = Int.(fld.(collect(t), PM+shift)) # number of the slices
+	n = Int.(fld.(collect(t).-shift, PM)) # number of the slices
 	slices = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
 	t_D2 = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
 	for i=1:length(unique(n))
@@ -1941,7 +1631,7 @@ function chrom_slicing(t, c, PM, shift) # correctly account for the shift!!!
 		slices[i] = c[i1:i2]
 		t_D2[i] = t[i1:i2] .- unique(n)[i] * PM
 	end
-	t_D1 = 0.0:PM:t[end] # shift?
+	t_D1 = (0.0:PM:t[end]).- shift# shift?
 	return slices, t_D1, t_D2
 end
 
@@ -2057,8 +1747,10 @@ function check_duration_modulation(pl_array, par, PM, ratio)
 		end
 	end
 	ok_TM2 = Array{Bool}(undef, length(Δts[5].Δt))
+	
 	for i=1:length(Δts[5].Δt)
-		if (Δts[5].Δt[i] > ratio*PM) && (Δts[5].Δt[i] < PM) # change this condition
+		#if (Δts[5].Δt[i] > ratio*PM) && (Δts[5].Δt[i] < PM) # change this condition
+		if (Δts[5].Δt[i] < PM)
 			ok_TM2[i] = true
 		else
 			ok_TM2[i] = false

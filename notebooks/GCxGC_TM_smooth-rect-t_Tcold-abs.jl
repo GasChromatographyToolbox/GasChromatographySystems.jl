@@ -39,24 +39,15 @@ html"""
 md"""
 # Test of the GCxGC with thermal modulator simulation
 
-- smooth rectangle modulation point in time (`spatial=false`, `tflank=20`, `algTM=Vern9()` ang `ng=true`)
+- smoothed rectangle temperature function at modulation point (`spatial=false`, `tflank=20`, `algTM=Vern9()` and `ng=true`)
 - Tcold is absolute (`Tcold_abs=true`)
 """
 
-# ╔═╡ 470c8573-a0f5-4ab2-9385-c256491f648d
-spatial = false
+# ╔═╡ 1948baf0-1217-485a-8c8b-6e826bd5ef50
+optTM = GasChromatographySystems.ModuleTMopt(Tcold_abs=true, spatial=false, alg=Vern9(), tflank=20, sflank=Inf, dtinit=0.05*1e-7)
 
-# ╔═╡ b7b00dda-40d3-40d8-86e5-377d48b189fc
-flank = 20
-
-# ╔═╡ 14a1a970-3cfe-4086-94d2-d0c7ed6dab15
-algTM = Vern9()
-
-# ╔═╡ b5efd58e-666b-43c0-9b98-31085c8c36fe
+# ╔═╡ 8a51f65b-d8f1-407b-835f-1bb1048902bc
 ng = true
-
-# ╔═╡ 9297b636-6daa-40e9-b312-e05f5e5da5fd
-Tcold_abs = true
 
 # ╔═╡ 13d4415d-3dc4-4eed-aded-c3561b77a9eb
 md"""
@@ -122,12 +113,11 @@ md"""
 # ╔═╡ de542d7e-bd0d-47a4-8977-5ab1e64a26f4
 begin
 	PM = 4.0
-	shift1 = 0.0
-	shift2 = 0.0
+	shift = 0.0
 	thot = 0.35
 	ratio = (PM-thot)/PM
 	Thot = 25.0
-	Tcold = -70.0
+	Tcold = -70#-100.0
 end
 
 # ╔═╡ daf7484b-ac12-4515-8e26-adbc8e214cbc
@@ -149,17 +139,14 @@ md"""
 
 # ╔═╡ 5883701b-96f6-431e-b29b-b5cc0be940e0
 begin
-	sys = GasChromatographySystems.GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TTL, LM, dM, dfM, spM, shift1, shift2, PM, ratio, Thot, Tcold, TPM, F, pin, pout)
+	sys = GasChromatographySystems.GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TTL, LM, dM, dfM, spM, shift, PM, ratio, Thot, Tcold, TPM, F, pin, pout; optTM=optTM)
 end
 
-# ╔═╡ 2e786dd9-ad9d-4bcf-861e-80785513ed6c
-GasChromatographySystems.plot_flow_over_time(sys; Tcold_abs=Tcold_abs, spatial=spatial, dt=30.0)
+# ╔═╡ 6afa596b-70dd-4b01-899b-5d9ef1349491
+GasChromatographySystems.plot_flow_over_time(sys; dt=30.0)
 
-# ╔═╡ 278b037a-7aaa-45d5-960d-821e2bcf1a19
-GasChromatographySystems.plot_pressure_over_time(sys; Tcold_abs=Tcold_abs, spatial=spatial, dt=30.0)
-
-# ╔═╡ 8bf8c26b-f5b0-46a4-a529-d5afbe5359c7
-GasChromatographySystems.plot_graph(sys)
+# ╔═╡ 7ddfe44e-fde9-422f-98de-27b80e8517be
+GasChromatographySystems.plot_pressure_over_time(sys; dt=30.0)
 
 # ╔═╡ 03b1cae0-cf56-4e0f-b0ad-fdfa736e0fa8
 md"""
@@ -178,25 +165,13 @@ end
 selected_solutes_ = GasChromatographySystems.common_solutes(db, sys).Name
 
 # ╔═╡ 262fba99-1b75-4803-8f34-a0619de559a9
-selected_solutes = selected_solutes_[Not([22, 28, 35])]#[[14,16,17]]
+selected_solutes = selected_solutes_[Not([22, 27, 28, 35])]#[[14,16,17]]
 
-# ╔═╡ 6d935cf1-ba36-44d8-8749-f555d327bbde
-# 22 -> 4674-50-4 produces error (NaN after 1st TM, resp. large retention times at TM1 -> problem with k at low temperatures?) -> if this fails, the simulation at TM should be replaced by the approximation 
-# 28 -> Octanophenone produces error (NaN after 1st TM, similar to 22)
-# 35 -> 2-Pentadecanone produces error (NaN after 1st TM, similar to 22)
-
-# ╔═╡ e04a711e-a4b2-46d8-8cff-59f2775abd31
-# 23 -> no warnings
-# 24 -> two times dt reduction at t0=1912s and t0=1924s
-# 25 -> dt reduction for every slice
-# 26 -> twice dt reduction for every slice
-# 27 -> multiple dt reduction (up to 5 or 6 times), including additional warnings ("dt(8.673617379884035e-19) <= dtmin(8.673617379884035e-19) at t=7.780872446328764e-11, and step error estimate = 1.7461402681439842. Aborting. There is either an error in your model specification or the true solution is unstable.")
-# 29 -> no warnings
-# 30 -> no warnings
-# 31 -> no warnings
-# 32 -> no warnings
-# 33 -> three times dt reduction at t0=2312s and t0=2320s and t0=2324s
-# 34 -> three times dt reduction at t0=2576s and t0=2580s and t0=2584s (two reductions)
+# ╔═╡ 80edd747-485b-4f8f-a593-9a3b1c96b82d
+# 22 -> Error "InexactError: Int64(NaN)" at second slicing, because retention time at 1st TM becomes NaN
+# 27 -> Error "InexactError: Int64(NaN)" at second slicing, because retention time at 1st TM becomes NaN
+# 28 -> Error "InexactError: Int64(NaN)" at second slicing, because retention time at 1st TM becomes NaN
+# 35 -> Error "InexactError: Int64(NaN)" at second slicing, because retention time at 1st TM becomes NaN
 
 # ╔═╡ 1964abf5-a627-4014-8348-e81145647104
 md"""
@@ -204,9 +179,9 @@ md"""
 """
 
 # ╔═╡ 5f3c1ce1-50bb-44ba-abac-d3ccc82fdb51
-par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes; Tcold_abs=Tcold_abs, spatial=spatial, tflank=flank, ng=ng)
+par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes; ng=ng)
 
-# ╔═╡ 3eee7c08-6726-4803-b449-bb3da1e06ed1
+# ╔═╡ e2e1ee2a-f98d-47fd-8c22-cc441f2d12c2
 begin
 	Plots.plot(cumsum(tsteps_), par[1].prog.T_itp(0.0, cumsum(tsteps_)).-273.15, label="")
 end
@@ -239,25 +214,8 @@ end
 # ╔═╡ b284207c-70b5-4da5-94e9-0fe70680b0e3
 paths = GasChromatographySystems.all_paths(sys.g, 1)[2]
 
-# ╔═╡ 2301a74c-2290-4de6-992d-bc887b66269e
-sys.modules[3].length*1e-6
-
 # ╔═╡ 2b41aa34-d994-440b-a8e1-dd6337008a48
-sim = GasChromatographySystems.simulate_along_paths(sys, paths, par; algTM=algTM, dt=sys.modules[3].length*1e-7)#, dtmax=sys.modules[3].length/100, dtmin=eps())
-
-# ╔═╡ baf56852-3559-4f11-a688-8d2724ed7fe5
-md"""
-## Determine tR1 and tR2
-"""
-
-# ╔═╡ 22d1d757-ef2f-40a5-945a-c153de565781
-fit_envel = GasChromatographySystems.fit_envelope(sim[2][1][8], sim[2][1][2])
-
-# ╔═╡ dff26d84-0a03-448f-94e1-cabd3ff7cc44
-fit_D1 = GasChromatographySystems.fit_gauss_D1(sim[2][1][8], sim[2][1][2], PM)
-
-# ╔═╡ a70a7f0a-53a8-47ec-ace2-ae59f1aa3fbd
-fit_D2 = GasChromatographySystems.fit_gauss_D2(sim[2][1][8], PM)
+sim = GasChromatographySystems.simulate_along_paths(sys, paths, par)
 
 # ╔═╡ bbb75e0b-ccab-4c32-9e33-0d8915dba95d
 md"""
@@ -273,95 +231,10 @@ md"""
 #collect_chrom(sim[2][1], sys; markings=true)
 
 # ╔═╡ d912d940-5b39-4bb9-a136-1f5e67ad7d82
-#GasChromatographySystems.chrom(sim[2][1][3])[1]
+GasChromatographySystems.chrom(sim[2][1][end])[1]
 
 # ╔═╡ f1f1ffdb-bc7e-48fd-b688-21f375ab21eb
 #GasChromatographySystems.chrom_marked(sim[2][1][4], PM, ratio, shift1; nτ=6)[1]
-
-# ╔═╡ 363533f9-0bc4-4ea9-82ad-b8b22a42e323
-md"""
-### Enveloping curve
-"""
-
-# ╔═╡ 7c2c251b-5cc7-4dc6-b385-d6a408628acc
-tall, call, ts, cs = GasChromatographySystems.chrom(sim[2][1][end]; nτ=6)[2:end]
-
-# ╔═╡ bd810db6-ed39-482e-8107-af3169ff09be
-#=begin
-	gr()
-	@. model_g(x,p) = p[3]/sqrt(2*π*p[2]^2)*exp(-(x-p[1])^2/(2*p[2]^2))
-	p_envel = GasChromatographySystems.collect_chrom(sim[2][1], sys; markings=true)[end]
-	t1, t2 = p_envel[1][1][:x_extrema]
-	t = t1:(t2-t1)/1000:t2
-	ymax = Array{Float64}(undef, length(fit_envel.Name))
-	for i=1:length(fit_envel.Name)
-		ymax[i] = model_g(fit_envel.fits[i].param[1], fit_envel.fits[i].param)
-		Plots.scatter!(p_envel, fit_envel.tRs[i], fit_envel.heights[i], msize=2, c=i+1)
-		Plots.plot!(p_envel, t, model_g(t, fit_envel.fits[i].param), c=i+1, linestyle=:dash)
-		Plots.plot!(p_envel, [fit_envel.fits[i].param[1], fit_envel.fits[i].param[1]], [0.0, ymax[i]], c=i+1, linestyle=:dot)
-		Plots.scatter!(p_envel, (fit_envel.fits[i].param[1], ymax[i]), c=i+1, shape=:diamond)
-	end
-	Plots.plot!(p_envel, xticks=0:4:3000, legend=false, ylims=(-0.01*maximum(ymax), 1.1*maximum(ymax)), title="Enveloping curve")
-	p_envel
-end=#
-
-# ╔═╡ 7a81859f-7c0c-4115-9cca-367753898427
-md"""
-### Projection on 1st dimension
-"""
-
-# ╔═╡ 8cbc706f-1d3f-49ac-8f1c-d281b2318dc1
-#=begin
-	plotly()
-	p_proj1stD = Plots.plot(legend=false, xlabel="time in s")
-
-	mins_ = minimum.(fit_D1.tRs)
-	maxs_ = maximum.(fit_D1.tRs)
-	for i=1:length(fit_envel.Name)
-		ymax = model_g(fit_D1.fits[i].param[1], fit_D1.fits[i].param)
-		for j=1:length(fit_D1.tRs[i]) 
-			Plots.plot!(p_proj1stD, [fit_D1.tRs[i][j], fit_D1.tRs[i][j]], [0.0, fit_envel.heights[i][j]], c=i+1, linewidth=10, linealpha=0.5)
-		end
-		Plots.scatter!(p_proj1stD, fit_D1.tRs[i], fit_D1.heights[i], msize=2, c=i+1)
-
-		tt = mins_[i]:(maxs_[i]-mins_[i])/1000.0:maxs_[i]
-		Plots.plot!(p_proj1stD, tt, model_g(tt, fit_D1.fits[i].param), c=i+1, linestyle=:dash)
-
-		Plots.plot!(p_proj1stD, [fit_D1.fits[i].param[1], fit_D1.fits[i].param[1]], [0.0, ymax], c=i+1, linestyle=:dot)
-		Plots.scatter!(p_proj1stD, (fit_D1.fits[i].param[1], ymax), c=i+1, shape=:diamond)
-	end
-	Plots.plot!(p_proj1stD, xticks=0:4:3000, legend=false, title="Projection 1st D")
-	p_proj1stD
-end=#
-
-# ╔═╡ 2491363c-4d1a-4baf-8c47-f85f550d59f8
-md"""
-### Projection on 2nd dimension
-"""
-
-# ╔═╡ fd5310bd-005a-4bf5-b6b7-79b137a101f7
-#=begin
-	plotly()
-	p_proj2ndD = Plots.plot(legend=false, xlabel="time in s", title="Projection 2nd D")
-
-	for i=1:length(cs)
-		Plots.plot!(p_proj2ndD, ts[i].-fld.(ts[i], PM).*PM, cs[i], c=findfirst(sim[2][1][end].Name[i].==selected_solutes)+1)
-	end
-	mins = minimum.(fit_D2.tRs)
-	maxs = maximum.(fit_D2.tRs)
-	for i=1:length(fit_D2.Name)
-		ymax = model_g(fit_D2.fits[i].param[1], fit_D2.fits[i].param)
-		col = findfirst(fit_D2.Name[i].==selected_solutes)+1
-		Plots.scatter!(p_proj2ndD, fit_D2.tRs[i], fit_D2.heights[i], msize=2, c=col)
-
-		tt = 0.9*mins[i]:(1.1*maxs[i]-0.9*mins[i])/1000.0:1.1*maxs[i]
-		Plots.plot!(p_proj2ndD, tt, model_g(tt, fit_D2.fits[i].param), c=col, linestyle=:dash)
-
-		Plots.plot!(p_proj2ndD, [fit_D2.fits[i].param[1], fit_D2.fits[i].param[1]], [0.0, ymax], c=col, linestyle=:dot)
-		Plots.scatter!(p_proj2ndD, (fit_D2.fits[i].param[1], ymax), c=col, shape=:diamond)
-	end
-	p_proj2ndD
-end=#
 
 # ╔═╡ 7739a83c-d001-47cd-aee2-36917106c2ad
 md"""
@@ -377,9 +250,6 @@ md"""
 """
 
 # ╔═╡ e5d4fb3a-f05f-4533-9666-08be32ef19ef
-pl_GCxGC_ = GasChromatographySystems.peaklist_GCxGC(sim[2][1][8], sim[2][1][2], PM)
-
-# ╔═╡ 8364b58b-1f59-4f35-8e4e-85b98511563f
 pl_GCxGC = GasChromatographySystems.peaklist_GCxGC_weighted_mean(sim[2][1][8], PM)
 
 # ╔═╡ 5f67ab8d-3b3d-4bbd-81c8-04eec158ef6e
@@ -405,8 +275,11 @@ md"""
 ## Checks
 """
 
+# ╔═╡ 9bc833db-7538-4520-9a80-ab49f9bbeb81
+GasChromatographySystems.check_peakwidths(sim[2][1][5])
+
 # ╔═╡ b872f155-d36f-4a2d-9741-342a108d6b5f
-chck_dur = GasChromatographySystems.check_duration_modulation(sim[2][1], sim[4], PM, ratio)
+GasChromatographySystems.check_duration_modulation(sim[2][1], sim[4], PM, ratio)
 
 # ╔═╡ daed9ba6-a44c-48a0-999b-5862838253c2
 GasChromatographySystems.check_area(sim[2][1][8])
@@ -437,15 +310,6 @@ md"""
 	end
 	Plots.plot(p_xt_check, p_τt_check, p_Tt_check, p_lnkt_check, size=(1000,800))
 end=#
-
-# ╔═╡ faebec58-268e-4d4b-850d-3a742a6223a1
-first_step_TM1_z
-
-# ╔═╡ baac6345-0c76-4450-a98e-017111d1712d
-first_step_TM1_t
-
-# ╔═╡ 09b5b754-9218-4784-977d-48759600037b
-sim[3][1][1]
 
 # ╔═╡ d4c0a1c4-68ef-408a-9919-1bd737b6c229
 md"""
@@ -488,20 +352,11 @@ pl_GCxGC
 # ╔═╡ 3ed4ad21-c8e4-428a-b6d3-b37cfdbd0778
 compare = GasChromatographySystems.comparison_meas_sim(meas, pl_GCxGC)
 
-# ╔═╡ a8de50cb-e4a6-41dc-9f7b-e88d742c0efa
-sum(collect(skipmissing(compare.relΔtR2_percent)))/length(collect(skipmissing(compare.relΔtR2_percent)))
-
-# ╔═╡ 8c156d25-1cd4-493e-ba6e-3371d9cdbd3f
+# ╔═╡ e17c92b0-2db3-4e29-b56f-c7b5650c9d95
 sum(abs.(collect(skipmissing(compare.relΔtR1_percent))))/length(collect(skipmissing(compare.relΔtR1_percent)))
 
 # ╔═╡ c190dd0f-6f09-4d18-9aa5-6b40beddfbf3
 sum(abs.(collect(skipmissing(compare.relΔtR2_percent))))/length(collect(skipmissing(compare.relΔtR2_percent)))
-
-# ╔═╡ 59f118b1-e09e-441e-8107-54bdcd6e9cde
-sum(abs.(collect(skipmissing(compare.relΔtR1_percent[Not([29])]))))/length(collect(skipmissing(compare.relΔtR1_percent[Not([29])])))
-
-# ╔═╡ f5461d4f-a1a2-4294-a31f-933428a30079
-sum(abs.(collect(skipmissing(compare.relΔtR2_percent[Not([29])]))))/length(collect(skipmissing(compare.relΔtR2_percent[Not([29])])))
 
 # ╔═╡ fb7236b5-98fd-4aac-86ed-5e7118b19ed6
 meas_chrom = sort!(DataFrame(CSV.File("/Users/janleppert/Documents/sciebo/GCsim/Estimator/ZB1xWax/CSV/KetAlkPhenHR3Mod1.csv", header=1, silencewarnings=true)), :RT)
@@ -573,22 +428,18 @@ md"""
 """
 
 # ╔═╡ Cell order:
-# ╟─113c6e70-2168-11ee-3f7f-2775a67bab90
+# ╠═113c6e70-2168-11ee-3f7f-2775a67bab90
 # ╠═98217474-a16f-406a-83a7-17fee89c951a
 # ╠═22091a27-80e1-4e98-abe7-4b9652cb832c
-# ╠═470c8573-a0f5-4ab2-9385-c256491f648d
-# ╠═b7b00dda-40d3-40d8-86e5-377d48b189fc
-# ╠═14a1a970-3cfe-4086-94d2-d0c7ed6dab15
-# ╠═b5efd58e-666b-43c0-9b98-31085c8c36fe
-# ╠═9297b636-6daa-40e9-b312-e05f5e5da5fd
+# ╠═1948baf0-1217-485a-8c8b-6e826bd5ef50
+# ╠═8a51f65b-d8f1-407b-835f-1bb1048902bc
 # ╟─13d4415d-3dc4-4eed-aded-c3561b77a9eb
 # ╟─ddde4e3d-4e72-4315-9555-5f8b3375b04c
 # ╠═55194da2-9c5b-464b-bfe1-a65c48bc7801
-# ╠═3eee7c08-6726-4803-b449-bb3da1e06ed1
+# ╠═e2e1ee2a-f98d-47fd-8c22-cc441f2d12c2
 # ╟─09438575-8370-475f-b2df-fda5155e8c82
 # ╠═d0379590-edf3-4017-b8b8-07bd6080f757
 # ╠═23b71d48-26bd-496d-9c10-e2d3ce2bc13c
-# ╠═a8de50cb-e4a6-41dc-9f7b-e88d742c0efa
 # ╟─0e349acc-46b4-4734-abb7-668ec1225c53
 # ╠═de542d7e-bd0d-47a4-8977-5ab1e64a26f4
 # ╟─a2d062a4-bd59-4ab7-9316-dc769b2c3c09
@@ -596,63 +447,44 @@ md"""
 # ╟─e72a6c41-2b14-45cb-81e7-263610c3c8ae
 # ╟─daf7484b-ac12-4515-8e26-adbc8e214cbc
 # ╠═83d10e79-3ab6-418c-80ba-653a50fa5d21
-# ╠═2e786dd9-ad9d-4bcf-861e-80785513ed6c
-# ╠═278b037a-7aaa-45d5-960d-821e2bcf1a19
+# ╠═6afa596b-70dd-4b01-899b-5d9ef1349491
+# ╠═7ddfe44e-fde9-422f-98de-27b80e8517be
 # ╟─5dd6d2b7-1d6f-49ef-b684-a453a50a9e96
 # ╠═5883701b-96f6-431e-b29b-b5cc0be940e0
-# ╠═8bf8c26b-f5b0-46a4-a529-d5afbe5359c7
 # ╟─03b1cae0-cf56-4e0f-b0ad-fdfa736e0fa8
 # ╠═397d7248-e069-4958-849d-6761cb20283d
-# ╟─35bbe26a-f82c-4f60-a2d0-74b052037ae7
+# ╠═35bbe26a-f82c-4f60-a2d0-74b052037ae7
 # ╠═262fba99-1b75-4803-8f34-a0619de559a9
-# ╠═6d935cf1-ba36-44d8-8749-f555d327bbde
-# ╠═e04a711e-a4b2-46d8-8cff-59f2775abd31
+# ╠═80edd747-485b-4f8f-a593-9a3b1c96b82d
 # ╟─1964abf5-a627-4014-8348-e81145647104
 # ╠═5f3c1ce1-50bb-44ba-abac-d3ccc82fdb51
 # ╠═b284207c-70b5-4da5-94e9-0fe70680b0e3
-# ╠═2301a74c-2290-4de6-992d-bc887b66269e
 # ╠═2b41aa34-d994-440b-a8e1-dd6337008a48
-# ╟─baf56852-3559-4f11-a688-8d2724ed7fe5
-# ╠═22d1d757-ef2f-40a5-945a-c153de565781
-# ╠═dff26d84-0a03-448f-94e1-cabd3ff7cc44
-# ╠═a70a7f0a-53a8-47ec-ace2-ae59f1aa3fbd
 # ╟─bbb75e0b-ccab-4c32-9e33-0d8915dba95d
 # ╟─b586403d-12ac-4b38-b4de-f974fe71b5dc
 # ╠═7e945bad-0a59-4a5e-8c63-cef21ee847d0
 # ╠═d912d940-5b39-4bb9-a136-1f5e67ad7d82
 # ╠═f1f1ffdb-bc7e-48fd-b688-21f375ab21eb
-# ╟─363533f9-0bc4-4ea9-82ad-b8b22a42e323
-# ╠═7c2c251b-5cc7-4dc6-b385-d6a408628acc
-# ╠═bd810db6-ed39-482e-8107-af3169ff09be
-# ╟─7a81859f-7c0c-4115-9cca-367753898427
-# ╠═8cbc706f-1d3f-49ac-8f1c-d281b2318dc1
-# ╟─2491363c-4d1a-4baf-8c47-f85f550d59f8
-# ╠═fd5310bd-005a-4bf5-b6b7-79b137a101f7
 # ╟─7739a83c-d001-47cd-aee2-36917106c2ad
 # ╠═582499db-7b5a-4054-92c2-d0e2a97cd91f
 # ╟─5f67ab8d-3b3d-4bbd-81c8-04eec158ef6e
 # ╟─f268df70-af5a-482f-85e6-84216681ecf4
 # ╠═e5d4fb3a-f05f-4533-9666-08be32ef19ef
-# ╠═8364b58b-1f59-4f35-8e4e-85b98511563f
 # ╟─93e2068d-760e-403e-a6fa-984a237ad6c3
+# ╠═9bc833db-7538-4520-9a80-ab49f9bbeb81
 # ╠═b872f155-d36f-4a2d-9741-342a108d6b5f
 # ╠═daed9ba6-a44c-48a0-999b-5862838253c2
 # ╟─27645404-48fd-488c-8b2e-66300f4b3303
 # ╠═c20db2f4-b5b8-4436-9d4b-df1333659d25
-# ╠═faebec58-268e-4d4b-850d-3a742a6223a1
-# ╠═baac6345-0c76-4450-a98e-017111d1712d
-# ╠═09b5b754-9218-4784-977d-48759600037b
 # ╟─d4c0a1c4-68ef-408a-9919-1bd737b6c229
 # ╠═2737c1e7-6239-41d7-8868-242bb881f436
 # ╟─271bb7a6-9a98-4336-9571-c131cc125486
 # ╟─b7c2070b-16bf-41f5-b021-160e54a53a21
 # ╠═189034b6-09e5-4e6b-80b3-e442ad30705c
 # ╟─3ed4ad21-c8e4-428a-b6d3-b37cfdbd0778
-# ╠═8c156d25-1cd4-493e-ba6e-3371d9cdbd3f
+# ╠═e17c92b0-2db3-4e29-b56f-c7b5650c9d95
 # ╠═c190dd0f-6f09-4d18-9aa5-6b40beddfbf3
-# ╠═59f118b1-e09e-441e-8107-54bdcd6e9cde
-# ╠═f5461d4f-a1a2-4294-a31f-933428a30079
-# ╟─fb7236b5-98fd-4aac-86ed-5e7118b19ed6
+# ╠═fb7236b5-98fd-4aac-86ed-5e7118b19ed6
 # ╠═a2cc7971-bd69-4623-86a1-7e7d43c6b05c
 # ╟─6cf28744-7748-4d88-bfd7-f8e428732228
 # ╠═e82034ef-57fa-4f78-b663-7465a97ff127

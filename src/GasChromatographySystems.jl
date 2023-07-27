@@ -26,25 +26,32 @@ const pn = 101300 # Pa
 # options structure
 struct Options
     mobile_phase::String# gas of the mobile phase
-    alg                 # algorithmen for the ODE solver
-    abstol              # absolute tolerance for ODE solver
-    reltol              # relative tolerance for ODE solver 
-    Tcontrol::String    # temperature control at 'inlet' (top) or 'outlet' (bottom) of the column
     odesys::Bool  		# calculate the two ODEs (migration and peak-width) separately (false) or 
                         # combined as a system of ODEs (true)                        
-    ng::Bool            # non-gradient calculation, ignores a defined spatial change of d, df or T
     vis::String         # viscosity model 'HP' or 'Blumberg'
     control::String     # control of the 'Flow' or of the inlet 'Pressure' during the program
     k_th                # threshold for the max. possible retention factor
 end
 
-function Options(;mobile_phase="He", alg=OwrenZen5(), abstol=1e-6, reltol=1e-3, Tcontrol="inlet", odesys=true, ng=false, vis="Blumberg", control="Pressure", k_th=1e12)
-    opt = Options(mobile_phase, alg, abstol, reltol, Tcontrol, odesys, ng, vis, control, k_th)
+function Options(;mobile_phase="He", odesys=true, vis="Blumberg", control="Pressure", k_th=1e12)
+    opt = Options(mobile_phase, odesys, vis, control, k_th)
     return opt
 end
 
 # module structure
 abstract type AbstractModule end
+
+struct ModuleColumnOpt
+	alg                 # algorithmen for the ODE solver
+    abstol              # absolute tolerance for ODE solver
+    reltol              # relative tolerance for ODE solver 
+	ng::Bool            # non-gradient calculation, ignores a defined spatial change of d, df or T
+	Tcontrol::String    # temperature control at 'inlet' (top) or 'outlet' (bottom) of the column
+end
+
+function ModuleColumnOpt(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")
+	ModuleColumnOpt(alg, abstol, reltol, ng, Tcontrol)
+end
 
 struct ModuleColumn<:GasChromatographySystems.AbstractModule
 	# Module
@@ -58,37 +65,51 @@ struct ModuleColumn<:GasChromatographySystems.AbstractModule
 	stationary_phase::String
 	temperature # a number (constant temperature) or a TemperatureProgram structure
 	flow # an number (constant flow) or a Function
+	opt::ModuleColumnOpt
 end
 
-function ModuleColumn(name, L, d, df, sp, tp)
+function ModuleColumn(name, L, d, df, sp, tp, opt::ModuleColumnOpt)
 	# function to construct the Column structure
 	# for the case of constant diameter and constant film thickness
 	# and undefined flow
-	col = ModuleColumn(name, L, d, [d], df, [df], sp, tp, NaN)
+	col = ModuleColumn(name, L, d, [d], df, [df], sp, tp, NaN, opt)
 	return col
 end
 
-function ModuleColumn(name, L, d, df, sp, tp, flow)
+function ModuleColumn(name, L, d, df, sp, tp, flow, opt::ModuleColumnOpt)
 	# function to construct the Column structure
 	# for the case of constant diameter and constant film thickness
-	col = ModuleColumn(name, L, d, [d], df, [df], sp, tp, flow)
+	col = ModuleColumn(name, L, d, [d], df, [df], sp, tp, flow, opt)
 	return col
+end
+
+function ModuleColumn(name, L, d, df, sp, tp; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")
+	opt = ModuleColumnOpt(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol)
+	TM = ModuleColumn(name, L, d, [d], df, [df], sp, tp, NaN, opt)
+	return TM
+end
+
+function ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")
+	opt = ModuleColumnOpt(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol)
+	TM = ModuleColumn(name, L, d, [d], df, [df], sp, tp, flow, opt)
+	return TM
 end
 
 # add a thermal modulator module
 struct ModuleTMopt
-	Tcold_abs::Bool # Tcold as absolute value (`true`) or as relative difference to the program temperature (`false`) 
-	spatial::Bool # model modulation spot also as smoothed rectangle over the length (`true`) or as uniform (`false`)
-	sflank::Float64 # flank factor for the spatial smoothed rectangle, values between 12 and Inf? 
-	tflank::Float64 # flank factor for the temporal smoothed rectangle, values between 12 and Inf?
-	alg # solver algorithm for the simulation, typical `Vern9()`, `OwrenZen5()`. With the option "simplifiedTM" no solving of ODEs is used for the modulator spot but an approximation is used, assuming a rectangle modulation.
-	abstol::Float64 # absolute tolerance for the solving of the ODEs, typical value 1e-10
-	reltol::Float64 # relativ tolerance for solving of the ODEs, typical value 1e-8
-	dtinit::Float64 # initial step width for the solving of the ODEs, typical value `module length * 1e-6
+	Tcold_abs::Bool 	# Tcold as absolute value (`true`) or as relative difference to the program temperature (`false`) 
+	sflank::Float64 	# flank factor for the spatial smoothed rectangle, values between 12 and Inf? 
+	tflank::Float64 	# flank factor for the temporal smoothed rectangle, values between 12 and Inf?
+	alg 				# solver algorithm for the simulation, typical `Vern9()`, `OwrenZen5()`. With the option "simplifiedTM" no solving of ODEs is used for the modulator spot but an approximation is used, assuming a rectangle modulation.
+	abstol::Float64 	# absolute tolerance for the solving of the ODEs, typical value 1e-10
+	reltol::Float64 	# relativ tolerance for solving of the ODEs, typical value 1e-8
+	dtinit::Float64 	# initial step width for the solving of the ODEs, typical value `module length * 1e-6
+	ng::Bool 			# model modulation spot also as smoothed rectangle over the length (`false`) or as uniform (`true`)
+	Tcontrol::String    # temperature control at 'inlet' (top) or 'outlet' (bottom) of the column
 end
 
-function ModuleTMopt(; Tcold_abs=true, spatial=false, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6)
-	ModuleTMopt(Tcold_abs, spatial, sflank, tflank, alg, abstol, reltol, dtinit)
+function ModuleTMopt(; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
+	ModuleTMopt(Tcold_abs, sflank, tflank, alg, abstol, reltol, dtinit, ng, Tcontrol)
 end
 
 struct ModuleTM<:GasChromatographySystems.AbstractModule
@@ -121,14 +142,14 @@ function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F, opt:
 	return TM
 end
 
-function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold; Tcold_abs=true, spatial=false, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6)
-	opt = ModuleTMopt(; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit)
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=false, Tcontrol="inlet")
+	opt = ModuleTMopt(; Tcold_abs=Tcold_abs, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit, ng=ng, Tcontrol=Tcontrol)
 	TM = ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, NaN, opt)
 	return TM
 end
 
-function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, spatial=false, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6)
-	opt = ModuleTMopt(; Tcold_abs=Tcold_abs, spatial=spatial, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit)
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=false, Tcontrol="inlet")
+	opt = ModuleTMopt(; Tcold_abs=Tcold_abs, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit, ng=ng, Tcontrol=Tcontrol)
 	TM = ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F, opt)
 	return TM
 end
@@ -235,7 +256,7 @@ function update_system(sys)
 			ii = findfirst(index_module_tempprog.==i)
 			new_tp = TemperatureProgram(new_timesteps, new_temperaturesteps[ii])
 			if typeof(sys.modules[i]) == ModuleColumn
-				new_modules[i] = ModuleColumn(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].flow)
+				new_modules[i] = ModuleColumn(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].flow, sys.modules[i].opt)
 			elseif typeof(sys.modules[i]) == ModuleTM
 				new_modules[i] = ModuleTM(sys.modules[i].name, sys.modules[i].length, sys.modules[i].diameter, sys.modules[i].film_thickness, sys.modules[i].stationary_phase, new_tp, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].flow, sys.modules[i].opt)
 			end
@@ -428,7 +449,7 @@ function flow_restrictions(sys)
 	kappas = Array{Function}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
 		T_itp = module_temperature(sys.modules[i], sys)[5]
-		κ(t) = GasChromatographySimulator.flow_restriction(sys.modules[i].length, t, T_itp, sys.modules[i].diameter, sys.options.mobile_phase; ng=sys.options.ng, vis=sys.options.vis)
+		κ(t) = GasChromatographySimulator.flow_restriction(sys.modules[i].length, t, T_itp, sys.modules[i].diameter, sys.options.mobile_phase; ng=sys.modules[i].opt.ng, vis=sys.options.vis)
 		kappas[i] = κ
 	end
 	return kappas
@@ -512,7 +533,7 @@ function flow_functions(sys)
 		pin(t) = p_func[srcE[i]](t)
 		pout(t) = p_func[dstE[i]](t)
 		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
-		f(t) = GasChromatographySimulator.flow(t, T_itp, pin, pout, sys.modules[i].length, sys.modules[i].diameter, sys.options.mobile_phase; ng=sys.options.ng, vis=sys.options.vis, control=sys.options.control)
+		f(t) = GasChromatographySimulator.flow(t, T_itp, pin, pout, sys.modules[i].length, sys.modules[i].diameter, sys.options.mobile_phase; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
 		F_func[i] = f
 	end
 	return F_func
@@ -687,7 +708,7 @@ function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 		therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15; flank=module_.opt.tflank) .+ 273.15 
 	end
 	
-	spot(x,t) = if module_.opt.spatial == true
+	spot(x,t) = if module_.opt.ng == false
 		GasChromatographySystems.smooth_rectangle(x, 0.0, sys.modules[5].length, T_itp_(x, t), T_itp(x,t); flank=module_.opt.sflank)
 	else
 		T_itp(x,t)
@@ -695,7 +716,7 @@ function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 	return time_steps, temp_steps, gf, a_gf, spot
 end
 
-function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1, ng=true)
+function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1)
 	# ng should be taken from the separat module options 
 	E = collect(edges(sys.g))
 	srcE = src.(E) # source indices
@@ -711,7 +732,7 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		col = GasChromatographySimulator.Column(sys.modules[i].length, sys.modules[i].diameter, [sys.modules[i].diameter], sys.modules[i].film_thickness, [sys.modules[i].film_thickness], sys.modules[i].stationary_phase, sys.options.mobile_phase)
 
 		# program parameters
-		pin_steps = sys.pressurepoints[srcE[i]].pressure_steps
+		pin_steps = sys.pressurepoints[srcE[i]].pressure_steps, optCol=ModuleColumnOpt()
 		pout_steps = sys.pressurepoints[dstE[i]].pressure_steps
 		pin_itp = p_func[srcE[i]]
 		pout_itp = p_func[dstE[i]]	
@@ -722,14 +743,12 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].stationary_phase, sys.options.mobile_phase, selected_solutes, NaN.*ones(length(selected_solutes)), NaN.*ones(length(selected_solutes)))
 
 		# option parameters
-		opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM && sys.modules[i].opt.spatial == true
-			GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.options.Tcontrol, odesys=sys.options.odesys, ng=false, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		elseif typeof(sys.modules[i]) == ModuleTM
-			GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.options.Tcontrol, odesys=sys.options.odesys, ng=true, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		else
+		#opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM 
+		opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+		#else
 			# put options for ModuleColumn in separat options structure?
-			GasChromatographySimulator.Options(alg=sys.options.alg, abstol=sys.options.abstol, reltol=sys.options.reltol, Tcontrol=sys.options.Tcontrol, odesys=sys.options.odesys, ng=sys.options.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		end
+		#	GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+		#end
 
 		parameters[i] = GasChromatographySimulator.Parameters(col, prog, sub, opt)
 	end
@@ -1041,7 +1060,7 @@ function plot_GCxGC(pl_GCxGC, sys; categories = String[])
 	return p_gcxgc
 end
 
-function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=GasChromatographySystems.Options(ng=true))
+function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=GasChromatographySystems.Options(), kwargs...)
 	# add test for correct lengths of input
 	# ? make two versions
 	# 1. defining flow over the columns (calculate pin)
@@ -1078,7 +1097,7 @@ function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=GasChromatography
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, n)
 	for i=1:n
-		modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6)
+		modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6; kwargs...)
 	end
 	# system
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))
@@ -1087,14 +1106,14 @@ function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=GasChromatography
 	return sys
 end
 
-function SeriesSystem(; Ls = [10.0, 5.0, 2.0, 1.0], ds = [0.53, 0.32, 0.25, 0.1], dfs = [0.53, 0.32, 0.25, 0.1], sps = ["Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS"], TPs = [default_TP(), default_TP(), default_TP(), default_TP()], F = NaN, pin = 300.0, pout = 0.0, opt=GasChromatographySystems.Options(ng=true))
-	sys = SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=opt)
+function SeriesSystem(; Ls = [10.0, 5.0, 2.0, 1.0], ds = [0.53, 0.32, 0.25, 0.1], dfs = [0.53, 0.32, 0.25, 0.1], sps = ["Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS"], TPs = [default_TP(), default_TP(), default_TP(), default_TP()], F = NaN, pin = 300.0, pout = 0.0, opt=GasChromatographySystems.Options(), kwargs...)
+	sys = SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=opt, kwargs...)
 	return sys
 end
 
 #example_SeriesSystem() = SeriesSystem([10.0, 5.0, 2.0, 1.0], [0.53, 0.32, 0.25, 0.1], [0.53, 0.32, 0.25, 0.1], ["Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS"], [default_TP(), default_TP(), default_TP(), default_TP()], NaN, 300.0, 0.0)
 
-function SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=GasChromatographySystems.Options(ng=true))
+function SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=GasChromatographySystems.Options(), kwargs...)
 	g = SimpleDiGraph(4)
 	add_edge!(g, 1, 2) # Inj -> GC column -> Split point
 	add_edge!(g, 2, 3) # Split point -> TL column -> Det 1
@@ -1129,9 +1148,9 @@ function SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=GasChroma
 	pp[4] = GasChromatographySystems.PressurePoint("p₄", com_timesteps, pout2s) # outlet 2
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
-	modules[1] = GasChromatographySystems.ModuleColumn("1 -> 2", Ls[1], ds[1]*1e-3, dfs[1]*1e-6, sps[1], TPs[1], Fs[1]/60e6)
-	modules[2] = GasChromatographySystems.ModuleColumn("2 -> 3", Ls[2], ds[2]*1e-3, dfs[2]*1e-6, sps[2], TPs[2], Fs[2]/60e6)
-	modules[3] = GasChromatographySystems.ModuleColumn("2 -> 4", Ls[3], ds[3]*1e-3, dfs[3]*1e-6, sps[3], TPs[3], Fs[3]/60e6)
+	modules[1] = GasChromatographySystems.ModuleColumn("1 -> 2", Ls[1], ds[1]*1e-3, dfs[1]*1e-6, sps[1], TPs[1], Fs[1]/60e6; kwargs...)
+	modules[2] = GasChromatographySystems.ModuleColumn("2 -> 3", Ls[2], ds[2]*1e-3, dfs[2]*1e-6, sps[2], TPs[2], Fs[2]/60e6; kwargs...)
+	modules[3] = GasChromatographySystems.ModuleColumn("2 -> 4", Ls[3], ds[3]*1e-3, dfs[3]*1e-6, sps[3], TPs[3], Fs[3]/60e6; kwargs...)
 	# system
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))
 
@@ -1139,13 +1158,13 @@ function SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=GasChroma
 	return sys
 end
 
-function SplitSystem(; Ls = [10.0, 1.0, 5.0], ds = [0.25, 0.1, 0.25], dfs = [0.25, 0.0, 0.0], sps = ["Rxi17SilMS", "", ""], TPs = [default_TP(), 300.0, 300.0], Fs = [1.0, NaN, NaN], pin = NaN, pout1 = 0.0, pout2 = 101.3, opt=GasChromatographySystems.Options(ng=true))
-	sys = SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=opt)
+function SplitSystem(; Ls = [10.0, 1.0, 5.0], ds = [0.25, 0.1, 0.25], dfs = [0.25, 0.0, 0.0], sps = ["Rxi17SilMS", "", ""], TPs = [default_TP(), 300.0, 300.0], Fs = [1.0, NaN, NaN], pin = NaN, pout1 = 0.0, pout2 = 101.3, opt=GasChromatographySystems.Options(), kwargs...)
+	sys = SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=opt, kwargs...)
 	return sys
 end
 
 #example_SplitSystem() = SplitSystem([10.0, 1.0, 5.0], [0.25, 0.1, 0.25], [0.25, 0.0, 0.0], ["Rxi17SilMS", "", ""], [default_TP(), 300.0, 300.0], [1.0, NaN, NaN], NaN, 0.0, 101.3)
-
+#=
 function GCxGC_TM_simp(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, F, pin, pout; opt=GasChromatographySystems.Options(ng=true))
 	# ? make two versions
 	# 1. defining flow over the columns (calculate pin)
@@ -1249,7 +1268,7 @@ function GCxGC_FM_simp(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "Rxi17SilMS", T
 end
 
 #example_GCxGC_FM_simp() = GCxGC_FM_simp(30.0, 0.25, 0.25, "Rxi17SilMS", default_TP(), 1.0, 2.0, 0.25, 0.25, "Wax", default_TP(), 2.0, NaN, 0.0)
-
+=#
 # thermal modulation
 
 # definitions for the periodic smoothed rectangle function
@@ -1295,7 +1314,7 @@ function therm_mod(t, shift, PM, ratio, Tcold, Thot; flank=20)
 end
 
 # definition GCxGC system with thermal modulator
-function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=GasChromatographySystems.Options(ng=true), optTM=ModuleTMopt())
+function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=GasChromatographySystems.Options(), optTM=ModuleTMopt(), optCol=ModuleColumnOpt())
 
 	TPs = [TP1, TP2, TPM]
 	
@@ -1339,21 +1358,21 @@ function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, 
 	pp[end] = PressurePoint("p$(nv(g))", com_timesteps, pouts) # outlet
 	# modules
 	modules = Array{AbstractModule}(undef, ne(g))
-	modules[1] = ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6)
-	modules[2] = ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM)
+	modules[1] = ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6, optCol)
+	modules[2] = ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
 	modules[3] = ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
-	modules[4] = ModuleColumn("mod loop", LM[3], dM*1e-3, dfM*1e-6, spM, TPM)
+	modules[4] = ModuleColumn("mod loop", LM[3], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
 	modules[5] = ModuleTM("TM2", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
-	modules[6] = ModuleColumn("mod out", LM[5], dM*1e-3, dfM*1e-6, spM, TPM, NaN)
-	modules[7] = ModuleColumn("GC column 2", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN)
-	modules[8] = ModuleColumn("TL", LTL, dTL*1e-3, dfTL*1e-6, spTL, TPTL, NaN)
+	modules[6] = ModuleColumn("mod out", LM[5], dM*1e-3, dfM*1e-6, spM, TPM, NaN, optCol)
+	modules[7] = ModuleColumn("GC column 2", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN, optCol)
+	modules[8] = ModuleColumn("TL", LTL, dTL*1e-3, dfTL*1e-6, spTL, TPTL, NaN, optCol)
 	# system
 	sys = update_system(System(g, pp, modules, opt))
 	return sys
 end
 
-function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = default_TP(), L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), LTL = 0.25, dTL = 0.1, dfTL = 0.1, spTL = "Stabilwax", TPTL = 280.0, LM = [0.30, 0.01, 0.90, 0.01, 0.30], dM = 0.1, dfM = 0.1, spM = "Stabilwax", shift = 0.0, PM = 4.0, ratioM = 0.9125, HotM = 30.0, ColdM = -120.0, TPM = default_TP(), F = 0.8, pin = NaN, pout = 0.0, opt=GasChromatographySystems.Options(ng=true), optTM=ModuleTMopt())
-	sys = GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=opt, optTM=optTM)
+function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = default_TP(), L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), LTL = 0.25, dTL = 0.1, dfTL = 0.1, spTL = "Stabilwax", TPTL = 280.0, LM = [0.30, 0.01, 0.90, 0.01, 0.30], dM = 0.1, dfM = 0.1, spM = "Stabilwax", shift = 0.0, PM = 4.0, ratioM = 0.9125, HotM = 30.0, ColdM = -120.0, TPM = default_TP(), F = 0.8, pin = NaN, pout = 0.0, opt=GasChromatographySystems.Options(), optTM=ModuleTMopt(), optCol=ModuleColumnOpt())
+	sys = GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=opt, optTM=optTM, optCol=optCol)
 	return sys
 end
 

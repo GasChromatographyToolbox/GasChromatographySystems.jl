@@ -3,7 +3,8 @@ using Test, CSV, DataFrames, GasChromatographySystems
 #@testset "example systems" begin
     # define some example systems
     ex_series = GasChromatographySystems.SeriesSystem(sps = ["SLB5ms", "SPB50", "Wax", "Wax"])
-    @test ex_series.modules[1].length == 10.0 
+    ex_series_ = GasChromatographySystems.SeriesSystem(sps = ["SLB5ms", "SPB50", "Wax", "Wax"]; abstol=1e-9)
+    @test ex_series_.modules[1].opt.abstol*10.0 == ex_series.modules[1].opt.abstol
     ex_split = GasChromatographySystems.SplitSystem(sps = ["SLB5ms", "SPB50", "Wax"])
     @test GasChromatographySystems.ne(ex_split.g) == 3
     #ex_GCxGC_TM_simp = GasChromatographySystems.GCxGC_TM_simp(sp1 = "SLB5ms", sp2 = "Wax")

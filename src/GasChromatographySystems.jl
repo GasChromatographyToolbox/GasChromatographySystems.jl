@@ -872,7 +872,7 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 	thot = PM*(1-ratio)
 	init_t_start = (fld.(tR .+ shift .- nτ.*τR, PM)).*PM .- shift # start time of the peaks, rounded down to multiple of PM
 	init_t_end = (fld.(tR .+ shift .+ nτ.*τR, PM)).*PM .- shift # end time of the peaks, rounded down to multiple of PM
-	n_slice = Int.((init_t_end .- init_t_start)./PM .+ 1) # number of slices for every substance
+	n_slice = round.(Int, (init_t_end .- init_t_start)./PM .+ 1) # number of slices for every substance
 	sub_TM_focussed = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice))
 	A_focussed = Array{Float64}(undef, sum(n_slice))
 	#A_unfocussed = Array{Float64}(undef, sum(n_slice))

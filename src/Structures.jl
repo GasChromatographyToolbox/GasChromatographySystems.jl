@@ -116,13 +116,13 @@ Four methods to construct this structure exist:
 struct ModuleColumn<:GasChromatographySystems.AbstractModule
 	# Module
 	# GC column, gradients are possible
-	name::String
-	L::Float64
+	name#::String
+	L#::Float64
 	d#::Fd # Function
-	a_d::Array{Float64,1} # Parameters of diameter function, just for information
+	a_d#::Array{Float64,1} # Parameters of diameter function, just for information
 	df#::Fdf # Function
-	a_df::Array{Float64,1} # Parameters of film_thickness function, just for information
-	sp::String
+	a_df#::Array{Float64,1} # Parameters of film_thickness function, just for information
+	sp#::String
 	T # a number (constant temperature) or a TemperatureProgram structure
 	F # an number (constant flow) or a Function
 	opt::ModuleColumnOptions
@@ -186,19 +186,19 @@ Four methods to construct this structure exist:
 struct ModuleTM<:GasChromatographySystems.AbstractModule
 	# Module
 	# thermal modulator
-	name::String
-	L::Float64
+	name#::String
+	L#::Float64
 	d#::Fd # Function
-	a_d::Array{Float64,1} # Parameters of diameter function, just for information
+	a_d#::Array{Float64,1} # Parameters of diameter function, just for information
 	df#::Fdf # Function
-	a_df::Array{Float64,1} # Parameters of film_thickness function, just for information
-	sp::String
+	a_df#::Array{Float64,1} # Parameters of film_thickness function, just for information
+	sp#::String
 	T # a number (constant temperature) or a TemperatureProgram structure
-	shift::Float64
-	PM::Float64 # a number, modulation periode 
-	ratio::Float64 # a number, ratio of the duration between cold and hot jet, approx. as rectangular function
-	Thot::Float64 # heating with hot jet
-	Tcold::Float64 # cooling with cold jet
+	shift#::Float64
+	PM#::Float64 # a number, modulation periode 
+	ratio#::Float64 # a number, ratio of the duration between cold and hot jet, approx. as rectangular function
+	Thot#::Float64 # heating with hot jet
+	Tcold#::Float64 # cooling with cold jet
 	F # an number (constant flow) or a Function
 	opt::ModuleTMOptions
 end

@@ -807,7 +807,7 @@ end
 
 function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(length(par_sys[1].sub)), τ₀_focus=zeros(length(par_sys[1].sub)), kwargsTM...)
 	
-	E = collect(GasChromatographySystems.edges(sys.g))
+	E = collect(edges(sys.g))
 #	peaklists = Array{Array{DataFrame,1}}(undef, length(paths))
 #	solutions = Array{Array{Any,1}}(undef, length(paths))
 #	path_pos = Array{String}(undef, length(paths))
@@ -817,8 +817,8 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 	# i -> path number
 	# j -> segment/module number
 #	for i=1:length(paths)
-		i_par = GasChromatographySystems.index_parameter(sys.g, path)
-		if GasChromatographySystems.path_possible(sys, path) == true
+		i_par = index_parameter(sys.g, path)
+		if path_possible(sys, path) == true
 			path_pos = "path is possible"
 			peaklists_ = Array{DataFrame}(undef, length(i_par))
 			solutions_ = Array{Any}(undef, length(i_par))
@@ -846,7 +846,7 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 #					solutions_[j] = solutions[i_path][i_edge]
 #				else # new simulated segments
 					if j == 1 # first segment, directly after injection, it is assumed to be a segment of type `ModuleColumn`
-						new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], t₀, τ₀)
+						new_par_sys[i_par[j]] = change_initial(par_sys[i_par[j]], t₀, τ₀)
 						
 						
 						T_itp = new_par_sys[i_par[j]].prog.T_itp
@@ -874,14 +874,14 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 						peaklists_[j] = GasChromatographySimulator.peaklist(sol_, new_par_sys[i_par[j]])
 						peaklists_[j][!,:A] = ones(length(peaklists_[j].Name)) # add a relativ area factor, splitting of `A` at split points is not accounted for yet, is only used for the slicing of peaks at modulators
 						solutions_[j] = sol_
-					elseif typeof(sys.modules[i_par[j]]) == GasChromatographySystems.ModuleTM
+					elseif typeof(sys.modules[i_par[j]]) == ModuleTM
 						# put this in a separate function
 						if refocus[i_par[j]] == true
 							τ₀=τ₀_focus
 						else
 							τ₀=peaklists_[j-1].τR # PM?
 						end
-						new_par_sys[i_par[j]], df_A = GasChromatographySystems.slicing(peaklists_[j-1], sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift, par_sys[i_par[j]]; nτ=nτ, τ₀=τ₀, abstol=sys.modules[i_par[j]].opt.abstol, reltol=sys.modules[i_par[j]].opt.reltol, alg=sys.modules[i_par[j]].opt.alg)
+						new_par_sys[i_par[j]], df_A = slicing(peaklists_[j-1], sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift, par_sys[i_par[j]]; nτ=nτ, τ₀=τ₀, abstol=sys.modules[i_par[j]].opt.abstol, reltol=sys.modules[i_par[j]].opt.reltol, alg=sys.modules[i_par[j]].opt.alg)
 						if sys.modules[i_par[j]].opt.alg == "simplifiedTM"
 							peaklists_[j], solutions_[j] = approximate_modulator(sys.modules[i_par[j]].T, new_par_sys[i_par[j]], df_A, sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift, sys.modules[i_par[j]].Thot)
 						else
@@ -903,16 +903,16 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 								#end
 							end
 							peaklists_[j] = GasChromatographySimulator.peaklist(sol, new_par_sys[i_par[j]])
-							GasChromatographySystems.add_A_to_pl!(peaklists_[j], df_A)
+							add_A_to_pl!(peaklists_[j], df_A)
 							solutions_[j] = sol
 						end
 						if maximum(peaklists_[j].τR) > sys.modules[i_par[j]].PM
 							return @warn "Peak width of focussed peaks $(maximum(peaklists_[j].τR)) > modulation period $(sys.modules[i_par[j]].PM). Simulation is aborted. alg=$(sys.modules[i_par[j]].opt.alg), T=$(sys.modules[i_par[j]].T), peaklist=$(peaklists_[j])."
 						end
 					else # ModuleColumn
-						new_par_sys[i_par[j]] = GasChromatographySystems.change_initial(par_sys[i_par[j]], peaklists_[j-1])
+						new_par_sys[i_par[j]] = change_initial(par_sys[i_par[j]], peaklists_[j-1])
 						peaklists_[j], solutions_[j] = GasChromatographySimulator.simulate(new_par_sys[i_par[j]])
-						GasChromatographySystems.add_A_to_pl!(peaklists_[j], peaklists_[j-1])
+						add_A_to_pl!(peaklists_[j], peaklists_[j-1])
 					end
 #				end
 			end
@@ -920,7 +920,7 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 #			peaklists[i] = peaklists_
 #			solutions[i] = solutions_
 		else # path not possible
-			neg_flow_modules = sys.modules[findall(paths[i][findall(GasChromatographySystems.positive_flow(sys)[i_par].==false)].==edges(sys.g))]
+			neg_flow_modules = sys.modules[findall(paths[i][findall(positive_flow(sys)[i_par].==false)].==edges(sys.g))]
 			str_neg_flow = "path not possible: "
 			for j=1:length(neg_flow_modules)
 				str_neg_flow = str_neg_flow*"Flow in module >$(neg_flow_modules[j].name)< becomes negative during the program. "

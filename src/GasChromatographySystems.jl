@@ -1691,5 +1691,46 @@ function traces(sol, par, i_select)
 end
 # end - Misc
 
+# begin - hold-up times
+function holdup_time_functions(sys)
+	p_func = GasChromatographySystems.pressure_functions(sys)
+	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
+	E = collect(GasChromatographySystems.edges(sys.g))
+	srcE = GasChromatographySystems.src.(E)
+	dstE = GasChromatographySystems.dst.(E)
+	for i=1:GasChromatographySystems.ne(sys.g)
+		pin(t) = p_func[srcE[i]](t)
+		pout(t) = p_func[dstE[i]](t)
+		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
+		f(t) = GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
+		tM_func[i] = f
+	end
+	return tM_func
+end
+
+function holdup_time_path(sys, num_paths)
+	tM = holdup_time_functions(sys)
+	i_paths = GasChromatographySystems.all_paths(sys.g, num_paths)[1]
+	tMp = Array{Function}(undef, num_paths)
+	for i=1:num_paths
+		f(t) = sum([tM[x](t) for x in i_paths[i]])
+		tMp[i] = f
+	end
+	return tMp, i_paths
+end
+
+function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)
+	#plotly()
+	tMp_func, i_paths = holdup_time_path(sys, num_paths)
+	com_timesteps = GasChromatographySystems.common_timesteps(sys)
+	trange = 0:dt:sum(com_timesteps)
+	p_tM = Plots.plot(xlabel="time in s", ylabel="flow in mL/min")
+	for i=1:length(tMp_func)
+		Plots.plot!(p_tM, trange, tMp_func[i].(trange), label="path: $(i_paths[i])")
+	end
+	return p_tM
+end
+# end - hold-up times
+
 
 end # module

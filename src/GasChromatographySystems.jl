@@ -805,7 +805,7 @@ function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].
 	return path_pos, peaklists, solutions, new_par_sys
 end
 
-function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(length(par_sys[1].sub)), τ₀_focus=zeros(length(par_sys[1].sub)), kwargsTM...)
+function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(length(par_sys[1].sub)), τ₀_focus=zeros(length(par_sys[1].sub)), pl_thread=true, kwargsTM...)
 	
 	E = collect(edges(sys.g))
 #	peaklists = Array{Array{DataFrame,1}}(undef, length(paths))
@@ -871,7 +871,7 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 						for i=1:length(new_par_sys[i_par[j]].sub)
 							sol_[i] = GasChromatographySimulator.solving_odesystem_r(L, d, df, T_itp, Fpin_itp, pout_itp, Tchars[i], θchars[i], ΔCps[i], φ₀s[i], Cags[i], t₀s[i], τ₀s[i], gas, opt)
 						end
-						peaklists_[j] = GasChromatographySimulator.peaklist(sol_, new_par_sys[i_par[j]])
+						peaklists_[j] = GasChromatographySimulator.peaklist(sol_, new_par_sys[i_par[j]]; thread=pl_thread)
 						peaklists_[j][!,:A] = ones(length(peaklists_[j].Name)) # add a relativ area factor, splitting of `A` at split points is not accounted for yet, is only used for the slicing of peaks at modulators
 						solutions_[j] = sol_
 					elseif typeof(sys.modules[i_par[j]]) == ModuleTM
@@ -902,7 +902,7 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 								#	sol[i_sub] = approximate_modulator(new_par_sys[i_par[j]], df_A, sys.modules[i_par[j]].PM, sys.modules[i_par[j]].ratio, sys.modules[i_par[j]].shift)[2][i_sub]
 								#end
 							end
-							peaklists_[j] = GasChromatographySimulator.peaklist(sol, new_par_sys[i_par[j]])
+							peaklists_[j] = GasChromatographySimulator.peaklist(sol, new_par_sys[i_par[j]]; thread=pl_thread)
 							add_A_to_pl!(peaklists_[j], df_A)
 							solutions_[j] = sol
 						end

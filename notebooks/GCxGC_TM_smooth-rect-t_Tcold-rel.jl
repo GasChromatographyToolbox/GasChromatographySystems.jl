@@ -44,7 +44,7 @@ md"""
 """
 
 # ╔═╡ 1948baf0-1217-485a-8c8b-6e826bd5ef50
-optTM = GasChromatographySystems.ModuleTMopt(Tcold_abs=false, spatial=false, alg=Vern9(), tflank=20, sflank=Inf, dtinit=0.05*1e-7)
+optTM = GasChromatographySystems.ModuleTMOptions(Tcold_abs=false, ng=true, alg=Vern9(), tflank=20, sflank=Inf, dtinit=0.05*1e-7)
 
 # ╔═╡ 8a51f65b-d8f1-407b-835f-1bb1048902bc
 ng = true
@@ -173,7 +173,7 @@ md"""
 """
 
 # ╔═╡ 5f3c1ce1-50bb-44ba-abac-d3ccc82fdb51
-par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes; ng=ng)
+par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes)
 
 # ╔═╡ e2e1ee2a-f98d-47fd-8c22-cc441f2d12c2
 begin
@@ -183,25 +183,25 @@ end
 # ╔═╡ a2d062a4-bd59-4ab7-9316-dc769b2c3c09
 begin
 	TM_itp = par[3].prog.T_itp
-	Plots.plot(0.0:0.01:sys.modules[3].PM, TM_itp.(sys.modules[3].length/2, 0.0:0.01:sys.modules[3].PM).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
-	Plots.plot!([0.0, 0.0], [TM_itp(sys.modules[3].length/2,0.0), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM)].-273.15, c=:black, label="")
-	Plots.plot!([ratio*PM, ratio*PM], [TM_itp(sys.modules[3].length/2,0.0), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM)].-273.15, c=:black, linestyle=:dash, label="")
-	Plots.plot!([PM, PM], [TM_itp(sys.modules[3].length/2,0.0), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM)].-273.15, c=:black, label="")
+	Plots.plot(0.0:0.01:sys.modules[3].PM, TM_itp.(sys.modules[3].L/2, 0.0:0.01:sys.modules[3].PM).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
+	Plots.plot!([0.0, 0.0], [TM_itp(sys.modules[3].L/2,0.0), TM_itp(sys.modules[3].L/2,(1+ratio)/2*PM)].-273.15, c=:black, label="")
+	Plots.plot!([ratio*PM, ratio*PM], [TM_itp(sys.modules[3].L/2,0.0), TM_itp(sys.modules[3].L/2,(1+ratio)/2*PM)].-273.15, c=:black, linestyle=:dash, label="")
+	Plots.plot!([PM, PM], [TM_itp(sys.modules[3].L/2,0.0), TM_itp(sys.modules[3].L/2,(1+ratio)/2*PM)].-273.15, c=:black, label="")
 end
 
 # ╔═╡ b8a6cdec-457b-4fb0-b6f8-60f713f4a015
 begin
 	Plots.plot(xlabel="position x in m", ylabel="temperature in °C", title="temperature at modulator point", legend=false)
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, sys.modules[3].ratio*sys.modules[3].PM).-273.15, label="t=$(sys.modules[3].ratio*sys.modules[3].PM)s")
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, (1+3*sys.modules[3].ratio)/4*sys.modules[3].PM).-273.15, label="t=$((1+3*sys.modules[3].ratio)/4*sys.modules[3].PM)s")
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, (1+sys.modules[3].ratio)/2*sys.modules[3].PM).-273.15, label="t=$((1+sys.modules[3].ratio)/2*sys.modules[3].PM)s")
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, 3.95).-273.15, label="t=3.95s")
-	Plots.plot!(0.0:sys.modules[3].length/100.0:sys.modules[3].length, TM_itp.(0.0:sys.modules[3].length/100.0:sys.modules[3].length, sys.modules[3].PM).-273.15, label="t=$(sys.modules[3].PM)s")
+	Plots.plot!(0.0:sys.modules[3].L/100.0:sys.modules[3].L, TM_itp.(0.0:sys.modules[3].L/100.0:sys.modules[3].L, sys.modules[3].ratio*sys.modules[3].PM).-273.15, label="t=$(sys.modules[3].ratio*sys.modules[3].PM)s")
+	Plots.plot!(0.0:sys.modules[3].L/100.0:sys.modules[3].L, TM_itp.(0.0:sys.modules[3].L/100.0:sys.modules[3].L, (1+3*sys.modules[3].ratio)/4*sys.modules[3].PM).-273.15, label="t=$((1+3*sys.modules[3].ratio)/4*sys.modules[3].PM)s")
+	Plots.plot!(0.0:sys.modules[3].L/100.0:sys.modules[3].L, TM_itp.(0.0:sys.modules[3].L/100.0:sys.modules[3].L, (1+sys.modules[3].ratio)/2*sys.modules[3].PM).-273.15, label="t=$((1+sys.modules[3].ratio)/2*sys.modules[3].PM)s")
+	Plots.plot!(0.0:sys.modules[3].L/100.0:sys.modules[3].L, TM_itp.(0.0:sys.modules[3].L/100.0:sys.modules[3].L, 3.95).-273.15, label="t=3.95s")
+	Plots.plot!(0.0:sys.modules[3].L/100.0:sys.modules[3].L, TM_itp.(0.0:sys.modules[3].L/100.0:sys.modules[3].L, sys.modules[3].PM).-273.15, label="t=$(sys.modules[3].PM)s")
 end
 
 # ╔═╡ e72a6c41-2b14-45cb-81e7-263610c3c8ae
 begin
-	Plots.plot(0.0:0.01:(sys.modules[3].PM*100.0), TM_itp.(sys.modules[3].length/2, 0.0:0.01:(sys.modules[3].PM*100.0)).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
+	Plots.plot(0.0:0.01:(sys.modules[3].PM*100.0), TM_itp.(sys.modules[3].L/2, 0.0:0.01:(sys.modules[3].PM*100.0)).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
 	Plots.plot!(0.0:0.01:(sys.modules[3].PM*100.0), par[1].prog.T_itp(0.0, 0.0:0.01:(sys.modules[3].PM*100.0)).-273.15, label="")
 end
 
@@ -236,7 +236,7 @@ md"""
 """
 
 # ╔═╡ 582499db-7b5a-4054-92c2-d0e2a97cd91f
-slice_mat, t_D1, t_D2, c_slices, t_, chrom_sliced_sum, chrom_sliced  = GasChromatographySystems.chrom2d(sim[2][1][end], sys)
+slice_mat, t_D1, t_D2, c_slices, t_, chrom_sliced_sum  = GasChromatographySystems.chrom2d(sim[2][1][end], sys, PM)
 
 # ╔═╡ f268df70-af5a-482f-85e6-84216681ecf4
 md"""
@@ -244,7 +244,7 @@ md"""
 """
 
 # ╔═╡ e5d4fb3a-f05f-4533-9666-08be32ef19ef
-pl_GCxGC = GasChromatographySystems.peaklist_GCxGC_weighted_mean(sim[2][1][8], PM)
+pl_GCxGC = GasChromatographySystems.peaklist_GCxGC(sim[2][1][8], PM)
 
 # ╔═╡ 5f67ab8d-3b3d-4bbd-81c8-04eec158ef6e
 begin
@@ -345,6 +345,12 @@ pl_GCxGC
 
 # ╔═╡ 3ed4ad21-c8e4-428a-b6d3-b37cfdbd0778
 compare = GasChromatographySystems.comparison_meas_sim(meas, pl_GCxGC)
+
+# ╔═╡ f2c96b76-1065-478a-bc25-2fa71afa2181
+#CSV.write(joinpath(pwd(), "compare_RT_ZB1ms-Stabilwax.csv"), compare)
+
+# ╔═╡ 37deb821-eff0-41cf-bdcf-7b0941373e92
+pwd()
 
 # ╔═╡ e17c92b0-2db3-4e29-b56f-c7b5650c9d95
 sum(abs.(collect(skipmissing(compare.relΔtR1_percent))))/length(collect(skipmissing(compare.relΔtR1_percent)))
@@ -475,6 +481,8 @@ md"""
 # ╟─b7c2070b-16bf-41f5-b021-160e54a53a21
 # ╠═189034b6-09e5-4e6b-80b3-e442ad30705c
 # ╟─3ed4ad21-c8e4-428a-b6d3-b37cfdbd0778
+# ╠═f2c96b76-1065-478a-bc25-2fa71afa2181
+# ╠═37deb821-eff0-41cf-bdcf-7b0941373e92
 # ╠═e17c92b0-2db3-4e29-b56f-c7b5650c9d95
 # ╠═c190dd0f-6f09-4d18-9aa5-6b40beddfbf3
 # ╠═fb7236b5-98fd-4aac-86ed-5e7118b19ed6

@@ -44,10 +44,7 @@ md"""
 """
 
 # ╔═╡ 1948baf0-1217-485a-8c8b-6e826bd5ef50
-optTM = GasChromatographySystems.ModuleTMopt(Tcold_abs=true, spatial=false, alg="simplifiedTM", tflank=Inf, sflank=Inf)
-
-# ╔═╡ 8a51f65b-d8f1-407b-835f-1bb1048902bc
-ng = true
+optTM = GasChromatographySystems.ModuleTMopt(Tcold_abs=true, ng=false, alg="simplifiedTM", tflank=Inf, sflank=Inf)
 
 # ╔═╡ 13d4415d-3dc4-4eed-aded-c3561b77a9eb
 md"""
@@ -84,7 +81,7 @@ begin
 	sp1 = "ZB1ms"
 	
 	# modulator
-	LM = [0.24, 0.005, 0.9, 0.005, 0.3]#[0.3, 0.005, 0.9, 0.005, 0.3]
+	LM = [0.30, 0.005, 0.9, 0.005, 0.3]#[0.3, 0.005, 0.9, 0.005, 0.3]
 	dM = 0.1
 	dfM = 0.1
 	spM = "Stabilwax"
@@ -113,18 +110,12 @@ md"""
 # ╔═╡ de542d7e-bd0d-47a4-8977-5ab1e64a26f4
 begin
 	PM = 4.0
-	shift = 3.0
+	shift = 3.35#-0.35*2
 	thot = 0.35
 	ratio = (PM-thot)/PM
 	Thot = 25.0
 	Tcold = -70#-100.0
 end
-
-# ╔═╡ bbb30f9e-0904-4147-b86b-a366040cf798
-ratio*PM-shift
-
-# ╔═╡ 521692a5-1afc-4909-b39f-62ab310e663b
-(1+ratio)/2*PM-shift
 
 # ╔═╡ daf7484b-ac12-4515-8e26-adbc8e214cbc
 md"""
@@ -154,6 +145,9 @@ GasChromatographySystems.plot_flow_over_time(sys; dt=30.0)
 # ╔═╡ 7ddfe44e-fde9-422f-98de-27b80e8517be
 GasChromatographySystems.plot_pressure_over_time(sys; dt=30.0)
 
+# ╔═╡ d1eca540-5621-4928-9d74-ab0e0e3ca22a
+optTM
+
 # ╔═╡ 03b1cae0-cf56-4e0f-b0ad-fdfa736e0fa8
 md"""
 ### Substances
@@ -171,7 +165,7 @@ end
 selected_solutes_ = GasChromatographySystems.common_solutes(db, sys).Name
 
 # ╔═╡ 262fba99-1b75-4803-8f34-a0619de559a9
-selected_solutes = selected_solutes_[[14,16,17]]#[Not([1, 29, 30])]#[[14,16,17]]
+selected_solutes = selected_solutes_[Not([1, 29, 30])]#[[14,16,17]]
 
 # ╔═╡ 80edd747-485b-4f8f-a593-9a3b1c96b82d
 # 1 -> Warning "Peak width of focussed peaks > modulation period. Simulation is aborted."
@@ -184,7 +178,7 @@ md"""
 """
 
 # ╔═╡ 5f3c1ce1-50bb-44ba-abac-d3ccc82fdb51
-par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes; ng=ng)
+par = GasChromatographySystems.graph_to_parameters(sys, db, selected_solutes)
 
 # ╔═╡ e2e1ee2a-f98d-47fd-8c22-cc441f2d12c2
 begin
@@ -199,9 +193,6 @@ begin
 	Plots.plot!([ratio*PM-shift, ratio*PM-shift], [TM_itp(sys.modules[3].length/2,ratio*PM-shift-eps()), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM-shift)].-273.15, c=:black, linestyle=:dash, label="")
 	Plots.plot!([PM-shift, PM-shift], [TM_itp(sys.modules[3].length/2,PM-shift), TM_itp(sys.modules[3].length/2,(1+ratio)/2*PM-shift)].-273.15, c=:black, label="")
 end
-
-# ╔═╡ 4a22896f-d1b7-4b69-87d6-cfee69cb91ff
-TM_itp(sys.modules[3].length/2,ratio*PM-shift)-273.15
 
 # ╔═╡ b8a6cdec-457b-4fb0-b6f8-60f713f4a015
 begin
@@ -293,7 +284,7 @@ md"""
 """
 
 # ╔═╡ 582499db-7b5a-4054-92c2-d0e2a97cd91f
-slice_mat, t_D1, t_D2, c_slices, t_, chrom_sliced_sum, chrom_sliced  = GasChromatographySystems.chrom2d(sim[2][1][end], sys)
+slice_mat, t_D1, t_D2, c_slices, t_, chrom_sliced_sum  = GasChromatographySystems.chrom2d(sim[2][1][end], sys, PM)
 
 # ╔═╡ f268df70-af5a-482f-85e6-84216681ecf4
 md"""
@@ -301,7 +292,7 @@ md"""
 """
 
 # ╔═╡ e5d4fb3a-f05f-4533-9666-08be32ef19ef
-pl_GCxGC = GasChromatographySystems.peaklist_GCxGC_weighted_mean(sim[2][1][8], PM, shift)
+pl_GCxGC = GasChromatographySystems.peaklist_GCxGC(sim[2][1][8], PM)
 
 # ╔═╡ 5f67ab8d-3b3d-4bbd-81c8-04eec158ef6e
 begin
@@ -310,11 +301,11 @@ begin
 	x2 = ceil(maximum(pl_GCxGC.tR1*1.01))
 	y1 = floor(minimum(pl_GCxGC.tR2*0.99))
 	y2 = ceil(maximum(pl_GCxGC.tR2*1.01))
-	p_contour = Plots.contour(t_D1[1:end-1], t_D2[1], slice_mat', levels=10, xlabel="tR1 in s", ylabel="tR2 in s")#, c=:jet1)
+	p_contour = Plots.contour(t_D1[1:end-1], t_D2[1], slice_mat[1:end-1,1:end]', levels=10, xlabel="tR1 in s", ylabel="tR2 in s")#, c=:jet1)
 	Plots.scatter!(p_contour, pl_GCxGC.tR1, pl_GCxGC.tR2, msize=3, shape=:diamond, c=:black, markeralpha=1)
 	Plots.plot!(p_contour, xlims=(x1, x2), ylims=(y1, y2))
 
-	p_heatmap = Plots.heatmap(t_D1[1:end-1], t_D2[1], slice_mat', levels=10, xlabel="tR1 in s", ylabel="tR2 in s", c=:jet1)
+	p_heatmap = Plots.heatmap(t_D1[1:end-1], t_D2[1], slice_mat[1:end-1,1:end]', levels=10, xlabel="tR1 in s", ylabel="tR2 in s", c=:jet1)
 	Plots.scatter!(p_heatmap, pl_GCxGC.tR1, pl_GCxGC.tR2, msize=3, shape=:diamond, c=:black, markeralpha=1)
 	Plots.plot!(p_heatmap, xlims=(x1, x2), ylims=(y1, y2))
 
@@ -322,23 +313,7 @@ begin
 end
 
 # ╔═╡ ab0c7a5a-7b6b-4b01-a283-dc4b157092ef
-GasChromatographySystems.peaklist_GCxGC(sim[2][1][8], sim[2][1][2], PM, shift)
-
-# ╔═╡ 1ba0ed9d-577d-4239-a5e2-d915b46236cc
-sim[2][1][8].tR
-
-# ╔═╡ c32ff404-452e-4bc5-85c4-539f0c42433c
-fld.(sim[2][1][8].tR .+ shift, PM).*PM .- shift
-
-# ╔═╡ c5a1f69a-ffe7-41aa-a96d-68be222d141e
-sim[2][1][8].tR .- (fld.(sim[2][1][8].tR.+ shift, PM).*PM.- shift)
-
-# ╔═╡ 7d649d71-824b-47b3-ad6b-b8bc391d170f
-begin
-	plotly()
-	Plots.plot(1800.0:0.01:1820.0, TM_itp.(sys.modules[3].length/2, 1800.0:0.01:1820.0).-273.115, title="temperature at modulator point", xlabel="time in s", ylabel="temperature in °C", label="")
-	Plots.plot!(1800.0:0.01:1820.0, par[1].prog.T_itp(0.0, 1800.0:0.01:1820.0).-273.15, label="")
-end
+GasChromatographySystems.peaklist_GCxGC(sim[2][1][8], sim[2][1][2], PM,)
 
 # ╔═╡ 93e2068d-760e-403e-a6fa-984a237ad6c3
 md"""
@@ -422,43 +397,101 @@ pl_GCxGC
 # ╔═╡ 3ed4ad21-c8e4-428a-b6d3-b37cfdbd0778
 compare = GasChromatographySystems.comparison_meas_sim(meas, pl_GCxGC)
 
-# ╔═╡ 664d11de-c597-43ab-8af6-810ed818900d
-pwd()
-
-# ╔═╡ 4b532d62-07f0-4f27-b25e-d5c6241f43dc
-#CSV.write(joinpath(pwd(), "test5.csv"), compare)
-
 # ╔═╡ e17c92b0-2db3-4e29-b56f-c7b5650c9d95
-sum(abs.(collect(skipmissing(compare.relΔtR1_percent))))/length(collect(skipmissing(compare.relΔtR1_percent)))
+avreltR1 = sum(abs.(collect(skipmissing(compare.relΔtR1_percent))))/length(collect(skipmissing(compare.relΔtR1_percent)))
 
 # ╔═╡ c190dd0f-6f09-4d18-9aa5-6b40beddfbf3
-sum(abs.(collect(skipmissing(compare.relΔtR2_percent))))/length(collect(skipmissing(compare.relΔtR2_percent)))
+avreltR2 = sum(abs.(collect(skipmissing(compare.relΔtR2_percent))))/length(collect(skipmissing(compare.relΔtR2_percent)))
 
 # ╔═╡ fb7236b5-98fd-4aac-86ed-5e7118b19ed6
 meas_chrom = sort!(DataFrame(CSV.File("/Users/janleppert/Documents/sciebo/GCsim/Estimator/ZB1xWax/CSV/KetAlkPhenHR3Mod1.csv", header=1, silencewarnings=true)), :RT)
 
-# ╔═╡ a2cc7971-bd69-4623-86a1-7e7d43c6b05c
-c_slices_m, t_D1_m, t_D2_m = GasChromatographySystems.chrom_slicing(meas_chrom.RT.*60, meas_chrom.TIC, PM)
+# ╔═╡ 503890e2-0560-49fc-9d35-116323ed945d
+names(meas_chrom)
 
-# ╔═╡ 6cf28744-7748-4d88-bfd7-f8e428732228
+# ╔═╡ 39bd57a4-271a-4c8a-9ecf-85ff260bdaae
+1833.311/60
+
+# ╔═╡ fd0eda02-2f89-42f7-907e-22ac89b34831
+findall((meas_chrom.RT.>1830/60) .== (meas_chrom.RT.<1840/60))# && meas_chrom.RT.<1840/60)
+
+# ╔═╡ 2ff72067-0026-4f63-8640-59a911a968bc
+ii = findall(meas_chrom.RT.≈30.55518)
+
+# ╔═╡ 6d16fcfa-d922-4559-80cb-de166525cc5d
+function massspectra(meas_chrom, i)
+	sig = Array(meas_chrom[i, :])[3:end]
+	mz = 0.0:1.0:(length(sig)-1)
+	i_sig = findall(sig.>0.0)
+	return DataFrame(mz=mz[i_sig], abundance=sig[i_sig])
+end
+
+# ╔═╡ 24053468-95d2-4fb2-8254-7c4aebcc7750
+mz = massspectra(meas_chrom, ii)
+
+# ╔═╡ f7660784-a782-4253-bcd6-15bed8838487
+Plots.bar(mz.mz, mz.abundance)
+
+# ╔═╡ d8c9f126-9e65-43cd-a378-d14286da6f13
+function mz_filter(meas_chrom, mz)
+	RT = meas_chrom.RT
+	mz_trace = meas_chrom[!, mz+3]
+	return DataFrame(RT=RT, mz_trace=mz_trace)
+end
+
+# ╔═╡ 6f2f34ed-a522-4e63-8d55-d9016cdbe891
+maximum(mz_filter(meas_chrom, 0).mz_trace)
+
+# ╔═╡ 39f45c8a-dbaf-4c97-8eef-47c59c8feee7
+31.6*60
+
+# ╔═╡ 02235d58-147e-4fab-92b3-60c6b1e5b736
 begin
+	mz84 = mz_filter(meas_chrom, 84)
+	mz94 = mz_filter(meas_chrom, 94)
+	mz109 = mz_filter(meas_chrom, 109)
+	mz152 = mz_filter(meas_chrom, 152)
+	Plots.plot(mz84.RT, mz84.mz_trace, label="mz=84")
+	Plots.plot!(mz94.RT, mz94.mz_trace, label="mz=94")
+	Plots.plot!(mz109.RT, mz109.mz_trace, label="mz=109")
+	Plots.plot!(mz152.RT, mz152.mz_trace, label="mz=152")
+end
+
+# ╔═╡ a22cb9e0-5fd8-4172-8b75-4a13bbc481e0
+Symbol("mz$(ii)_trace")
+
+# ╔═╡ 42901987-35b2-4690-a8ec-6b865ac6166e
+begin
+	p_chrom_meas = Plots.plot(meas_chrom.RT.*60, meas_chrom.TIC)
+	Plots.scatter!(p_chrom_meas, 468.0:4.0:500.0, 1000.0.*ones(length(468.0:4.0:500.0)), label="no shift")
+	Plots.scatter!(p_chrom_meas, (468.0:4.0:500.0).+shift, 1000.0.*ones(length(468.0:4.0:500.0)), label="+shift")
+	Plots.scatter!(p_chrom_meas, (468.0:4.0:500.0).-shift, 1000.0.*ones(length(468.0:4.0:500.0)), label="-shift")
+
+	t_sum, c_sum = GasChromatographySystems.chrom(sim[2][1][end])[2:3]
+	Plots.plot!(p_chrom_meas, t_sum, c_sum.*1e4, label="sim")
+
+	# mark selected point for mass spectra
+	Plots.scatter!(p_chrom_meas, (meas_chrom.RT[ii].*60, meas_chrom.TIC[ii]), shape=:diamond, label="mz")
+end
+
+# ╔═╡ c8809c64-33d3-4371-b5b5-6ee41baf2a3f
+shift
+
+# ╔═╡ b28b299c-1c2f-4638-a91f-a970c92e4f5a
+begin
+	c_slices_m, t_D1_m, t_D2_m = GasChromatographySystems.chrom_slicing(meas_chrom.RT.*60, meas_chrom.TIC, PM)
+
+	# interpolation in tR2 for the same time basis
 	itps = Array{Interpolations.Extrapolation}(undef, length(c_slices_m))
 	for i=1:length(c_slices_m)
 		itps[i] = LinearInterpolation((t_D2_m[i],), c_slices_m[i], extrapolation_bc=Flat())
 	end
-end
-
-# ╔═╡ e82034ef-57fa-4f78-b663-7465a97ff127
-sim[4]
-
-# ╔═╡ b28b299c-1c2f-4638-a91f-a970c92e4f5a
-begin
-	chrom_mat = Array{Float64}(undef, length(c_slices_m), length(0.0:0.001:4.0))
+	chrom_mat = Array{Float64}(undef, length(c_slices_m), length(0.0:0.01:4.0))
 	for i=1:length(c_slices_m)
-		chrom_mat[i,:] = itps[i].(0.0:0.001:4.0)
+		chrom_mat[i,:] = itps[i].(0.0:0.01:4.0)
 	end
 	chrom_mat
-end
+end;
 
 # ╔═╡ 847d5b23-967f-4316-941f-fde283200b36
 begin
@@ -474,7 +507,7 @@ begin
 		end
 	end
 	#gr()
-	p_meas = Plots.heatmap(0.0:4.0:(size(chrom_mat)[1]-1)*4.0, 0.0:0.001:4.0, chrom_mat_mod', c=:jet1, colorbar=false, legend=:bottomright);
+	p_meas = Plots.heatmap(0.0:4.0:(size(chrom_mat)[1]-1)*4.0, 0.0:0.01:4.0, chrom_mat_mod', c=:jet1, colorbar=false, legend=:bottomright);
 	# add markers for the measured RTs
 	Plots.scatter!(meas.tR1[1:5], meas.tR2[1:5], markersize=4, c=:red, label="alcohols");# alcohols
 	Plots.scatter!(meas.tR1[6:22], meas.tR2[6:22], markersize=4, c=:orange, label="terpenes") # terpenes
@@ -508,7 +541,6 @@ md"""
 # ╠═98217474-a16f-406a-83a7-17fee89c951a
 # ╠═22091a27-80e1-4e98-abe7-4b9652cb832c
 # ╠═1948baf0-1217-485a-8c8b-6e826bd5ef50
-# ╠═8a51f65b-d8f1-407b-835f-1bb1048902bc
 # ╟─13d4415d-3dc4-4eed-aded-c3561b77a9eb
 # ╟─ddde4e3d-4e72-4315-9555-5f8b3375b04c
 # ╠═55194da2-9c5b-464b-bfe1-a65c48bc7801
@@ -518,11 +550,8 @@ md"""
 # ╠═23b71d48-26bd-496d-9c10-e2d3ce2bc13c
 # ╟─0e349acc-46b4-4734-abb7-668ec1225c53
 # ╠═de542d7e-bd0d-47a4-8977-5ab1e64a26f4
-# ╠═4a22896f-d1b7-4b69-87d6-cfee69cb91ff
-# ╠═bbb30f9e-0904-4147-b86b-a366040cf798
-# ╠═521692a5-1afc-4909-b39f-62ab310e663b
 # ╠═a2d062a4-bd59-4ab7-9316-dc769b2c3c09
-# ╟─b8a6cdec-457b-4fb0-b6f8-60f713f4a015
+# ╠═b8a6cdec-457b-4fb0-b6f8-60f713f4a015
 # ╟─e72a6c41-2b14-45cb-81e7-263610c3c8ae
 # ╟─daf7484b-ac12-4515-8e26-adbc8e214cbc
 # ╠═83d10e79-3ab6-418c-80ba-653a50fa5d21
@@ -530,6 +559,7 @@ md"""
 # ╠═7ddfe44e-fde9-422f-98de-27b80e8517be
 # ╟─5dd6d2b7-1d6f-49ef-b684-a453a50a9e96
 # ╠═5883701b-96f6-431e-b29b-b5cc0be940e0
+# ╠═d1eca540-5621-4928-9d74-ab0e0e3ca22a
 # ╟─03b1cae0-cf56-4e0f-b0ad-fdfa736e0fa8
 # ╠═397d7248-e069-4958-849d-6761cb20283d
 # ╠═35bbe26a-f82c-4f60-a2d0-74b052037ae7
@@ -559,14 +589,10 @@ md"""
 # ╠═f1f1ffdb-bc7e-48fd-b688-21f375ab21eb
 # ╟─7739a83c-d001-47cd-aee2-36917106c2ad
 # ╠═582499db-7b5a-4054-92c2-d0e2a97cd91f
-# ╟─5f67ab8d-3b3d-4bbd-81c8-04eec158ef6e
+# ╠═5f67ab8d-3b3d-4bbd-81c8-04eec158ef6e
 # ╟─f268df70-af5a-482f-85e6-84216681ecf4
 # ╠═e5d4fb3a-f05f-4533-9666-08be32ef19ef
 # ╠═ab0c7a5a-7b6b-4b01-a283-dc4b157092ef
-# ╠═1ba0ed9d-577d-4239-a5e2-d915b46236cc
-# ╠═c32ff404-452e-4bc5-85c4-539f0c42433c
-# ╠═c5a1f69a-ffe7-41aa-a96d-68be222d141e
-# ╠═7d649d71-824b-47b3-ad6b-b8bc391d170f
 # ╟─93e2068d-760e-403e-a6fa-984a237ad6c3
 # ╠═9bc833db-7538-4520-9a80-ab49f9bbeb81
 # ╠═b872f155-d36f-4a2d-9741-342a108d6b5f
@@ -579,14 +605,23 @@ md"""
 # ╟─b7c2070b-16bf-41f5-b021-160e54a53a21
 # ╠═189034b6-09e5-4e6b-80b3-e442ad30705c
 # ╟─3ed4ad21-c8e4-428a-b6d3-b37cfdbd0778
-# ╠═664d11de-c597-43ab-8af6-810ed818900d
-# ╠═4b532d62-07f0-4f27-b25e-d5c6241f43dc
 # ╠═e17c92b0-2db3-4e29-b56f-c7b5650c9d95
 # ╠═c190dd0f-6f09-4d18-9aa5-6b40beddfbf3
 # ╠═fb7236b5-98fd-4aac-86ed-5e7118b19ed6
-# ╠═a2cc7971-bd69-4623-86a1-7e7d43c6b05c
-# ╟─6cf28744-7748-4d88-bfd7-f8e428732228
-# ╠═e82034ef-57fa-4f78-b663-7465a97ff127
-# ╟─b28b299c-1c2f-4638-a91f-a970c92e4f5a
+# ╠═503890e2-0560-49fc-9d35-116323ed945d
+# ╠═39bd57a4-271a-4c8a-9ecf-85ff260bdaae
+# ╠═fd0eda02-2f89-42f7-907e-22ac89b34831
+# ╠═2ff72067-0026-4f63-8640-59a911a968bc
+# ╠═24053468-95d2-4fb2-8254-7c4aebcc7750
+# ╠═f7660784-a782-4253-bcd6-15bed8838487
+# ╠═6d16fcfa-d922-4559-80cb-de166525cc5d
+# ╠═d8c9f126-9e65-43cd-a378-d14286da6f13
+# ╠═6f2f34ed-a522-4e63-8d55-d9016cdbe891
+# ╠═39f45c8a-dbaf-4c97-8eef-47c59c8feee7
+# ╠═02235d58-147e-4fab-92b3-60c6b1e5b736
+# ╠═a22cb9e0-5fd8-4172-8b75-4a13bbc481e0
+# ╠═42901987-35b2-4690-a8ec-6b865ac6166e
+# ╠═c8809c64-33d3-4371-b5b5-6ee41baf2a3f
+# ╠═b28b299c-1c2f-4638-a91f-a970c92e4f5a
 # ╠═847d5b23-967f-4316-941f-fde283200b36
 # ╠═954597a2-b847-4cf0-8c1c-ff4b4b4b670b

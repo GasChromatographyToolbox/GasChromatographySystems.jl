@@ -270,9 +270,8 @@ function GCxGC_TM_simp(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, F, pin, pou
 	pp[3] = GasChromatographySystems.PressurePoint("p3", com_timesteps, pouts) # outlet
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, n)
-	for i=1:n
-		modules[i] = GasChromatographySystems.ModuleColumn("GC$(i)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6)
-	end
+	modules[1] = GasChromatographySystems.ModuleColumn("GC1", Ls[1], ds[1]*1e-3, dfs[1]*1e-6, sps[1], TPs[1], F/60e6)
+	modules[2] = GasChromatographySystems.ModuleColumn("GC2", Ls[2], ds[2]*1e-3, dfs[2]*1e-6, sps[2], TPs[2], NaN/60e6)
 	# system
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))
 	# add test for the defined pressures and flows

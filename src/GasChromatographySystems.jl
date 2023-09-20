@@ -1710,13 +1710,15 @@ end
 
 function holdup_time_path(sys, num_paths)
 	tM = holdup_time_functions(sys)
-	i_paths = GasChromatographySystems.all_paths(sys.g, num_paths)[1]
+	paths = all_paths(sys.g, num_paths)[2]
+	
 	tMp = Array{Function}(undef, num_paths)
 	for i=1:num_paths
-		f(t) = sum([tM[x](t) for x in i_paths[i]])
+		i_paths = GasChromatographySystems.index_parameter(sys.g, paths[i])
+		f(t) = sum([tM[x](t) for x in i_paths])
 		tMp[i] = f
 	end
-	return tMp, i_paths
+	return tMp
 end
 
 function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)

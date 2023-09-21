@@ -178,9 +178,19 @@ function unknown_p(sys)
 	return i_unknown_pressures
 end
 
+function unknown_λ(sys)
+	i_unknown_permeability = Int[]
+	for i=1:nv(sys.g)
+		if isnan(sys.modules[i].L) || isnan(sys.modules[i].d)
+			push!(i_unknown_permeability, i)
+		end
+	end
+	return i_unknown_permeability
+end
+
 # second substitute the unknowns in the flow balance equations and add equations for the known flows
 function substitute_unknown_flows(sys)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 	E = collect(edges(sys.g)) # all edges
 	srcE = src.(E) # source nodes of the edges
 	dstE = dst.(E) # destination nodes of the edges
@@ -189,7 +199,7 @@ function substitute_unknown_flows(sys)
 	sub_dict = Dict()
 	for i=1:length(i_unknown_F)
 		j = i_unknown_F[i]
-		sub_dict = merge(sub_dict, Dict(F[j] => A*(P²[srcE[j]]-P²[dstE[j]])/κ[j]))
+		sub_dict = merge(sub_dict, Dict(F[j] => A*λ[j]*(P²[srcE[j]]-P²[dstE[j]])))
 	end
 	# index of the known flows
 	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
@@ -201,14 +211,14 @@ function substitute_unknown_flows(sys)
 	end
 	for i=1:length(i_known_F)
 		j = i_known_F[i]
-		sub_bal_eq[length(bal_eq)+i] = F[j] - A*(P²[srcE[j]]-P²[dstE[j]])/κ[j] ~ 0
+		sub_bal_eq[length(bal_eq)+i] = F[j] - A*λ[j]*(P²[srcE[j]]-P²[dstE[j]]) ~ 0
 	end
 	return sub_bal_eq
 end
 
 # not needed???
 function unknowns_in_flow_balances(sys)
-	@variables P²[1:nv(sys.g)], κ[1:ne(sys.g)]
+	@variables P²[1:nv(sys.g)], λ[1:ne(sys.g)]
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
 	F_balance = GasChromatographySystems.flow_balance(sys)
 	in_equation = Array{Array{Int64,1}}(undef, length(i_unknown_p))
@@ -235,24 +245,14 @@ function unknowns_in_flow_balances(sys)
 end
 
 function solve_balance(sys)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
+	# unkown permeabilities λ ???
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 	i_unknown_p = GasChromatographySystems.unknown_p(sys) # indices of the nodes with unknown pressure
 	#i_unknown_F = unknown_F(sys) # indices of the edges with an unknown flow
 	bal_eq = substitute_unknown_flows(sys)
 	#num_use_eq = GasChromatographySystems.unknowns_in_flow_balances(sys)[2]
 	if length(i_unknown_p) == length(bal_eq)
 		sol = Symbolics.solve_for(bal_eq, [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
-	#elseif length(i_unknown_p) == 1
-	#	sol = Symbolics.solve_for(F_balance[i_unknown_p[1]-1], [P²[i_unknown_p[1]]])
-	#elseif length(i_unknown_p) == (length(F_balance) - 1)
-		#if length(findall(minimum(num_use_eq).==num_use_eq)) == 1
-	#		leave_out_eq = findlast(num_use_eq.==minimum(num_use_eq))
-		#else
-		#	leave_out_eq = 
-		#end
-	#	sol = Symbolics.solve_for(F_balance[Not(leave_out_eq)], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
-	#elseif length(i_unknown_p) < (length(F_balance) - 1)
-	#	error("More flow balance equations than unknown pressures. ToDo: leave equations out.")
 	elseif length(i_unknown_p) > length(bal_eq)
 		error("More unknown pressures than flow balance equations.")
 	else # loop of the i_unknown_p -> is this really used???
@@ -268,7 +268,7 @@ function solve_balance(sys)
 				bal_eq_i[i] = findfirst(i_unknown_p[i].==inner_V)
 			end
 		end
-		sol = Symbolics.solve_for([bal_eq[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
+		sol = Symbolics.simplify(Symbolics.solve_for([bal_eq[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)]))
 	end
 	return sol
 end
@@ -328,6 +328,16 @@ function flow_restrictions(sys)
 	return kappas
 end
 
+function flow_permeabilities(sys)
+	lambdas = Array{Function}(undef, ne(sys.g))
+	for i=1:ne(sys.g)
+		T_itp = module_temperature(sys.modules[i], sys)[5]
+		λ(t) = 1/GasChromatographySimulator.flow_restriction(sys.modules[i].L, t, T_itp, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis)
+		lambdas[i] = λ
+	end
+	return lambdas
+end
+
 function pressures_squared(sys)
 	#p² = Array{Interpolations.Extrapolation}(undef, nv(sys.g))
 	p² = Array{Any}(undef, nv(sys.g))
@@ -344,17 +354,17 @@ function pressures_squared(sys)
 end
 
 function solve_pressure(sys)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 	#balance = flow_balance(sys)
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
 	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
 	solutions = solve_balance(sys)
 	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
-	κs = GasChromatographySystems.flow_restrictions(sys)
+	λs = GasChromatographySystems.flow_permeabilities(sys)
 	p²s = GasChromatographySystems.pressures_squared(sys)
 	p_solution = Array{Function}(undef, length(i_unknown_p))
 	for i=1:length(i_unknown_p)
-		sub_dict(t) = merge(Dict((P²[j] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((κ[j] => κs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].F for j in i_known_F))
+		sub_dict(t) = merge(Dict((P²[j] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((λ[j] => λs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].F for j in i_known_F))
 		f(t) = sqrt(substitute(solutions[i], sub_dict(t)))
 		p_solution[i] = f
 	end

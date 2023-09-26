@@ -180,7 +180,7 @@ end
 
 function unknown_λ(sys)
 	i_unknown_permeability = Int[]
-	for i=1:nv(sys.g)
+	for i=1:ne(sys.g)
 		if isnan(sys.modules[i].L) || isnan(sys.modules[i].d)
 			push!(i_unknown_permeability, i)
 		end
@@ -268,9 +268,9 @@ function solve_balance(sys)
 				bal_eq_i[i] = findfirst(i_unknown_p[i].==inner_V)
 			end
 		end
-		sol = Symbolics.simplify(Symbolics.solve_for([bal_eq[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)]))
+		sol = Symbolics.solve_for([bal_eq[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
 	end
-	return sol
+	return Symbolics.simplify.(sol)
 end
 
 function module_temperature(module_::ModuleColumn, sys)
@@ -353,19 +353,47 @@ function pressures_squared(sys)
 	return p²
 end
 
+#function solve_pressure(sys)
+#	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+#	#balance = flow_balance(sys)
+#	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+#	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
+#	solutions = solve_balance(sys)
+#	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
+#	λs = GasChromatographySystems.flow_permeabilities(sys)
+#	p²s = GasChromatographySystems.pressures_squared(sys)
+#	p_solution = Array{Function}(undef, length(i_unknown_p))
+#	for i=1:length(i_unknown_p)
+#		sub_dict(t) = merge(Dict((P²[j] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((λ[j] => λs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].F for j in i_known_F))
+#		f(t) = sqrt(substitute(solutions[i], sub_dict(t)))
+#		p_solution[i] = f
+#	end
+#	return p_solution, i_unknown_p
+#end
+
 function solve_pressure(sys)
 	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 	#balance = flow_balance(sys)
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
-	solutions = solve_balance(sys)
+	i_unknown_F = GasChromatographySystems.unknown_F(sys)
+	i_unknown_λ = unknown_λ(sys)
+
+	i_known_p = collect(1:nv(sys.g))[Not(i_unknown_p)]
+	i_known_F = collect(1:ne(sys.g))[Not(i_unknown_F)]
+	i_known_λ = collect(1:ne(sys.g))[Not(i_unknown_λ)]
+	
+	solutions = GasChromatographySystems.solve_balance(sys)
 	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
 	λs = GasChromatographySystems.flow_permeabilities(sys)
 	p²s = GasChromatographySystems.pressures_squared(sys)
 	p_solution = Array{Function}(undef, length(i_unknown_p))
 	for i=1:length(i_unknown_p)
-		sub_dict(t) = merge(Dict((P²[j] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((λ[j] => λs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].F for j in i_known_F))
-		f(t) = sqrt(substitute(solutions[i], sub_dict(t)))
+		#sub_dict(t) = merge(Dict((P²[Not(i_unknown_p)] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((λ[j] => λs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].F for j in i_known_F))
+		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [λ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
+               expression = Val{false},
+               target = Symbolics.JuliaTarget(),
+               parallel=nothing)
+		f(t) = sqrt(eval(pfun)([[p²s[j](t) for j=i_known_p]; [λs[j](t) for j=i_known_λ]; [sys.modules[j].F for j=i_known_F]; a]))
 		p_solution[i] = f
 	end
 	return p_solution, i_unknown_p

@@ -190,6 +190,10 @@ end
 
 # second substitute the unknowns in the flow balance equations and add equations for the known flows
 function substitute_unknown_flows(sys)
+	return substitute_unknown_flows_λ(sys)
+end
+
+function substitute_unknown_flows_λ(sys)
 	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 	E = collect(edges(sys.g)) # all edges
 	srcE = src.(E) # source nodes of the edges
@@ -199,7 +203,7 @@ function substitute_unknown_flows(sys)
 	sub_dict = Dict()
 	for i=1:length(i_unknown_F)
 		j = i_unknown_F[i]
-		sub_dict = merge(sub_dict, Dict(F[j] => A*λ[j]*(P²[srcE[j]]-P²[dstE[j]])))
+		sub_dict = merge(sub_dict, Dict(F[j] => λ[j]*(P²[srcE[j]]-P²[dstE[j]])))
 	end
 	# index of the known flows
 	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
@@ -211,7 +215,34 @@ function substitute_unknown_flows(sys)
 	end
 	for i=1:length(i_known_F)
 		j = i_known_F[i]
-		sub_bal_eq[length(bal_eq)+i] = F[j] - A*λ[j]*(P²[srcE[j]]-P²[dstE[j]]) ~ 0
+		sub_bal_eq[length(bal_eq)+i] = F[j]/A - λ[j]*(P²[srcE[j]]-P²[dstE[j]]) ~ 0
+	end
+	return sub_bal_eq
+end
+
+function substitute_unknown_flows_κ(sys)
+	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
+	E = collect(edges(sys.g)) # all edges
+	srcE = src.(E) # source nodes of the edges
+	dstE = dst.(E) # destination nodes of the edges
+	i_unknown_F = GasChromatographySystems.unknown_F(sys) # indices of the modules with an unknown flow
+	# create dictionary for the substitution of the unknown flows
+	sub_dict = Dict()
+	for i=1:length(i_unknown_F)
+		j = i_unknown_F[i]
+		sub_dict = merge(sub_dict, Dict(F[j] => (P²[srcE[j]]-P²[dstE[j]])/κ[j]))
+	end
+	# index of the known flows
+	i_known_F = collect(1:length(edges(sys.g)))[Not(i_unknown_F)]
+	# substitute the unknown flows in all balance equations
+	bal_eq = GasChromatographySystems.flow_balance(sys)
+	sub_bal_eq = Array{Equation}(undef, length(bal_eq)+length(i_known_F))
+	for i=1:length(bal_eq)
+		sub_bal_eq[i] = substitute(bal_eq[i], sub_dict)
+	end
+	for i=1:length(i_known_F)
+		j = i_known_F[i]
+		sub_bal_eq[length(bal_eq)+i] = F[j]/A - (P²[srcE[j]]-P²[dstE[j]])/κ[j] ~ 0
 	end
 	return sub_bal_eq
 end
@@ -245,14 +276,23 @@ function unknowns_in_flow_balances(sys)
 end
 
 function solve_balance(sys)
+	return solve_balance_λ(sys)
+end
+
+function solve_balance_λ(sys) # should be standard
 	# unkown permeabilities λ ???
-	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+	@variables P²[1:nv(sys.g)]
 	i_unknown_p = GasChromatographySystems.unknown_p(sys) # indices of the nodes with unknown pressure
 	#i_unknown_F = unknown_F(sys) # indices of the edges with an unknown flow
-	bal_eq = substitute_unknown_flows(sys)
+	bal_eq = substitute_unknown_flows_λ(sys)
 	#num_use_eq = GasChromatographySystems.unknowns_in_flow_balances(sys)[2]
 	if length(i_unknown_p) == length(bal_eq)
-		sol = Symbolics.solve_for(bal_eq, [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
+		a, b, lin = Symbolics.linear_expansion(bal_eq , [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
+		if lin == true
+			sol = (inv(a)*-b)
+		else
+			error("System of flow balance equations is not linear for the unknown parameters.")
+		end
 	elseif length(i_unknown_p) > length(bal_eq)
 		error("More unknown pressures than flow balance equations.")
 	else # loop of the i_unknown_p -> is this really used???
@@ -268,9 +308,53 @@ function solve_balance(sys)
 				bal_eq_i[i] = findfirst(i_unknown_p[i].==inner_V)
 			end
 		end
-		sol = Symbolics.solve_for([bal_eq[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
+		a, b, lin = Symbolics.linear_expansion([bal_eq[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
+		if lin == true
+			sol = (inv(a)*-b)
+		else
+			error("System of flow balance equations is not linear for the unknown parameters.")
+		end
 	end
-	return Symbolics.simplify.(sol)
+	return sol#Symbolics.simplify.(sol) # simplification seems to hang or take forever in some cases
+end
+
+function solve_balance_κ(sys)
+	# unkown permeabilities λ ???
+	@variables P²[1:nv(sys.g)]
+	i_unknown_p = GasChromatographySystems.unknown_p(sys) # indices of the nodes with unknown pressure
+	#i_unknown_F = unknown_F(sys) # indices of the edges with an unknown flow
+	bal_eq = substitute_unknown_flows_κ(sys)
+	#num_use_eq = GasChromatographySystems.unknowns_in_flow_balances(sys)[2]
+	if length(i_unknown_p) == length(bal_eq)
+		a, b, lin = Symbolics.linear_expansion(bal_eq , [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
+		if lin == true
+			sol = (inv(a)*-b)
+		else
+			error("System of flow balance equations is not linear for the unknown parameters.")
+		end
+	elseif length(i_unknown_p) > length(bal_eq)
+		error("More unknown pressures than flow balance equations.")
+	else # loop of the i_unknown_p -> is this really used???
+		# identifie inner nodes which are unknown pressures, there index in the inner_vertices() is the index of the flow balance equations to use 
+		# this works only for unknown_p which are inner nodes, unknown_p at outer nodes (e.g. inlet pressure), lead to error 
+		inner_V = GasChromatographySystems.inner_vertices(sys.g) 
+		bal_eq_i = Array{Int}(undef, length(i_unknown_p))
+		for i=1:length(i_unknown_p)
+			# if the unknown pressure is not an inner node, than add a equation from the end of the list of balance equation, which should be a flow definition.
+			if isnothing(findfirst(i_unknown_p[i].==inner_V))
+				bal_eq_i[i] = length(bal_eq)-(i+0)
+			else
+				bal_eq_i[i] = findfirst(i_unknown_p[i].==inner_V)
+			end
+		end
+		a, b, lin = Symbolics.linear_expansion([bal_eq[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
+		if lin == true
+			sol = (inv(a)*-b)
+		else
+			error("System of flow balance equations is not linear for the unknown parameters.")
+		end
+	end
+	return sol#Symbolics.simplify.(sol)
 end
 
 function module_temperature(module_::ModuleColumn, sys)
@@ -383,6 +467,33 @@ function solve_pressure(sys)
 	i_known_λ = collect(1:ne(sys.g))[Not(i_unknown_λ)]
 	
 	solutions = GasChromatographySystems.solve_balance(sys)
+	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
+	λs = GasChromatographySystems.flow_permeabilities(sys)
+	p²s = GasChromatographySystems.pressures_squared(sys)
+	p_solution = Array{Function}(undef, length(i_unknown_p))
+	for i=1:length(i_unknown_p)
+		#sub_dict(t) = merge(Dict((P²[Not(i_unknown_p)] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((λ[j] => λs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].F for j in i_known_F))
+		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [λ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
+               expression = Val{false},
+               target = Symbolics.JuliaTarget(),
+               parallel=nothing)
+		f(t) = sqrt(eval(pfun)([[p²s[j](t) for j=i_known_p]; [λs[j](t) for j=i_known_λ]; [sys.modules[j].F for j=i_known_F]; a]))
+		p_solution[i] = f
+	end
+	return p_solution, i_unknown_p
+end
+
+function solve_pressure(sys, solutions)
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+	#balance = flow_balance(sys)
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+	i_unknown_F = GasChromatographySystems.unknown_F(sys)
+	i_unknown_λ = unknown_λ(sys)
+
+	i_known_p = collect(1:nv(sys.g))[Not(i_unknown_p)]
+	i_known_F = collect(1:ne(sys.g))[Not(i_unknown_F)]
+	i_known_λ = collect(1:ne(sys.g))[Not(i_unknown_λ)]
+	
 	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
 	λs = GasChromatographySystems.flow_permeabilities(sys)
 	p²s = GasChromatographySystems.pressures_squared(sys)
@@ -1761,12 +1872,12 @@ end
 
 function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)
 	#plotly()
-	tMp_func, i_paths = holdup_time_path(sys, num_paths)
+	tMp_func = holdup_time_path(sys, num_paths)
 	com_timesteps = GasChromatographySystems.common_timesteps(sys)
 	trange = 0:dt:sum(com_timesteps)
 	p_tM = Plots.plot(xlabel="time in s", ylabel="flow in mL/min")
-	for i=1:length(tMp_func)
-		Plots.plot!(p_tM, trange, tMp_func[i].(trange), label="path: $(i_paths[i])")
+	for i=1:num_paths
+		Plots.plot!(p_tM, trange, tMp_func[i].(trange), label="path: $(i)")
 	end
 	return p_tM
 end

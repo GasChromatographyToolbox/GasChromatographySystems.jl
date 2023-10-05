@@ -198,7 +198,7 @@ function substitute_unknown_flows_λ(sys)
 	E = collect(edges(sys.g)) # all edges
 	srcE = src.(E) # source nodes of the edges
 	dstE = dst.(E) # destination nodes of the edges
-	i_unknown_F = unknown_F(sys) # indices of the modules with an unknown flow
+	i_unknown_F = GasChromatographySystems.unknown_F(sys) # indices of the modules with an unknown flow
 	# create dictionary for the substitution of the unknown flows
 	sub_dict = Dict()
 	for i=1:length(i_unknown_F)
@@ -206,7 +206,7 @@ function substitute_unknown_flows_λ(sys)
 		sub_dict = merge(sub_dict, Dict(F[j] => A*λ[j]*(P²[srcE[j]]-P²[dstE[j]])))
 	end
 	# index of the known flows
-	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
+	i_known_F = collect(1:length(edges(sys.g)))[Not(i_unknown_F)]
 	# substitute the unknown flows in all balance equations
 	bal_eq = flow_balance(sys)
 	sub_bal_eq = Array{Equation}(undef, length(bal_eq)+length(i_known_F))

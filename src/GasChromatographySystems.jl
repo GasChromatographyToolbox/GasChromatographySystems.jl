@@ -203,7 +203,7 @@ function substitute_unknown_flows_λ(sys)
 	sub_dict = Dict()
 	for i=1:length(i_unknown_F)
 		j = i_unknown_F[i]
-		sub_dict = merge(sub_dict, Dict(F[j] => λ[j]*(P²[srcE[j]]-P²[dstE[j]])))
+		sub_dict = merge(sub_dict, Dict(F[j] => A*λ[j]*(P²[srcE[j]]-P²[dstE[j]])))
 	end
 	# index of the known flows
 	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]

@@ -149,11 +149,11 @@ end
 
 # first construct the flow balance equations only using the flows over the edges
 function flow_balance(sys)
-	@variables F[1:ne(sys.g)]
+	@variables F[1:ne(sys.g)], A
 	inner_V = GasChromatographySystems.inner_vertices(sys.g) # one flow balance equation for every inner node
 	bal_eq = Array{Symbolics.Equation}(undef, length(inner_V))
 	for i=1:length(inner_V)
-		bal_eq[i] = flow_balance(sys.g, inner_V[i], F) ~ 0
+		bal_eq[i] = flow_balance(sys.g, inner_V[i], F/A) ~ 0
 	end
 	return bal_eq
 end
@@ -477,7 +477,7 @@ function solve_pressure(sys)
                expression = Val{false},
                target = Symbolics.JuliaTarget(),
                parallel=nothing)
-		f(t) = sqrt(eval(pfun)([[p²s[j](t) for j=i_known_p]; [λs[j](t) for j=i_known_λ]; [sys.modules[j].F for j=i_known_F]; a]))
+		f(t) = sqrt(pfun([[p²s[j](t) for j=i_known_p]; [λs[j](t) for j=i_known_λ]; [sys.modules[j].F for j=i_known_F]; a]))
 		p_solution[i] = f
 	end
 	return p_solution, i_unknown_p

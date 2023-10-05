@@ -1687,7 +1687,11 @@ function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=GasChromatography
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, n)
 	for i=1:n
-		modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6; kwargs...)
+		if i==1
+			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6; kwargs...)
+		else
+			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], NaN; kwargs...)
+		end
 	end
 	# system
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))

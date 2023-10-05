@@ -95,25 +95,6 @@ end
 
 # begin - pressure and flow calculations
 # flow balance and pressure calculations
-function flow_balance(g, i_n, F)
-	#@variables P²[1:nv(g)], κ[1:ne(g)]
-	E = collect(edges(g)) # all edges
-	srcE = src.(E) # source nodes of the edges
-	dstE = dst.(E) # destination nodes of the edges
-	# find edges, where node `i_n` is the source
-	i_src = findall(srcE.==i_n)
-	# find edges, where node `i_n` is the destination
-	i_dst = findall(dstE.==i_n)
-	balance = 0
-	for j=1:length(i_dst) # ingoing flows
-		balance = balance + F[i_dst[j]]
-	end
-	for j=1:length(i_src) # outgoing flows
-		balance = balance - F[i_src[j]]
-	end
-	return balance
-end
-
 function inlet_vertices(g)
 	v = vertices(g)
 	inlet = Int[]
@@ -148,12 +129,31 @@ function inner_vertices(g)
 end
 
 # first construct the flow balance equations only using the flows over the edges
+function flow_balance(g, i_n, F)
+	@variables A
+	E = collect(edges(g)) # all edges
+	srcE = src.(E) # source nodes of the edges
+	dstE = dst.(E) # destination nodes of the edges
+	# find edges, where node `i_n` is the source
+	i_src = findall(srcE.==i_n)
+	# find edges, where node `i_n` is the destination
+	i_dst = findall(dstE.==i_n)
+	balance = 0
+	for j=1:length(i_dst) # ingoing flows
+		balance = balance + F[i_dst[j]]/A
+	end
+	for j=1:length(i_src) # outgoing flows
+		balance = balance - F[i_src[j]]/A
+	end
+	return balance
+end
+
 function flow_balance(sys)
-	@variables F[1:ne(sys.g)], A
+	@variables F[1:ne(sys.g)]
 	inner_V = GasChromatographySystems.inner_vertices(sys.g) # one flow balance equation for every inner node
 	bal_eq = Array{Symbolics.Equation}(undef, length(inner_V))
 	for i=1:length(inner_V)
-		bal_eq[i] = flow_balance(sys.g, inner_V[i], F/A) ~ 0
+		bal_eq[i] = flow_balance(sys.g, inner_V[i], F) ~ 0
 	end
 	return bal_eq
 end

@@ -358,18 +358,23 @@ function solve_balance_κ(sys)
 end
 
 function module_temperature(module_::ModuleColumn, sys)
+	L = if isnan(module_.L)
+		1.0
+	else
+		module_.L
+	end
 	if typeof(module_.T) <: TemperatureProgram # temperature is a TemperatureProgram
 		time_steps = module_.T.time_steps
 		temp_steps = module_.T.temp_steps	
 		gf = module_.T.gf
 		a_gf = module_.T.a_gf
-		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.L)
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L)
 	elseif typeof(module_.T) <: Number # temperature is a constant value
 		time_steps = common_timesteps(sys)
 		temp_steps = module_.T.*ones(length(time_steps))
 		gf(x) = zero(x).*ones(length(time_steps))
 		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
-		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.L)
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L)
 	end
 	return time_steps, temp_steps, gf, a_gf, T_itp
 end

@@ -75,6 +75,7 @@ function substitute_unknown_flows(sys; mode="λ"; bal_eq = flow_balance(sys))
         return substitute_unknown_flows_κ(sys, bal_eq)
     else
         error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
+	end
 end
 
 function substitute_unknown_flows_λ(sys, bal_eq)

@@ -9,7 +9,9 @@ Constructing the flow balance equations of the capillary system `sys` in the for
 
 For every inner vertice, the sum of ingoing flows (positive) and of outgoing flows (negative) are equated to zero.
 
-``\\Sum  F_{in} + \\Sum F_{out} = 0`` 
+```math
+\Sum  F_{in} + \Sum F_{out} = 0
+``` 
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
@@ -51,15 +53,15 @@ Substitutes flow equations for undefined flows over edges in the capillary syste
 
 Flow equation over edge ``j,i`` between vertice `ì`` and ``j`` with flow permability ``λ_{i,j}``:
 
-``
+```math
 F_{i,j} = A λ_{i,j} \\left(p_i^2-p_j^2\\right)
-``
+```
 
 For flow resistance ``κ_{i,j}``:
 
-``
+```math
 F_{i,j} = \\frac{A}{κ_{i,j}} \\left(p_i^2-p_j^2\\right)
-``
+```
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.

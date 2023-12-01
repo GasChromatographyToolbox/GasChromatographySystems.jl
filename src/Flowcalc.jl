@@ -47,7 +47,7 @@ end
 
 # second substitute the unknowns in the flow balance equations and add equations for the known flows
 """
-    substitute_unknown_flows(sys; mode="λ")
+    substitute_unknown_flows(sys; mode="λ", bal_eq = flow_balance(sys))
 
 Substitutes flow equations for undefined flows over edges in the capillary system `sys` in the flow balance equation system. 
 
@@ -225,11 +225,11 @@ Solves the substituted flow balance equations of the capillary system `sys` for 
 * `sys`: System structure of the capillary system for which the flow balance is set up.
 * `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
-function solve_balance(sys; mode="λ")
+function solve_balance(sys; mode="λ", bal_eq = flow_balance(sys))
 	if mode == "λ"
-		return solve_balance_λ(sys, substitute_unknown_flows_λ(sys))
+		return solve_balance_λ(sys, substitute_unknown_flows_λ(sys, bal_eq))
 	elseif mode == "κ"
-		return solve_balance_κ(sys, substitute_unknown_flows_κ(sys))
+		return solve_balance_κ(sys, substitute_unknown_flows_κ(sys, bal_eq))
 	else
         error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
 	end

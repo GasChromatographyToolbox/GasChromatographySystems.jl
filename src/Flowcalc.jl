@@ -10,7 +10,7 @@ Constructing the flow balance equations of the capillary system `sys` in the for
 For every inner vertice, the sum of ingoing flows (positive) and of outgoing flows (negative) are equated to zero.
 
 ```math
-\Sum  F_{in} + \Sum F_{out} = 0
+\\Sum  F_{in} + \\Sum F_{out} = 0
 ``` 
 
 # Arguments

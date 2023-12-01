@@ -68,7 +68,7 @@ F_{i,j} = \\frac{A}{κ_{i,j}} \\left(p_i^2-p_j^2\\right)
 * `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 * `bal_eq`: Array of the symbolic flow balance equations; defaults to `flow_balance(sys)`
 """
-function substitute_unknown_flows(sys; mode="λ"; bal_eq = flow_balance(sys))
+function substitute_unknown_flows(sys; mode="λ", bal_eq = flow_balance(sys))
     if mode == "λ"
 	    return substitute_unknown_flows_λ(sys, bal_eq)
     elseif mode == "κ"

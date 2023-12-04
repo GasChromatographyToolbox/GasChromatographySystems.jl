@@ -321,6 +321,18 @@ function plot_pressure_over_time(sys; dt=60.0)
 	return p_pres
 end
 
+function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)
+	#plotly()
+	tMp_func = holdup_time_path(sys, num_paths)
+	com_timesteps = GasChromatographySystems.common_timesteps(sys)
+	trange = 0:dt:sum(com_timesteps)
+	p_tM = Plots.plot(xlabel="time in s", ylabel="hold-up time in s")
+	for i=1:num_paths
+		Plots.plot!(p_tM, trange, tMp_func[i].(trange), label="path: $(i)")
+	end
+	return p_tM
+end
+
 # transform system to GasChromatographySimulator.Parameters
 function all_stationary_phases(sys)
 	stat_phases = Array{String}(undef, ne(sys.g))
@@ -1511,80 +1523,5 @@ function traces(sol, par, i_select)
 	return trace = DataFrame(z=z, t=tt, τ²=ττ, T=TT, k=kk)
 end
 # end - Misc
-
-# begin - hold-up times
-function holdup_time_functions(sys)
-	p_func = GasChromatographySystems.pressure_functions(sys)
-	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
-	E = collect(GasChromatographySystems.edges(sys.g))
-	srcE = GasChromatographySystems.src.(E)
-	dstE = GasChromatographySystems.dst.(E)
-	for i=1:GasChromatographySystems.ne(sys.g)
-		pin(t) = p_func[srcE[i]](t)
-		pout(t) = p_func[dstE[i]](t)
-		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
-		f(t) = GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
-		tM_func[i] = f
-	end
-	return tM_func
-end
-
-function holdup_time_path(sys, num_paths)
-	tM = holdup_time_functions(sys)
-	paths = all_paths(sys.g, num_paths)[2]
-	
-	tMp = Array{Function}(undef, num_paths)
-	for i=1:num_paths
-		i_paths = GasChromatographySystems.index_parameter(sys.g, paths[i])
-		f(t) = sum([tM[x](t) for x in i_paths])
-		tMp[i] = f
-	end
-	return tMp
-end
-
-function holdup_time_functions(sys, p2fun)
-	# collecting the hold-up time functions of every edge as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
-	p_func = pressure_functions(sys, p2fun)
-	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
-	E = collect(GasChromatographySystems.edges(sys.g))
-	srcE = GasChromatographySystems.src.(E)
-	dstE = GasChromatographySystems.dst.(E)
-	for i=1:GasChromatographySystems.ne(sys.g)
-		pin(t) = p_func[srcE[i]](t)
-		pout(t) = p_func[dstE[i]](t)
-		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
-		f(t) = GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
-		tM_func[i] = f
-	end
-	return tM_func
-end
-
-function holdup_time_path(sys, p2fun, num_paths)
-	# collecting the hold-up time functions of every path as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
-	tM = holdup_time_functions(sys, p2fun)
-	paths = all_paths(sys.g, num_paths)[2]
-	
-	tMp = Array{Function}(undef, num_paths)
-	for i=1:num_paths
-		i_paths = GasChromatographySystems.index_parameter(sys.g, paths[i])
-		f(t) = sum([tM[x](t) for x in i_paths])
-		tMp[i] = f
-	end
-	return tMp
-end
-
-function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)
-	#plotly()
-	tMp_func = holdup_time_path(sys, num_paths)
-	com_timesteps = GasChromatographySystems.common_timesteps(sys)
-	trange = 0:dt:sum(com_timesteps)
-	p_tM = Plots.plot(xlabel="time in s", ylabel="hold-up time in s")
-	for i=1:num_paths
-		Plots.plot!(p_tM, trange, tMp_func[i].(trange), label="path: $(i)")
-	end
-	return p_tM
-end
-# end - hold-up times
-
 
 end # module

@@ -217,7 +217,7 @@ end
 =#
 
 """
-    solve_balance(sys; mode="λ")
+    solve_balance(sys; mode="λ", bal_eq = flow_balance(sys))
 
 Solves the substituted flow balance equations of the capillary system `sys` for the squared pressures of vertices with undefined pressures as an array of symbolic expressions.
 
@@ -490,7 +490,7 @@ end
 """
 	pressure_functions(sys, p2fun)
 
-...
+Collect all pressure functions as functions of time t at the vertices of the capillary system `sys`, either from defined input values or from the solutions of the flow balance equations. 
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
@@ -518,7 +518,7 @@ end
 """
 	pressure_functions(sys)
 
-...
+Collect all pressure functions as functions of time t at the vertices of the capillary system `sys`, either from defined input values or from the solutions of the flow balance equations. 
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
@@ -541,7 +541,7 @@ end
 """
 	interpolate_pressure_functions(sys; dt=1)
 
-...
+Interpolates (linearly) all pressure funtions at the vertices of the system of capillaries `sys` between the time steps `dt`. For the speed of the simulation these interpolated functions are faster than the pure solution functions of the flow balance equations.
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
@@ -570,7 +570,15 @@ end
 """
 	flow_functions(sys)
 
-...
+Collects the flow functions as functions of time t for all edges of the system of capillaries `sys`.
+
+The flow over edge `i => j` is calculated as
+
+```math
+F_{i,j} = \\frac{A}{κ_{i,j}} \\left(p_i^2-p_j^2\\right)
+```
+
+with flow restriction ``κ_{i,j} = \\int_0^{L_{i,j}} η(T_{i,j})T_{i,j}/d_{i,j}^4 dx``, pressures ``p_i`` resp. ``p_j`` at the vertices ``i`` resp. ``j``, temperature ``T_{i,j}``, capillary length ``L_{i,j}`` and diameter ``d_{i,j}`` of the edge `i => j`.
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
@@ -589,4 +597,91 @@ function flow_functions(sys)
 		F_func[i] = f
 	end
 	return F_func
+end
+
+"""
+	holdup_time_functions(sys)
+
+Collects the hold-up time functions as functions of time t for all edges of the system of capillaries `sys`.
+
+The hold-up time over edge `i => j` is calculated as
+
+```math
+t_{M_{i,j}} = \\frac{128}{3} η(T_{i,j}) \\frac{L_{i,j}^2}{d_{i,j}^2} \\frac{p_i^3-p_j^3}{\\left(p_i^2-p_j^2\\right)^2}
+```
+	
+with flow restriction, pressures ``p_i`` resp. ``p_j`` at the vertices ``i`` resp. ``j``, temperature ``T_{i,j}``, capillary length ``L_{i,j}`` and diameter ``d_{i,j}`` of the edge `i => j`.
+	
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+"""
+function holdup_time_functions(sys)
+	p_func = GasChromatographySystems.pressure_functions(sys)
+	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
+	E = collect(GasChromatographySystems.edges(sys.g))
+	srcE = GasChromatographySystems.src.(E)
+	dstE = GasChromatographySystems.dst.(E)
+	for i=1:GasChromatographySystems.ne(sys.g)
+		pin(t) = p_func[srcE[i]](t)
+		pout(t) = p_func[dstE[i]](t)
+		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
+		f(t) = GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
+		tM_func[i] = f
+	end
+	return tM_func
+end
+
+function holdup_time_functions(sys, p2fun)
+	# collecting the hold-up time functions of every edge as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
+	p_func = pressure_functions(sys, p2fun)
+	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
+	E = collect(GasChromatographySystems.edges(sys.g))
+	srcE = GasChromatographySystems.src.(E)
+	dstE = GasChromatographySystems.dst.(E)
+	for i=1:GasChromatographySystems.ne(sys.g)
+		pin(t) = p_func[srcE[i]](t)
+		pout(t) = p_func[dstE[i]](t)
+		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
+		f(t) = GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
+		tM_func[i] = f
+	end
+	return tM_func
+end
+
+"""
+	holdup_time_path(sys, numpaths)
+
+Calculates the hold-up times of the `numpaths` paths as functions of time t of the system of capillaries `sys`.
+
+The hold-up time over edge `i => j` is calculated as
+	
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+* `numpaths`: Number of the different paths between inlet and outlets of system `sys`.
+"""
+function holdup_time_path(sys, num_paths)
+	tM = holdup_time_functions(sys)
+	paths = all_paths(sys.g, num_paths)[2]
+	
+	tMp = Array{Function}(undef, num_paths)
+	for i=1:num_paths
+		i_paths = GasChromatographySystems.index_parameter(sys.g, paths[i])
+		f(t) = sum([tM[x](t) for x in i_paths])
+		tMp[i] = f
+	end
+	return tMp
+end
+
+function holdup_time_path(sys, p2fun, num_paths)
+	# collecting the hold-up time functions of every path as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
+	tM = holdup_time_functions(sys, p2fun)
+	paths = all_paths(sys.g, num_paths)[2]
+	
+	tMp = Array{Function}(undef, num_paths)
+	for i=1:num_paths
+		i_paths = GasChromatographySystems.index_parameter(sys.g, paths[i])
+		f(t) = sum([tM[x](t) for x in i_paths])
+		tMp[i] = f
+	end
+	return tMp
 end

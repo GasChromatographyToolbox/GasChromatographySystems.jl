@@ -56,7 +56,7 @@ function match_programs(sys)
 	com_times = common_timesteps(sys)
 	new_press_steps = Array{Array{Float64,1}}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
-		new_press_steps[i] = GasChromatographySimulator.new_value_steps(sys.pressurepoints[i].pressure_steps, sys.pressurepoints[i].time_steps, com_times)
+		new_press_steps[i] = GasChromatographySimulator.new_value_steps(sys.pressurepoints[i].P.pressure_steps, sys.pressurepoints[i].P.time_steps, com_times)
 	end
 	i_tempprog = index_modules_with_temperature_program(sys)
 	new_temp_steps = Array{Array{Float64,1}}(undef, length(i_tempprog))
@@ -219,10 +219,12 @@ function pressures_squared(sys)
 	#p² = Array{Interpolations.Extrapolation}(undef, nv(sys.g))
 	p² = Array{Any}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
-		g = if isnan(sys.pressurepoints[i].pressure_steps[1])
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, NaN.*ones(length(sys.pressurepoints[i].time_steps)))
+		g = if isnan(sys.pressurepoints[i].P.pressure_steps[1])
+			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, NaN.*ones(length(sys.pressurepoints[i].P.time_steps)))
+		elseif isnan(sys.pressurepoints[i].P)
+			GasChromatographySimulator.steps_interpolation([0.0, 36000.0], fill(NaN, 2))
 		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, identity.(sys.pressurepoints[i].pressure_steps))
+			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
 		end
 		f(t) = g(t).^2 
 		p²[i] = f
@@ -392,8 +394,17 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
 
 		# program parameters
-		pin_steps = sys.pressurepoints[srcE[i]].pressure_steps
-		pout_steps = sys.pressurepoints[dstE[i]].pressure_steps
+		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) == GasChromatographySystem.PressureProgram
+			sys.pressurepoints[srcE[i]].P.pressure_steps
+		else
+			sys.pressurepoints[srcE[i]].P
+		end
+		pout_steps = sys.pressurepoints[dstE[i]].P.pressure_steps
+		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) == GasChromatographySystem.PressureProgram
+			sys.pressurepoints[dstE[i]].P.pressure_steps
+		else
+			sys.pressurepoints[dstE[i]].P
+		end
 		pin_itp = p_func[srcE[i]]
 		pout_itp = p_func[dstE[i]]	
 		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)

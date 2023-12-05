@@ -161,8 +161,14 @@ Extract the index of the vertices of the graph of system `sys` for which the pre
 function unknown_p(sys)
 	i_unknown_pressures = Int[]
 	for i=1:nv(sys.g)
-		if isnan(sys.pressurepoints[i].pressure_steps[1])
-			push!(i_unknown_pressures, i)
+		if typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			if isnan(sys.pressurepoints[i].P.pressure_steps[1])
+				push!(i_unknown_pressures, i)
+			end
+		elseif typeof(sys.pressurepoints[i].P) <: Number
+			if isnan(sys.pressurepoints[i].P)
+				push!(i_unknown_pressures, i)
+			end
 		end
 	end
 	return i_unknown_pressures
@@ -507,8 +513,10 @@ function pressure_functions(sys, p2fun)
 	for i=1:nv(sys.g)
 		f = if i in i_unknown_p
 			pres[findfirst(i_unknown_p.==i)]
-		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, identity.(sys.pressurepoints[i].pressure_steps))
+		elseif typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
+		elseif typeof(sys.pressurepoints[i].P) <: Number
+			GasChromatographySimulator.steps_interpolation([0.0, 36000.0], identity.(fill(sys.pressurepoints[i].P, 2)))
 		end
 	p_func[i] = f
 	end
@@ -530,8 +538,10 @@ function pressure_functions(sys)
 	for i=1:nv(sys.g)
 		f = if i in unk
 			pres[findfirst(unk.==i)]
-		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, identity.(sys.pressurepoints[i].pressure_steps))
+		elseif typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
+		elseif typeof(sys.pressurepoints[i].P) <: Number
+			GasChromatographySimulator.steps_interpolation([0.0, 36000.0], identity.(fill(sys.pressurepoints[i].P, 2)))
 		end
 	p_func[i] = f
 	end
@@ -555,14 +565,16 @@ function interpolate_pressure_functions(sys; dt=1)
 	else
 		trange = 0:dt:tend
 	end
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
 	p_func = GasChromatographySystems.pressure_functions(sys)
 	p_itp = Array{Any}(undef, length(p_func))
 	for i=1:length(p_func)
-		if all(isnan.(sys.pressurepoints[i].pressure_steps))
+		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
+		if i ∈ i_unkonwn_p
 			p_itp[i] = LinearInterpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
 		else
 			p_itp[i] = p_func[i]
-		end
+		end # no additional interpolation, if the pressure is allready defined by a linear program
 	end
 	return p_itp
 end

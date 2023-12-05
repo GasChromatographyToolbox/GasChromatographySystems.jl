@@ -131,20 +131,20 @@ begin # column config from Tungkijanansin2022
 	pp[10] = GasChromatographySystems.PressurePoint("p₁₀", [0.0, 1800.0], [eps(Float64), eps(Float64)]) # outlet 1
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
-	modules[1] = GasChromatographySystems.ModuleColumn("GC1", 30.0, 0.25e-3, 0.25e-6, "SLB5ms", default_TP, NaN)
-	modules[2] = GasChromatographySystems.ModuleColumn("Sp1a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
-	modules[3] = GasChromatographySystems.ModuleColumn("Sp1b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
-	modules[4] = GasChromatographySystems.ModuleColumn("Sp2b1", 1.42, 0.25e-3, 0.0e-6, "", default_TP, NaN)
-	modules[5] = GasChromatographySystems.ModuleColumn("Sp2a", 0.14, 0.1e-3, 0.0e-6, "", default_TP, NaN)#3
-	modules[6] = GasChromatographySystems.ModuleColumn("Sp3b1", 2.93, 0.25e-3, 0.0e-6, "", default_TP, NaN)#2
-	modules[7] = GasChromatographySystems.ModuleColumn("Sp3a", 4.46, 0.25e-3, 0.0e-6, "", default_TP, NaN)#4
-	modules[8] = GasChromatographySystems.ModuleColumn("Sp2b2", 0.095, 0.1e-3, 0.0e-6, "", default_TP, NaN)
-	modules[9] = GasChromatographySystems.ModuleColumn("Sp3b2", 0.05, 0.1e-3, 0.0e-6, "", default_TP, NaN)#2
-	modules[10] = GasChromatographySystems.ModuleColumn("Sp4a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
-	modules[11] = GasChromatographySystems.ModuleColumn("Sp4b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN)
-	modules[12] = GasChromatographySystems.ModuleColumn("GC2", 30.0, 0.25e-3, 0.25e-6, "Wax", default_TP, NaN)
+	modules[1] = GasChromatographySystems.ModuleColumn("GC1", 30.0, 0.25e-3, 0.25e-6, "SLB5ms", default_TP, NaN; ng=true)
+	modules[2] = GasChromatographySystems.ModuleColumn("Sp1a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN; ng=true)
+	modules[3] = GasChromatographySystems.ModuleColumn("Sp1b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN; ng=true)
+	modules[4] = GasChromatographySystems.ModuleColumn("Sp2b1", 1.42, 0.25e-3, 0.0e-6, "", default_TP, NaN; ng=true)
+	modules[5] = GasChromatographySystems.ModuleColumn("Sp2a", 0.14, 0.1e-3, 0.0e-6, "", default_TP, NaN; ng=true)#3
+	modules[6] = GasChromatographySystems.ModuleColumn("Sp3b1", 2.93, 0.25e-3, 0.0e-6, "", default_TP, NaN; ng=true)#2
+	modules[7] = GasChromatographySystems.ModuleColumn("Sp3a", 4.46, 0.25e-3, 0.0e-6, "", default_TP, NaN; ng=true)#4
+	modules[8] = GasChromatographySystems.ModuleColumn("Sp2b2", 0.095, 0.1e-3, 0.0e-6, "", default_TP, NaN; ng=true)
+	modules[9] = GasChromatographySystems.ModuleColumn("Sp3b2", 0.05, 0.1e-3, 0.0e-6, "", default_TP, NaN; ng=true)#2
+	modules[10] = GasChromatographySystems.ModuleColumn("Sp4a", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN; ng=true)
+	modules[11] = GasChromatographySystems.ModuleColumn("Sp4b", 0.5, 0.25e-3, 0.0e-6, "", default_TP, NaN; ng=true)
+	modules[12] = GasChromatographySystems.ModuleColumn("GC2", 30.0, 0.25e-3, 0.25e-6, "Wax", default_TP, NaN; ng=true)
 	# system
-	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, GasChromatographySystems.Options(ng=true, vis="HP")))
+	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, GasChromatographySystems.Options()))
 end
 
 # ╔═╡ 0e3164b6-d583-477f-843f-f6d3d8a390d4
@@ -353,6 +353,9 @@ md"""
 
 # ╔═╡ a1dcef3e-3d8f-418a-875a-4d05258d39a3
 db = filter([:CAS] => x -> !ismissing(x), DataFrame(CSV.File("/Users/janleppert/Documents/GitHub/RetentionData/Databases/GCSim_database_nonflag.csv", header=1, silencewarnings=true)))
+
+# ╔═╡ 29dd4605-260e-4084-becd-855e9bfda196
+GasChromatographySystems.common_solutes(db, sys)
 
 # ╔═╡ bd81cafc-208f-4afb-94af-990c6697335b
 com_solutes = GasChromatographySystems.common_solutes(db, sys).Name
@@ -700,6 +703,7 @@ t_D2_
 # ╠═d828afa5-8335-434a-96be-041cbd53a5a8
 # ╠═9eecf202-d3e7-405a-99d7-6a17a12d481a
 # ╠═a1dcef3e-3d8f-418a-875a-4d05258d39a3
+# ╠═29dd4605-260e-4084-becd-855e9bfda196
 # ╠═bd81cafc-208f-4afb-94af-990c6697335b
 # ╠═70bc6f4d-a4aa-47e7-92f0-671d8f230e6a
 # ╠═54151540-4150-49c0-a260-d755d663462b

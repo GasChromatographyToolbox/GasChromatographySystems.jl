@@ -23,6 +23,7 @@ const pn = 101300 # Pa
 
 # Definition of structures and methods
 include("./Structures.jl")
+include("./Flowcalc.jl")
 
 # functions
 
@@ -95,25 +96,6 @@ end
 
 # begin - pressure and flow calculations
 # flow balance and pressure calculations
-function flow_balance(g, i_n, F)
-	#@variables P²[1:nv(g)], κ[1:ne(g)]
-	E = collect(edges(g)) # all edges
-	srcE = src.(E) # source nodes of the edges
-	dstE = dst.(E) # destination nodes of the edges
-	# find edges, where node `i_n` is the source
-	i_src = findall(srcE.==i_n)
-	# find edges, where node `i_n` is the destination
-	i_dst = findall(dstE.==i_n)
-	balance = 0
-	for j=1:length(i_dst) # ingoing flows
-		balance = balance + F[i_dst[j]]
-	end
-	for j=1:length(i_src) # outgoing flows
-		balance = balance - F[i_src[j]]
-	end
-	return balance
-end
-
 function inlet_vertices(g)
 	v = vertices(g)
 	inlet = Int[]
@@ -147,145 +129,24 @@ function inner_vertices(g)
 	return inner
 end
 
-# first construct the flow balance equations only using the flows over the edges
-function flow_balance(sys)
-	@variables F[1:ne(sys.g)]
-	inner_V = GasChromatographySystems.inner_vertices(sys.g) # one flow balance equation for every inner node
-	bal_eq = Array{Symbolics.Equation}(undef, length(inner_V))
-	for i=1:length(inner_V)
-		bal_eq[i] = flow_balance(sys.g, inner_V[i], F) ~ 0
-	end
-	return bal_eq
-end
-
-function unknown_F(sys)
-	i_unknown_flows = Int[]
-	for i=1:ne(sys.g)
-		if isnan(sys.modules[i].F)
-			push!(i_unknown_flows, i)
-		end
-	end
-	return i_unknown_flows
-end
-
-function unknown_p(sys)
-	i_unknown_pressures = Int[]
-	for i=1:nv(sys.g)
-		if isnan(sys.pressurepoints[i].pressure_steps[1])
-			push!(i_unknown_pressures, i)
-		end
-	end
-	return i_unknown_pressures
-end
-
-# second substitute the unknowns in the flow balance equations and add equations for the known flows
-function substitute_unknown_flows(sys)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
-	E = collect(edges(sys.g)) # all edges
-	srcE = src.(E) # source nodes of the edges
-	dstE = dst.(E) # destination nodes of the edges
-	i_unknown_F = unknown_F(sys) # indices of the modules with an unknown flow
-	# create dictionary for the substitution of the unknown flows
-	sub_dict = Dict()
-	for i=1:length(i_unknown_F)
-		j = i_unknown_F[i]
-		sub_dict = merge(sub_dict, Dict(F[j] => A*(P²[srcE[j]]-P²[dstE[j]])/κ[j]))
-	end
-	# index of the known flows
-	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
-	# substitute the unknown flows in all balance equations
-	bal_eq = flow_balance(sys)
-	sub_bal_eq = Array{Equation}(undef, length(bal_eq)+length(i_known_F))
-	for i=1:length(bal_eq)
-		sub_bal_eq[i] = substitute(bal_eq[i], sub_dict)
-	end
-	for i=1:length(i_known_F)
-		j = i_known_F[i]
-		sub_bal_eq[length(bal_eq)+i] = F[j] - A*(P²[srcE[j]]-P²[dstE[j]])/κ[j] ~ 0
-	end
-	return sub_bal_eq
-end
-
-# not needed???
-function unknowns_in_flow_balances(sys)
-	@variables P²[1:nv(sys.g)], κ[1:ne(sys.g)]
-	i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	F_balance = GasChromatographySystems.flow_balance(sys)
-	in_equation = Array{Array{Int64,1}}(undef, length(i_unknown_p))
-	touched = zeros(Int, length(F_balance))
-	for i=1:length(i_unknown_p)
-		var_unknown = Symbolics.get_variables(P²[i_unknown_p[i]])
-		in_equation_ = Int[]
-		for j=1:length(F_balance)
-			var_equation = Symbolics.get_variables(F_balance[j])
-			counter_touched = touched[j]
-			for k=1:length(var_equation)
-				if isequal(var_unknown[1], var_equation[k])
-					push!(in_equation_, j)
-					counter_touched += 1
-				end
-			end
-			touched[j] = counter_touched
-		end
-		in_equation[i] = in_equation_
-	end
-	# in_equation ... Array of Arrays, lists the idices of the flow balances in which the unknown is in it.
-	# touched ... total number of different unknowns in the flow balance equations
-	return in_equation, touched
-end
-
-function solve_balance(sys)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
-	i_unknown_p = GasChromatographySystems.unknown_p(sys) # indices of the nodes with unknown pressure
-	#i_unknown_F = unknown_F(sys) # indices of the edges with an unknown flow
-	bal_eq = substitute_unknown_flows(sys)
-	#num_use_eq = GasChromatographySystems.unknowns_in_flow_balances(sys)[2]
-	if length(i_unknown_p) == length(bal_eq)
-		sol = Symbolics.solve_for(bal_eq, [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
-	#elseif length(i_unknown_p) == 1
-	#	sol = Symbolics.solve_for(F_balance[i_unknown_p[1]-1], [P²[i_unknown_p[1]]])
-	#elseif length(i_unknown_p) == (length(F_balance) - 1)
-		#if length(findall(minimum(num_use_eq).==num_use_eq)) == 1
-	#		leave_out_eq = findlast(num_use_eq.==minimum(num_use_eq))
-		#else
-		#	leave_out_eq = 
-		#end
-	#	sol = Symbolics.solve_for(F_balance[Not(leave_out_eq)], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
-	#elseif length(i_unknown_p) < (length(F_balance) - 1)
-	#	error("More flow balance equations than unknown pressures. ToDo: leave equations out.")
-	elseif length(i_unknown_p) > length(bal_eq)
-		error("More unknown pressures than flow balance equations.")
-	else # loop of the i_unknown_p -> is this really used???
-		# identifie inner nodes which are unknown pressures, there index in the inner_vertices() is the index of the flow balance equations to use 
-		# this works only for unknown_p which are inner nodes, unknown_p at outer nodes (e.g. inlet pressure), lead to error 
-		inner_V = GasChromatographySystems.inner_vertices(sys.g) 
-		bal_eq_i = Array{Int}(undef, length(i_unknown_p))
-		for i=1:length(i_unknown_p)
-			# if the unknown pressure is not an inner node, than add a equation from the end of the list of balance equation, which should be a flow definition.
-			if isnothing(findfirst(i_unknown_p[i].==inner_V))
-				bal_eq_i[i] = length(bal_eq)-(i+0)
-			else
-				bal_eq_i[i] = findfirst(i_unknown_p[i].==inner_V)
-			end
-		end
-		sol = Symbolics.solve_for([bal_eq[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
-	end
-	return sol
-end
-
 function module_temperature(module_::ModuleColumn, sys)
+	L = if isnan(module_.L)
+		1.0
+	else
+		module_.L
+	end
 	if typeof(module_.T) <: TemperatureProgram # temperature is a TemperatureProgram
 		time_steps = module_.T.time_steps
 		temp_steps = module_.T.temp_steps	
 		gf = module_.T.gf
 		a_gf = module_.T.a_gf
-		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.L)
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L)
 	elseif typeof(module_.T) <: Number # temperature is a constant value
 		time_steps = common_timesteps(sys)
 		temp_steps = module_.T.*ones(length(time_steps))
 		gf(x) = zero(x).*ones(length(time_steps))
 		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
-		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.L)
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L)
 	end
 	return time_steps, temp_steps, gf, a_gf, T_itp
 end
@@ -318,6 +179,14 @@ function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 	return time_steps, temp_steps, gf, a_gf, spot
 end
 
+"""
+    flow_restrictions(sys)
+
+Calculates the flow restrictions κ of all edges (capliaries) of a system of capillaries.
+
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+"""
 function flow_restrictions(sys)
 	kappas = Array{Function}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
@@ -326,6 +195,24 @@ function flow_restrictions(sys)
 		kappas[i] = κ
 	end
 	return kappas
+end
+
+"""
+    flow_permeabilities(sys)
+
+Calculates the flow permeabilities λ of all edges (capliaries) of a system of capillaries.
+
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+"""
+function flow_permeabilities(sys)
+	lambdas = Array{Function}(undef, ne(sys.g))
+	for i=1:ne(sys.g)
+		T_itp = module_temperature(sys.modules[i], sys)[5]
+		λ(t) = 1/GasChromatographySimulator.flow_restriction(sys.modules[i].L, t, T_itp, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis)
+		lambdas[i] = λ
+	end
+	return lambdas
 end
 
 function pressures_squared(sys)
@@ -342,76 +229,6 @@ function pressures_squared(sys)
 	end
 	return p²
 end
-
-function solve_pressure(sys)
-	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
-	#balance = flow_balance(sys)
-	i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	i_known_F = collect(1:length(edges(sys.g)))[Not(unknown_F(sys))]
-	solutions = solve_balance(sys)
-	a = π/256 * GasChromatographySystems.Tn/GasChromatographySystems.pn
-	κs = GasChromatographySystems.flow_restrictions(sys)
-	p²s = GasChromatographySystems.pressures_squared(sys)
-	p_solution = Array{Function}(undef, length(i_unknown_p))
-	for i=1:length(i_unknown_p)
-		sub_dict(t) = merge(Dict((P²[j] => p²s[j](t) for j=setdiff(1:nv(sys.g), i_unknown_p))), Dict((κ[j] => κs[j](t) for j=1:ne(sys.g))), Dict(A => a), Dict(F[j] => sys.modules[j].F for j in i_known_F))
-		f(t) = sqrt(substitute(solutions[i], sub_dict(t)))
-		p_solution[i] = f
-	end
-	return p_solution, i_unknown_p
-end
-
-function pressure_functions(sys)
-	pres, unk = solve_pressure(sys)
-	#p²s = pressures_squared(sys)
-	p_func = Array{Any}(undef, nv(sys.g))
-	for i=1:nv(sys.g)
-		f = if i in unk
-			pres[findfirst(unk.==i)]
-		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, identity.(sys.pressurepoints[i].pressure_steps))
-		end
-	p_func[i] = f
-	end
-	return p_func
-end
-
-function interpolate_pressure_functions(sys; dt=1)
-	tsteps = GasChromatographySystems.common_timesteps(sys)
-	tend = sum(tsteps)
-	if all(degree(sys.g).<3) # no split/merge nodes, straight graph -> pressure at nodes is linear
-		trange = cumsum(tsteps)
-	else
-		trange = 0:dt:tend
-	end
-	p_func = GasChromatographySystems.pressure_functions(sys)
-	p_itp = Array{Any}(undef, length(p_func))
-	for i=1:length(p_func)
-		if all(isnan.(sys.pressurepoints[i].pressure_steps))
-			p_itp[i] = LinearInterpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
-		else
-			p_itp[i] = p_func[i]
-		end
-	end
-	return p_itp
-end
-
-function flow_functions(sys)
-	p_func = pressure_functions(sys)
-	F_func = Array{Function}(undef, ne(sys.g))
-	E = collect(edges(sys.g))
-	srcE = src.(E)
-	dstE = dst.(E)
-	for i=1:ne(sys.g)
-		pin(t) = p_func[srcE[i]](t)
-		pout(t) = p_func[dstE[i]](t)
-		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
-		f(t) = GasChromatographySimulator.flow(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
-		F_func[i] = f
-	end
-	return F_func
-end
-# end - pressure and flow calculations
 
 # begin - plotting of the graphs and functions
 function plot_graph(g, edge_labels, node_labels; lay = Spring(), color=:lightblue, node_size=40, arrow_size=20, arrow_shift=0.8, dataaspect=false, nlabels_fontsize=10, elabels_fontsize=10)
@@ -502,6 +319,18 @@ function plot_pressure_over_time(sys; dt=60.0)
 		Plots.plot!(p_pres, trange, p_func[i].(trange), label="$(sys.pressurepoints[i].name)")
 	end
 	return p_pres
+end
+
+function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)
+	#plotly()
+	tMp_func = holdup_time_path(sys, num_paths)
+	com_timesteps = GasChromatographySystems.common_timesteps(sys)
+	trange = 0:dt:sum(com_timesteps)
+	p_tM = Plots.plot(xlabel="time in s", ylabel="hold-up time in s")
+	for i=1:num_paths
+		Plots.plot!(p_tM, trange, tMp_func[i].(trange), label="path: $(i)")
+	end
+	return p_tM
 end
 
 # transform system to GasChromatographySimulator.Parameters
@@ -1538,7 +1367,11 @@ function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=GasChromatography
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, n)
 	for i=1:n
-		modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6; kwargs...)
+		if i==1
+			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6; kwargs...)
+		else
+			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], NaN; kwargs...)
+		end
 	end
 	# system
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))
@@ -1690,49 +1523,5 @@ function traces(sol, par, i_select)
 	return trace = DataFrame(z=z, t=tt, τ²=ττ, T=TT, k=kk)
 end
 # end - Misc
-
-# begin - hold-up times
-function holdup_time_functions(sys)
-	p_func = GasChromatographySystems.pressure_functions(sys)
-	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
-	E = collect(GasChromatographySystems.edges(sys.g))
-	srcE = GasChromatographySystems.src.(E)
-	dstE = GasChromatographySystems.dst.(E)
-	for i=1:GasChromatographySystems.ne(sys.g)
-		pin(t) = p_func[srcE[i]](t)
-		pout(t) = p_func[dstE[i]](t)
-		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
-		f(t) = GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
-		tM_func[i] = f
-	end
-	return tM_func
-end
-
-function holdup_time_path(sys, num_paths)
-	tM = holdup_time_functions(sys)
-	paths = all_paths(sys.g, num_paths)[2]
-	
-	tMp = Array{Function}(undef, num_paths)
-	for i=1:num_paths
-		i_paths = GasChromatographySystems.index_parameter(sys.g, paths[i])
-		f(t) = sum([tM[x](t) for x in i_paths])
-		tMp[i] = f
-	end
-	return tMp
-end
-
-function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)
-	#plotly()
-	tMp_func, i_paths = holdup_time_path(sys, num_paths)
-	com_timesteps = GasChromatographySystems.common_timesteps(sys)
-	trange = 0:dt:sum(com_timesteps)
-	p_tM = Plots.plot(xlabel="time in s", ylabel="flow in mL/min")
-	for i=1:length(tMp_func)
-		Plots.plot!(p_tM, trange, tMp_func[i].(trange), label="path: $(i_paths[i])")
-	end
-	return p_tM
-end
-# end - hold-up times
-
 
 end # module

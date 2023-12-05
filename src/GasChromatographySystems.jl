@@ -246,12 +246,14 @@ function pressures_squared(sys)
 	#p² = Array{Interpolations.Extrapolation}(undef, nv(sys.g))
 	p² = Array{Any}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
-		g = if isnan(sys.pressurepoints[i].P.pressure_steps[1])
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, NaN.*ones(length(sys.pressurepoints[i].P.time_steps)))
-		elseif isnan(sys.pressurepoints[i].P)
-			GasChromatographySimulator.steps_interpolation([0.0, 36000.0], fill(NaN, 2))
-		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
+		g = if typeof(sys.pressurepoints[i].P) <: Number
+				GasChromatographySimulator.steps_interpolation([0.0, 36000.0], fill(sys.pressurepoints[i].P, 2))
+		elseif typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			#if isnan(sys.pressurepoints[i].P.pressure_steps[1])
+			#	GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, NaN.*ones(length(sys.pressurepoints[i].P.time_steps)))
+			#else
+				GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
+			#end
 		end
 		f(t) = g(t).^2 
 		p²[i] = f

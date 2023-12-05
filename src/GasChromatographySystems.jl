@@ -32,7 +32,8 @@ include("./Flowcalc.jl")
 function common_timesteps(sys)
 	com_timesteps = []
 	for i=1:nv(sys.g)
-		com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.pressurepoints[i].time_steps)
+		if typeof(sys.pressurepoints[i].P) <: PressureProgram
+		com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.pressurepoints[i].P.time_steps)
 	end
 	for i=1:ne(sys.g)
 		if typeof(sys.modules[i].T) <: TemperatureProgram
@@ -52,10 +53,21 @@ function index_modules_with_temperature_program(sys)
 	return i_tempprog
 end
 
+function index_pressurepoints_with_pressure_program(sys)
+	i_pressprog = Int[]
+	for i=1:nv(sys.g)
+		if typeof(sys.pressurepoints[i].P) <: PressureProgramProgram
+			push!(i_pressprog, i)
+		end
+	end
+	return i_pressprog
+end
+
 function match_programs(sys)
 	com_times = common_timesteps(sys)
-	new_press_steps = Array{Array{Float64,1}}(undef, nv(sys.g))
-	for i=1:nv(sys.g)
+	i_pressprog = index_pressurepoints_with_pressure_program(sys)
+	new_press_steps = Array{Array{Float64,1}}(undef, length(i_pressprog))
+	for i=1:length(i_pressprog)
 		new_press_steps[i] = GasChromatographySimulator.new_value_steps(sys.pressurepoints[i].P.pressure_steps, sys.pressurepoints[i].P.time_steps, com_times)
 	end
 	i_tempprog = index_modules_with_temperature_program(sys)
@@ -64,14 +76,20 @@ function match_programs(sys)
 		new_temp_steps[i] = GasChromatographySimulator.new_value_steps(sys.modules[i_tempprog[i]].T.temp_steps, sys.modules[i_tempprog[i]].T.time_steps, com_times)
 	end
 	# add for gradient new_a_gf
-	return com_times, new_press_steps, new_temp_steps, i_tempprog
+	return com_times, new_press_steps, new_temp_steps, i_pressprog, i_tempprog
 end
 
 function update_system(sys)
-	new_timesteps, new_pressuresteps, new_temperaturesteps, index_module_tempprog = match_programs(sys)
+	new_timesteps, new_pressuresteps, new_temperaturesteps, index_pp_pressprog, index_module_tempprog = match_programs(sys)
 	new_pp = Array{PressurePoint}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
-		new_pp[i] = PressurePoint(sys.pressurepoints[i].name, new_timesteps, new_pressuresteps[i])
+		if typeof(sys.pressurepoints[i].P) <: Number
+			new_pp[i] = sys.pressurepoints[i]
+		elseif typeof(sys.pressurepoints[i].P) <: PressureProgram
+			ii = findfirst(index_pp_pressprog.==i)
+			new_presprog = PressureProgram(new_timesteps, new_pressuresteps[ii])
+			new_pp[i] = PressurePoint(sys.pressurepoints[i].name, new_presprog)
+		end
 	end
 	new_modules = Array{AbstractModule}(undef, ne(sys.g))
 	for i=1:ne(sys.g)

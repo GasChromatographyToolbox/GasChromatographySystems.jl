@@ -33,7 +33,8 @@ function common_timesteps(sys)
 	com_timesteps = []
 	for i=1:nv(sys.g)
 		if typeof(sys.pressurepoints[i].P) <: PressureProgram
-		com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.pressurepoints[i].P.time_steps)
+			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.pressurepoints[i].P.time_steps)
+		end
 	end
 	for i=1:ne(sys.g)
 		if typeof(sys.modules[i].T) <: TemperatureProgram

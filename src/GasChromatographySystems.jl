@@ -69,7 +69,7 @@ function match_programs(sys)
 	i_pressprog = index_pressurepoints_with_pressure_program(sys)
 	new_press_steps = Array{Array{Float64,1}}(undef, length(i_pressprog))
 	for i=1:length(i_pressprog)
-		new_press_steps[i] = GasChromatographySimulator.new_value_steps(sys.pressurepoints[i].P.pressure_steps, sys.pressurepoints[i].P.time_steps, com_times)
+		new_press_steps[i] = GasChromatographySimulator.new_value_steps(sys.pressurepoints[i_pressprog[i]].P.pressure_steps, sys.pressurepoints[i_pressprog[i]].P.time_steps, com_times)
 	end
 	i_tempprog = index_modules_with_temperature_program(sys)
 	new_temp_steps = Array{Array{Float64,1}}(undef, length(i_tempprog))

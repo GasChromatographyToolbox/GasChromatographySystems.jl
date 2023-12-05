@@ -57,7 +57,7 @@ end
 function index_pressurepoints_with_pressure_program(sys)
 	i_pressprog = Int[]
 	for i=1:nv(sys.g)
-		if typeof(sys.pressurepoints[i].P) <: PressureProgramProgram
+		if typeof(sys.pressurepoints[i].P) <: PressureProgram
 			push!(i_pressprog, i)
 		end
 	end

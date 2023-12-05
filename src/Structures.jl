@@ -265,6 +265,26 @@ end
 
 default_TP() = GasChromatographySystems.TemperatureProgram([0.0, 1800.0], [40.0, 340.0])
 
+"""
+    PressureProgram(time_steps, pres_steps)
+
+Structure describing the pressure program. 
+
+# Arguments
+* `time_steps`: Time steps in s, after which the corresponding pressure in `pres_steps` is reached. 
+* `pres_steps`: Pressure steps in Pa.
+
+A default temperature program is avaliable:
+* `default_PP()`: Pressure increase from 100.000 Pa to 200.000 in 1800 s (30 min). 
+"""
+struct PressureProgram
+    time_steps::Array{<:Real,1}
+    pres_steps::Array{<:Real,1}
+    PressureProgram(ts,ps) = (length(ts)!=length(ps)) ? error("Mismatch between length(time_steps) = $(length(ts)) and length(pres_steps) = $(length(ps))") : new(ts,ps)
+end
+
+default_PP() = GasChromatographySystems.PressureProgram([0.0, 1800.0], [100000.0, 200000.0])
+
 # pressure point structure
 """
     PressurePoint(name, time_steps, pressure_steps)

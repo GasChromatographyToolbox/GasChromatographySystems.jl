@@ -239,8 +239,9 @@ Structure describing the temperature program.
 * `gf`: Gradient function `gf(x, a_gf)`, describes the thermal gradient.
 * `a_gf`:Parameters of the gradient function.
 
-One method to construct this structure exist for a uniform temperatur program (same for all column positions `x`):
+Two method to construct this structure exist for a uniform temperatur program (same for all column positions `x`):
 * `TemperatureProgram(time_steps, temp_steps)`
+* `TemperatureProgram(CP)`, with `CP` beeing a conventional notation of a temperature program in the form of an array with the pattern `[T1, t1, r1, T2, t2, r2, ..., Tn, tn]`, with `Ti` temperature niveaus, `ti` holding times for the corresponding tempertures, `ri` the heating ramp between temperatures `Ti` and `Ti+1`.
 
 A default temperature program is avaliable:
 * `default_TP()`: Heating from 40°C to 340°C in 1800 s (30 min). 
@@ -261,6 +262,22 @@ function TemperatureProgram(time_steps, temp_steps)
     gf(x) = GasChromatographySimulator.gradient(x, a_gf)
     prog = TemperatureProgram(time_steps, temp_steps, gf, a_gf)
     return prog
+end
+
+default_TP() = GasChromatographySystems.TemperatureProgram([0.0, 1800.0], [40.0, 340.0])
+
+"""
+    TemperatureProgram(CP)
+
+Structure describing the temperature program defined by a conventional notation of a temperature program. 
+
+# Arguments
+* `CP`: conventional notation of a temperature program in the form of an array with the pattern `[T1, t1, r1, T2, t2, r2, ..., Tn, tn]`, with `Ti` temperature niveaus, `ti` holding times for the corresponding tempertures, `ri` the heating ramp between temperatures `Ti` and `Ti+1`.
+"""
+function TemperatureProgram(CP)
+	time_steps, temp_steps = GasChromatographySimulator.conventional_program([40.0, 2.0, 15.0, 150.0, 1.0, 10.0, 250.0, 3.0, 20.0, 300.0, 1.0])
+	prog = TemperatureProgram(time_steps, temp_steps)
+	return prog
 end
 
 default_TP() = GasChromatographySystems.TemperatureProgram([0.0, 1800.0], [40.0, 340.0])

@@ -334,7 +334,7 @@ function build_pressure_squared_functions(sys; mode="λ")
 	if mode == "λ"
 		return build_pressure_squared_functions_λ(sys, solve_balance(sys; mode="λ"))
 	elseif mode == "κ"
-		return build_pressure_squared_functions_κ(sys, solve_balance_κ(sys; mode="κ"))
+		return build_pressure_squared_functions_κ(sys, solve_balance(sys; mode="κ"))
 	else
         error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
 	end

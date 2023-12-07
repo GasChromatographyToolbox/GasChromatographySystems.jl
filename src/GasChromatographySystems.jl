@@ -427,20 +427,21 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
 
 		# program parameters
-		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) == GasChromatographySystem.PressureProgram
+		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
+		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) <: PressureProgram
 			sys.pressurepoints[srcE[i]].P.pressure_steps
 		else
-			sys.pressurepoints[srcE[i]].P
+			fill(sys.pressurepoints[srcE[i]].P, length(time_steps))
 		end
 		pout_steps = sys.pressurepoints[dstE[i]].P.pressure_steps
-		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) == GasChromatographySystem.PressureProgram
+		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) <: PressureProgram
 			sys.pressurepoints[dstE[i]].P.pressure_steps
 		else
-			sys.pressurepoints[dstE[i]].P
+			fill(sys.pressurepoints[dstE[i]].P, length(time_steps))
 		end
 		pin_itp = p_func[srcE[i]]
 		pout_itp = p_func[dstE[i]]	
-		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
+		
 		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
 
 		# substance parameters

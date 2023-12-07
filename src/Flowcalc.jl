@@ -611,6 +611,23 @@ function flow_functions(sys)
 	return F_func
 end
 
+# flow_functions version with p2fun
+function flow_functions(sys, p2fun)
+	p_func = pressure_functions(sys, p2fun)
+	F_func = Array{Function}(undef, ne(sys.g))
+	E = collect(edges(sys.g))
+	srcE = src.(E)
+	dstE = dst.(E)
+	for i=1:ne(sys.g)
+		pin(t) = p_func[srcE[i]](t)
+		pout(t) = p_func[dstE[i]](t)
+		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
+		f(t) = GasChromatographySimulator.flow(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
+		F_func[i] = f
+	end
+	return F_func
+end
+
 """
 	holdup_time_functions(sys)
 

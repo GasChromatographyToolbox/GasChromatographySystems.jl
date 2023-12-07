@@ -433,7 +433,6 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		else
 			fill(sys.pressurepoints[srcE[i]].P, length(time_steps))
 		end
-		pout_steps = sys.pressurepoints[dstE[i]].P.pressure_steps
 		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) <: PressureProgram
 			sys.pressurepoints[dstE[i]].P.pressure_steps
 		else

@@ -863,7 +863,7 @@ end
 # A_focussed calculated in relation to it
 # A_focussed is the complete area during a modulation period
 # not focussed segment is already included in the focussed segment, assuming it will be focussed in the 2nd modulation in a multi stage modulation
-function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(pl.τR)), abstol=1e-8, reltol=1e-6, alg=OwrenZen5())
+function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(pl.τR)), abstol=1e-8, reltol=1e-8, alg=OwrenZen5())
 	tR = pl.tR
 	τR = pl.τR
 	AR = pl.A
@@ -899,7 +899,7 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 			#prob_focussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM, init_t_start[i]+(j-1)*PM+tcold, p)
 			#prob_unfocussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM+tcold, init_t_start[i]+(j-1)*PM+tcold+thot, p)
 			prob_focussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM, init_t_start[i]+(j-1)*PM+PM, p)
-			A_focussed[ii] = solve(prob_focussed, QuadGKJL(); reltol = 1e-18, abstol = 1e-30).u * AR[i]
+			A_focussed[ii] = solve(prob_focussed, QuadGKJL(); reltol = reltol, abstol = abstol).u * AR[i]
 			#A_unfocussed[ii] = solve(prob_unfocussed, QuadGKJL(); reltol = 1e-18, abstol = 1e-30).u * AR[i]
 			# Areas in the same order as sub_TM_focussed
 			Name[ii] = sub_TM_focussed[ii].name

@@ -239,8 +239,9 @@ Structure describing the temperature program.
 * `gf`: Gradient function `gf(x, a_gf)`, describes the thermal gradient.
 * `a_gf`:Parameters of the gradient function.
 
-One method to construct this structure exist for a uniform temperatur program (same for all column positions `x`):
+Two method to construct this structure exist for a uniform temperatur program (same for all column positions `x`):
 * `TemperatureProgram(time_steps, temp_steps)`
+* `TemperatureProgram(CP)`, with `CP` beeing a conventional notation of a temperature program in the form of an array with the pattern `[T1, t1, r1, T2, t2, r2, ..., Tn, tn]`, with `Ti` temperature niveaus, `ti` holding times for the corresponding tempertures, `ri` the heating ramp between temperatures `Ti` and `Ti+1`.
 
 A default temperature program is avaliable:
 * `default_TP()`: Heating from 40°C to 340°C in 1800 s (30 min). 
@@ -265,23 +266,47 @@ end
 
 default_TP() = GasChromatographySystems.TemperatureProgram([0.0, 1800.0], [40.0, 340.0])
 
+function TemperatureProgram(CP)
+	time_steps, temp_steps = GasChromatographySimulator.conventional_program([40.0, 2.0, 15.0, 150.0, 1.0, 10.0, 250.0, 3.0, 20.0, 300.0, 1.0])
+	prog = TemperatureProgram(time_steps, temp_steps)
+	return prog
+end
+
+
+"""
+    PressureProgram(time_steps, pressure_steps)
+
+Structure describing the pressure program. 
+
+# Arguments
+* `time_steps`: Time steps in s, after which the corresponding pressure in `pressure_steps` is reached. 
+* `pressure_steps`: Pressure steps in Pa.
+
+A default temperature program is avaliable:
+* `default_PP()`: Pressure increase from 100.000 Pa to 200.000 in 1800 s (30 min). 
+"""
+struct PressureProgram
+    time_steps::Array{<:Real,1}
+    pressure_steps::Array{<:Real,1}
+    PressureProgram(ts,ps) = (length(ts)!=length(ps)) ? error("Mismatch between length(time_steps) = $(length(ts)) and length(pressure_steps) = $(length(ps))") : new(ts,ps)
+end
+
+default_PP() = GasChromatographySystems.PressureProgram([0.0, 1800.0], [100000.0, 200000.0])
+
 # pressure point structure
 """
-    PressurePoint(name, time_steps, pressure_steps)
+    PressurePoint(name, PP)
 
 Structure describing the pressure program at the connection points of the modules. These are the vertices of the graph representation of a GC system.
 
 # Arguments
 * `name`: Name of the `PressurePoint`.
-* `time_steps`: Time steps in , after which the corresponding pressure in `pressure_steps` is reached. 
-* `pressure_steps`: Pressure steps in kPa(a)?.
+* `P`: Pressure program as structure `GasChromatographySystems.PressureProgram` or as a number for constant pressure.
 """
 struct PressurePoint
 	# Pressure program, same structure for inlet and outlet
 	name::String
-	time_steps::Array{Float64,1}
-	pressure_steps::Array{Float64,1}
-	PressurePoint(n,ts,ps) = length(ts)!=length(ps) ? error("Mismatch between length(time_steps) = $(length(ts)), length(pressure_steps) = $(length(ps))") : new(n,ts,ps)
+	P
 end
 
 # system structure
@@ -304,11 +329,11 @@ Definition of the graph:
     add_edge!(g, 1, 2)
 ```
 
-Definition of the two pressure points, here column inlet and outlet with constant pressure:
+Definition of the two pressure points, here column inlet has the default pressure program and the outlet pressure is constant:
 ```julia
     pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(g))
-    pp[1] = GasChromatographySystems.PressurePoint("p_in", [0.0, 3600.0], [pin, pin])
-    pp[2] = GasChromatographySystems.PressurePoint("p_out", [0.0, 3600.0], [pout, pout])
+    pp[1] = GasChromatographySystems.PressurePoint("p_in", GasChromatographySystems.default_PP())
+    pp[2] = GasChromatographySystems.PressurePoint("p_out", pout)
 ```
 
 Definition of the column module with default temperature program `default_TP()`, flow is unknown and is calculated from the pressures, default module options:

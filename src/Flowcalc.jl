@@ -161,8 +161,14 @@ Extract the index of the vertices of the graph of system `sys` for which the pre
 function unknown_p(sys)
 	i_unknown_pressures = Int[]
 	for i=1:nv(sys.g)
-		if isnan(sys.pressurepoints[i].pressure_steps[1])
-			push!(i_unknown_pressures, i)
+		if typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			if isnan(sys.pressurepoints[i].P.pressure_steps[1])
+				push!(i_unknown_pressures, i)
+			end
+		elseif typeof(sys.pressurepoints[i].P) <: Number
+			if isnan(sys.pressurepoints[i].P)
+				push!(i_unknown_pressures, i)
+			end
 		end
 	end
 	return i_unknown_pressures
@@ -328,7 +334,7 @@ function build_pressure_squared_functions(sys; mode="λ")
 	if mode == "λ"
 		return build_pressure_squared_functions_λ(sys, solve_balance(sys; mode="λ"))
 	elseif mode == "κ"
-		return build_pressure_squared_functions_κ(sys, solve_balance_κ(sys; mode="κ"))
+		return build_pressure_squared_functions_κ(sys, solve_balance(sys; mode="κ"))
 	else
         error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
 	end
@@ -507,8 +513,10 @@ function pressure_functions(sys, p2fun)
 	for i=1:nv(sys.g)
 		f = if i in i_unknown_p
 			pres[findfirst(i_unknown_p.==i)]
-		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, identity.(sys.pressurepoints[i].pressure_steps))
+		elseif typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
+		elseif typeof(sys.pressurepoints[i].P) <: Number
+			GasChromatographySimulator.steps_interpolation([0.0, 36000.0], identity.(fill(sys.pressurepoints[i].P, 2)))
 		end
 	p_func[i] = f
 	end
@@ -530,8 +538,10 @@ function pressure_functions(sys)
 	for i=1:nv(sys.g)
 		f = if i in unk
 			pres[findfirst(unk.==i)]
-		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, identity.(sys.pressurepoints[i].pressure_steps))
+		elseif typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
+		elseif typeof(sys.pressurepoints[i].P) <: Number
+			GasChromatographySimulator.steps_interpolation([0.0, 36000.0], identity.(fill(sys.pressurepoints[i].P, 2)))
 		end
 	p_func[i] = f
 	end
@@ -555,14 +565,16 @@ function interpolate_pressure_functions(sys; dt=1)
 	else
 		trange = 0:dt:tend
 	end
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
 	p_func = GasChromatographySystems.pressure_functions(sys)
 	p_itp = Array{Any}(undef, length(p_func))
 	for i=1:length(p_func)
-		if all(isnan.(sys.pressurepoints[i].pressure_steps))
+		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
+		if i ∈ i_unknown_p
 			p_itp[i] = LinearInterpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
 		else
 			p_itp[i] = p_func[i]
-		end
+		end # no additional interpolation, if the pressure is allready defined by a linear program
 	end
 	return p_itp
 end
@@ -585,6 +597,23 @@ with flow restriction ``κ_{i,j} = \\int_0^{L_{i,j}} η(T_{i,j})T_{i,j}/d_{i,j}^
 """
 function flow_functions(sys)
 	p_func = pressure_functions(sys)
+	F_func = Array{Function}(undef, ne(sys.g))
+	E = collect(edges(sys.g))
+	srcE = src.(E)
+	dstE = dst.(E)
+	for i=1:ne(sys.g)
+		pin(t) = p_func[srcE[i]](t)
+		pout(t) = p_func[dstE[i]](t)
+		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
+		f(t) = GasChromatographySimulator.flow(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
+		F_func[i] = f
+	end
+	return F_func
+end
+
+# flow_functions version with p2fun
+function flow_functions(sys, p2fun)
+	p_func = pressure_functions(sys, p2fun)
 	F_func = Array{Function}(undef, ne(sys.g))
 	E = collect(edges(sys.g))
 	srcE = src.(E)

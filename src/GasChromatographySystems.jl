@@ -24,20 +24,26 @@ const pn = 101300 # Pa
 # Definition of structures and methods
 include("./Structures.jl")
 include("./Flowcalc.jl")
+include("./Systems.jl")
 
 # functions
 
 # begin - misc, for update_system
 # common programs
-function common_timesteps(sys)
+function common_timesteps(sys; default=[0.0, 36000.0])
 	com_timesteps = []
 	for i=1:nv(sys.g)
-		com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.pressurepoints[i].time_steps)
+		if typeof(sys.pressurepoints[i].P) <: PressureProgram
+			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.pressurepoints[i].P.time_steps)
+		end
 	end
 	for i=1:ne(sys.g)
 		if typeof(sys.modules[i].T) <: TemperatureProgram
 			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.modules[i].T.time_steps)
 		end
+	end
+	if isempty(com_timesteps)
+		com_timesteps = default
 	end
 	return com_timesteps
 end
@@ -52,11 +58,22 @@ function index_modules_with_temperature_program(sys)
 	return i_tempprog
 end
 
-function match_programs(sys)
-	com_times = common_timesteps(sys)
-	new_press_steps = Array{Array{Float64,1}}(undef, nv(sys.g))
+function index_pressurepoints_with_pressure_program(sys)
+	i_pressprog = Int[]
 	for i=1:nv(sys.g)
-		new_press_steps[i] = GasChromatographySimulator.new_value_steps(sys.pressurepoints[i].pressure_steps, sys.pressurepoints[i].time_steps, com_times)
+		if typeof(sys.pressurepoints[i].P) <: PressureProgram
+			push!(i_pressprog, i)
+		end
+	end
+	return i_pressprog
+end
+
+function match_programs(sys)
+	com_times = GasChromatographySystems.common_timesteps(sys)
+	i_pressprog = index_pressurepoints_with_pressure_program(sys)
+	new_press_steps = Array{Array{Float64,1}}(undef, length(i_pressprog))
+	for i=1:length(i_pressprog)
+		new_press_steps[i] = GasChromatographySimulator.new_value_steps(sys.pressurepoints[i_pressprog[i]].P.pressure_steps, sys.pressurepoints[i_pressprog[i]].P.time_steps, com_times)
 	end
 	i_tempprog = index_modules_with_temperature_program(sys)
 	new_temp_steps = Array{Array{Float64,1}}(undef, length(i_tempprog))
@@ -64,14 +81,20 @@ function match_programs(sys)
 		new_temp_steps[i] = GasChromatographySimulator.new_value_steps(sys.modules[i_tempprog[i]].T.temp_steps, sys.modules[i_tempprog[i]].T.time_steps, com_times)
 	end
 	# add for gradient new_a_gf
-	return com_times, new_press_steps, new_temp_steps, i_tempprog
+	return com_times, new_press_steps, new_temp_steps, i_pressprog, i_tempprog
 end
 
 function update_system(sys)
-	new_timesteps, new_pressuresteps, new_temperaturesteps, index_module_tempprog = match_programs(sys)
+	new_timesteps, new_pressuresteps, new_temperaturesteps, index_pp_pressprog, index_module_tempprog = match_programs(sys)
 	new_pp = Array{PressurePoint}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
-		new_pp[i] = PressurePoint(sys.pressurepoints[i].name, new_timesteps, new_pressuresteps[i])
+		if typeof(sys.pressurepoints[i].P) <: Number
+			new_pp[i] = sys.pressurepoints[i]
+		elseif typeof(sys.pressurepoints[i].P) <: PressureProgram
+			ii = findfirst(index_pp_pressprog.==i)
+			new_presprog = PressureProgram(new_timesteps, new_pressuresteps[ii])
+			new_pp[i] = PressurePoint(sys.pressurepoints[i].name, new_presprog)
+		end
 	end
 	new_modules = Array{AbstractModule}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
@@ -142,7 +165,11 @@ function module_temperature(module_::ModuleColumn, sys)
 		a_gf = module_.T.a_gf
 		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L)
 	elseif typeof(module_.T) <: Number # temperature is a constant value
-		time_steps = common_timesteps(sys)
+		time_steps = if isempty(GasChromatographySystems.common_timesteps(sys))
+			[0.0, 36000.0]
+		else
+			GasChromatographySystems.common_timesteps(sys)
+		end
 		temp_steps = module_.T.*ones(length(time_steps))
 		gf(x) = zero(x).*ones(length(time_steps))
 		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
@@ -159,7 +186,11 @@ function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 		a_gf = module_.T.a_gf
 		T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.L)
 	elseif typeof(module_.T) <: Number # temperature is a constant value
-		time_steps = GasChromatographySystems.common_timesteps(sys)
+		time_steps = if isempty(GasChromatographySystems.common_timesteps(sys))
+			[0.0, 36000.0]
+		else
+			GasChromatographySystems.common_timesteps(sys)
+		end
 		temp_steps = module_.T.*ones(length(time_steps))
 		gf(x) = zero(x).*ones(length(time_steps))
 		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
@@ -219,10 +250,14 @@ function pressures_squared(sys)
 	#p² = Array{Interpolations.Extrapolation}(undef, nv(sys.g))
 	p² = Array{Any}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
-		g = if isnan(sys.pressurepoints[i].pressure_steps[1])
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, NaN.*ones(length(sys.pressurepoints[i].time_steps)))
-		else
-			GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].time_steps, identity.(sys.pressurepoints[i].pressure_steps))
+		g = if typeof(sys.pressurepoints[i].P) <: Number
+				GasChromatographySimulator.steps_interpolation([0.0, 36000.0], fill(sys.pressurepoints[i].P, 2))
+		elseif typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			#if isnan(sys.pressurepoints[i].P.pressure_steps[1])
+			#	GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, NaN.*ones(length(sys.pressurepoints[i].P.time_steps)))
+			#else
+				GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
+			#end
 		end
 		f(t) = g(t).^2 
 		p²[i] = f
@@ -392,11 +427,20 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
 
 		# program parameters
-		pin_steps = sys.pressurepoints[srcE[i]].pressure_steps
-		pout_steps = sys.pressurepoints[dstE[i]].pressure_steps
+		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
+		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) <: PressureProgram
+			sys.pressurepoints[srcE[i]].P.pressure_steps
+		else
+			fill(sys.pressurepoints[srcE[i]].P, length(time_steps))
+		end
+		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) <: PressureProgram
+			sys.pressurepoints[dstE[i]].P.pressure_steps
+		else
+			fill(sys.pressurepoints[dstE[i]].P, length(time_steps))
+		end
 		pin_itp = p_func[srcE[i]]
 		pout_itp = p_func[dstE[i]]	
-		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
+		
 		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
 
 		# substance parameters
@@ -819,7 +863,7 @@ end
 # A_focussed calculated in relation to it
 # A_focussed is the complete area during a modulation period
 # not focussed segment is already included in the focussed segment, assuming it will be focussed in the 2nd modulation in a multi stage modulation
-function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(pl.τR)), abstol=1e-8, reltol=1e-6, alg=OwrenZen5())
+function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(pl.τR)), abstol=1e-8, reltol=1e-8, alg=OwrenZen5())
 	tR = pl.tR
 	τR = pl.τR
 	AR = pl.A
@@ -855,7 +899,7 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 			#prob_focussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM, init_t_start[i]+(j-1)*PM+tcold, p)
 			#prob_unfocussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM+tcold, init_t_start[i]+(j-1)*PM+tcold+thot, p)
 			prob_focussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM, init_t_start[i]+(j-1)*PM+PM, p)
-			A_focussed[ii] = solve(prob_focussed, QuadGKJL(); reltol = 1e-18, abstol = 1e-30).u * AR[i]
+			A_focussed[ii] = solve(prob_focussed, QuadGKJL(); reltol = reltol, abstol = abstol).u * AR[i]
 			#A_unfocussed[ii] = solve(prob_unfocussed, QuadGKJL(); reltol = 1e-18, abstol = 1e-30).u * AR[i]
 			# Areas in the same order as sub_TM_focussed
 			Name[ii] = sub_TM_focussed[ii].name
@@ -1329,177 +1373,6 @@ function plot_GCxGC(pl_GCxGC, sys; categories = String[])
 end
 
 
-# begin - specific systems
-function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=GasChromatographySystems.Options(), kwargs...)
-	# add test for correct lengths of input
-	# ? make two versions
-	# 1. defining flow over the columns (calculate pin)
-	# 2. defining inlet pressure (calculate F)
-	n = length(Ls)
-	g = SimpleDiGraph(n+1)
-	for i=1:n
-		add_edge!(g, i, i+1) 
-	end
-	# common time steps
-	com_timesteps = []
-	for i=1:length(TPs)
-		if typeof(TPs[i]) <: GasChromatographySystems.TemperatureProgram
-			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, TPs[i].time_steps)
-		end
-	end
-	if isempty(com_timesteps)
-		com_timesteps = [0.0, 36000.0]
-	end
-	# pressure points
-	pp = Array{GasChromatographySystems.PressurePoint}(undef, n+1)
-	pins = pin*1000.0.*ones(length(com_timesteps))
-	nans = NaN.*ones(length(com_timesteps))
-	if pout == 0.0
-		pouts = eps(Float64).*ones(length(com_timesteps))
-	else 
-		pouts = pout*1000.0.*ones(length(com_timesteps))
-	end
-	pp[1] = GasChromatographySystems.PressurePoint("p1", com_timesteps, pins) # inlet
-	for i=2:n
-		pp[i] = GasChromatographySystems.PressurePoint("p$(i)", com_timesteps, nans) #
-	end
-	pp[end] = GasChromatographySystems.PressurePoint("p$(n+1)", com_timesteps, pouts) # outlet
-	# modules
-	modules = Array{GasChromatographySystems.AbstractModule}(undef, n)
-	for i=1:n
-		if i==1
-			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6; kwargs...)
-		else
-			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], NaN; kwargs...)
-		end
-	end
-	# system
-	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))
-
-	# add test for the defined pressures and flows
-	return sys
-end
-
-function SeriesSystem(; Ls = [10.0, 5.0, 2.0, 1.0], ds = [0.53, 0.32, 0.25, 0.1], dfs = [0.53, 0.32, 0.25, 0.1], sps = ["Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS"], TPs = [default_TP(), default_TP(), default_TP(), default_TP()], F = NaN, pin = 300.0, pout = 0.0, opt=GasChromatographySystems.Options(), kwargs...)
-	sys = SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; opt=opt, kwargs...)
-	return sys
-end
-
-#example_SeriesSystem() = SeriesSystem([10.0, 5.0, 2.0, 1.0], [0.53, 0.32, 0.25, 0.1], [0.53, 0.32, 0.25, 0.1], ["Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS", "Rxi17SilMS"], [default_TP(), default_TP(), default_TP(), default_TP()], NaN, 300.0, 0.0)
-
-function SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=GasChromatographySystems.Options(), kwargs...)
-	g = SimpleDiGraph(4)
-	add_edge!(g, 1, 2) # Inj -> GC column -> Split point
-	add_edge!(g, 2, 3) # Split point -> TL column -> Det 1
-	add_edge!(g, 2, 4) # Split point -> TL column -> Det 2
-	# common time steps
-	com_timesteps = []
-	for i=1:length(TPs)
-		if typeof(TPs[i]) <: GasChromatographySystems.TemperatureProgram
-			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, TPs[i].time_steps)
-		end
-	end
-	if isempty(com_timesteps)
-		com_timesteps = [0.0, 36000.0]
-	end
-	# pressure points
-	pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(g))
-	pins = pin*1000.0.*ones(length(com_timesteps))
-	nans = NaN.*ones(length(com_timesteps))
-	if pout1 == 0.0
-		pout1s = eps(Float64).*ones(length(com_timesteps))
-	else 
-		pout1s = pout1*1000.0.*ones(length(com_timesteps))
-	end
-	if pout2 == 0.0
-		pout2s = eps(Float64).*ones(length(com_timesteps))
-	else 
-		pout2s = pout2*1000.0.*ones(length(com_timesteps))
-	end
-	pp[1] = GasChromatographySystems.PressurePoint("p₁", com_timesteps, pins) # inlet 
-	pp[2] = GasChromatographySystems.PressurePoint("p₂", com_timesteps, nans) # 
-	pp[3] = GasChromatographySystems.PressurePoint("p₃", com_timesteps, pout1s) # outlet 1 
-	pp[4] = GasChromatographySystems.PressurePoint("p₄", com_timesteps, pout2s) # outlet 2
-	# modules
-	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
-	modules[1] = GasChromatographySystems.ModuleColumn("1 -> 2", Ls[1], ds[1]*1e-3, dfs[1]*1e-6, sps[1], TPs[1], Fs[1]/60e6; kwargs...)
-	modules[2] = GasChromatographySystems.ModuleColumn("2 -> 3", Ls[2], ds[2]*1e-3, dfs[2]*1e-6, sps[2], TPs[2], Fs[2]/60e6; kwargs...)
-	modules[3] = GasChromatographySystems.ModuleColumn("2 -> 4", Ls[3], ds[3]*1e-3, dfs[3]*1e-6, sps[3], TPs[3], Fs[3]/60e6; kwargs...)
-	# system
-	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(g, pp, modules, opt))
-
-	# add test for the defined pressures and flows
-	return sys
-end
-
-function SplitSystem(; Ls = [10.0, 1.0, 5.0], ds = [0.25, 0.1, 0.25], dfs = [0.25, 0.0, 0.0], sps = ["Rxi17SilMS", "", ""], TPs = [default_TP(), 300.0, 300.0], Fs = [1.0, NaN, NaN], pin = NaN, pout1 = 0.0, pout2 = 101.3, opt=GasChromatographySystems.Options(), kwargs...)
-	sys = SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; opt=opt, kwargs...)
-	return sys
-end
-
-# definition GCxGC system with thermal modulator
-function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
-
-	TPs = [TP1, TP2, TPM]
-	
-	g = SimpleDiGraph(9)
-	add_edge!(g, 1, 2) # 1st-D GC
-	add_edge!(g, 2, 3) # modulator
-	add_edge!(g, 3, 4) # hot/cold 1
-	add_edge!(g, 4, 5) # modulator
-	add_edge!(g, 5, 6) # hot/cold 2 
-	add_edge!(g, 6, 7) # modulator
-	add_edge!(g, 7, 8) # 2nd-D GC
-	add_edge!(g, 8, 9) # TL
-	
-	# common time steps
-	com_timesteps = []
-	for i=1:length(TPs)
-		if typeof(TPs[i]) <: TemperatureProgram
-			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, TPs[i].time_steps)
-		end
-	end
-	if isempty(com_timesteps)
-		com_timesteps = [0.0, 36000.0]
-	end
-	
-	# pressure points
-	if length(pin) == 1
-		pins = pin*1000.0.*ones(length(com_timesteps))
-	else
-	end
-	nans = NaN.*ones(length(com_timesteps))
-	if pout == 0.0
-		pouts = eps(Float64).*ones(length(com_timesteps))
-	else 
-		pouts = pout*1000.0.*ones(length(com_timesteps))
-	end
-	pp = Array{PressurePoint}(undef, nv(g))
-	pp[1] = PressurePoint("p1", com_timesteps, pins) # inlet 
-	for i=2:(nv(g)-1)
-		pp[i] = PressurePoint("p$(i)", com_timesteps, nans)
-	end
-	pp[end] = PressurePoint("p$(nv(g))", com_timesteps, pouts) # outlet
-	# modules
-	modules = Array{AbstractModule}(undef, ne(g))
-	modules[1] = ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6, optCol)
-	modules[2] = ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
-	modules[3] = ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
-	modules[4] = ModuleColumn("mod loop", LM[3], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
-	modules[5] = ModuleTM("TM2", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
-	modules[6] = ModuleColumn("mod out", LM[5], dM*1e-3, dfM*1e-6, spM, TPM, NaN, optCol)
-	modules[7] = ModuleColumn("GC column 2", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN, optCol)
-	modules[8] = ModuleColumn("TL", LTL, dTL*1e-3, dfTL*1e-6, spTL, TPTL, NaN, optCol)
-	# system
-	sys = update_system(System(g, pp, modules, opt))
-	return sys
-end
-
-function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = default_TP(), L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), LTL = 0.25, dTL = 0.1, dfTL = 0.1, spTL = "Stabilwax", TPTL = 280.0, LM = [0.30, 0.01, 0.90, 0.01, 0.30], dM = 0.1, dfM = 0.1, spM = "Stabilwax", shift = 0.0, PM = 4.0, ratioM = 0.9125, HotM = 30.0, ColdM = -120.0, TPM = default_TP(), F = 0.8, pin = NaN, pout = 0.0, opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
-	sys = GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; opt=opt, optTM=optTM, optCol=optCol)
-	return sys
-end
-# end - specific systems
 
 
 #example_GCxGC_TM() = GCxGC_TM(30.0, 0.25, 0.25, "ZB1ms", default_TP(), 0.1, 0.1, 0.1, "Stabilwax", default_TP(), 0.56, 0.1, 0.1, "Stabilwax", 280.0, [0.30, 0.01, 0.90, 0.01, 0.30], 0.1, 0.1, "Stabilwax", 0.0, 0.0, 4.0, 0.9125, 80.0, -120.0, default_TP(), 0.8, NaN, 0.0)

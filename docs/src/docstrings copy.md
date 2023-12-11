@@ -1,3 +1,7 @@
+```@docs
+GasChromatographySystems
+```
+
 ## Module Index
 
 ```@index

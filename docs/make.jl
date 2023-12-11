@@ -4,7 +4,7 @@ using GasChromatographySystems
 makedocs(
     sitename = "GasChromatographySystems",
     format = Documenter.HTML(),
-    modules = [GasChromatographySystems]
+    modules = [GasChromatographySystems],
     pages = Any[
                 "Home" => "index.md",
                 "Instalation" => "installation.md",

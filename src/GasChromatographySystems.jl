@@ -1,8 +1,9 @@
 module GasChromatographySystems
 
-using Graphs
+using Reexport
+@reexport using Graphs
 using GraphMakie
-using Symbolics
+@reexport using Symbolics
 using NetworkLayout
 using CairoMakie
 using GasChromatographySimulator

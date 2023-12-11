@@ -1,11 +1,10 @@
 using Documenter
 using GasChromatographySystems
 
-push!(LOAD_PATH,"../src/")
 makedocs(
     sitename = "GasChromatographySystems",
-    #format = Documenter.HTML(),
-    #modules = [GasChromatographySystems]
+    format = Documenter.HTML(),
+    modules = [GasChromatographySystems]
     pages = Any[
                 "Home" => "index.md",
                 "Instalation" => "installation.md",
@@ -21,7 +20,6 @@ makedocs(
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
 deploydocs(
-    repo = "github.com/JanLeppert/GasChromatographySystems.jl",
-    devbranch = "main"
+    repo = "github.com/JanLeppert/GasChromatographySystems.jl"#,
+    #devbranch = "main"
 )
-

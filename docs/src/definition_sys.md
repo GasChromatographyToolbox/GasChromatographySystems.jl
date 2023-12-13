@@ -46,8 +46,6 @@ This graph can be visualized:
     nothing # hide
 ```
 
-![](sys_3seriers_plot.svg)
-
 ## Pressure points
 
 The vertices ``V`` represent the connections of the capillaries of the GC system. To fully define the flow of the mobile phase through the GC system the pressure at these connections must be known or calculated. To store this information about the pressures, two structures are defined. One to define the vertex as pressure point and one to store information about a pressure program.

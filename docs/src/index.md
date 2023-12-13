@@ -2,7 +2,7 @@
 
 Documentation for GasChromatographySystems.jl
 
-[GasChromatographySystems.jl](github.com/JanLeppert/GasChromatographySystems)
+[GasChromatographySystems.jl](https://github.com/JanLeppert/GasChromatographySystems)
 
 ## Introduction
 

@@ -8,6 +8,6 @@ julia> using Pkg; Pkg.add(GasChromatographySystems)
 
 To use the package type:
 
-```julia
-julia> using GasChromatographySystems
+```@example ex_3series
+using GasChromatographySystems
 ```

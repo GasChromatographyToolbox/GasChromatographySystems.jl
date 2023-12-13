@@ -42,7 +42,7 @@ This graph can be visualized:
 
 ```@example ex_3series
     f = GasChromatographySystems.plot_graph(g, ["$(i)=>$(i+1)" for i=1:3], ["p$(i)" for i=1:4])
-    save("plot_graph_3series.svg", f) #hide
+    CairoMakie.save("plot_graph_3series.svg", f) #hide
     nothing # hide
 ```
 

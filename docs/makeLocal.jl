@@ -32,12 +32,12 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-                "Instalation" => "installation.md",
-                "Definition of a GC system" => "definition_sys.md",
-                "Flow calculation" => "flowcalc.md",
-                "Simulation" => "simulation.md",
-                "Examples" => "examples.md",
-                "Docstrings" => "docstrings.md"
+        "Instalation" => "installation.md",
+        "Definition of a GC system" => "definition_sys.md",
+        "Flow calculation" => "flowcalc.md",
+        "Simulation" => "simulation.md",
+        "Examples" => "examples.md",
+        "Docstrings" => "docstrings.md"
     ],
     repo="github.com/JanLeppert/GasChromatographySystems.jl",
     sitename="GasChromatographySystems",

@@ -41,6 +41,7 @@ In following steps the vertices are connected by the edges:
 This graph can be visualized:
 
 ```@example ex_3series
+    using CairoMakie # hide
     f = GasChromatographySystems.plot_graph(g, ["$(i)=>$(i+1)" for i=1:3], ["p$(i)" for i=1:4])
     CairoMakie.save("plot_graph_3series.svg", f) #hide
     nothing # hide

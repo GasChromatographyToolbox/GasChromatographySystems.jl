@@ -4,5 +4,4 @@
 
 ```@autodocs
 Modules = [GasChromatographySystems]
-Order   = [:constant, :type, :function, :macro]
 ```

@@ -24,8 +24,8 @@ In the structure `GasChromatographySystems.System(g, pressurepoints, modules, op
 First, a simple directed graph with 4 vertices is defined:
 
 ```@example ex_3series
-    a = 1 + 1
-    #g = Graphs.SimpleDiGraph(4)
+    using GasChromatographySystems
+    g = SimpleDiGraph(4)
     #nothing # hide
 ```
 

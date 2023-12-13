@@ -23,6 +23,7 @@ push!(LOAD_PATH,"../src/")
 #
 
 using Documenter, GasChromatographySystems
+using Graphs
 
 makedocs(;
     modules=[GasChromatographySystems],

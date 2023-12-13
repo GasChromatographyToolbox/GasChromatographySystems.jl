@@ -1,5 +1,6 @@
 using Documenter
 using GasChromatographySystems
+using Graphs
 
 makedocs(
     sitename = "GasChromatographySystems",

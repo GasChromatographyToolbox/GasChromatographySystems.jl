@@ -26,7 +26,7 @@ using Documenter, GasChromatographySystems
 using Graphs, CairoMakie
 
 makedocs(;
-    #modules=[GasChromatographySystems],
+    modules=[GasChromatographySystems],
 	format = Documenter.HTML(
         prettyurls = prettyurls = get(ENV, "CI", nothing) == "true",
     ),
@@ -36,8 +36,8 @@ makedocs(;
         "Definition of a GC system" => "definition_sys.md",
         "Flow calculation" => "flowcalc.md",
         "Simulation" => "simulation.md",
-        "Examples" => "examples.md"#,
-        #"Docstrings" => "docstrings.md"
+        "Examples" => "examples.md",
+        "Docstrings" => "docstrings.md"
     ],
     repo="github.com/JanLeppert/GasChromatographySystems.jl",
     sitename="GasChromatographySystems",

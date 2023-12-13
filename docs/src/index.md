@@ -12,17 +12,7 @@ To model the separation in the complex GC system, it is necessary to know the in
 
 The manual is structured as followed:
 
-```@contents
-Pages = [
-    "installation.md",
-    "definition_sys.md",
-    "flowcalc.md",
-    "simulation.md,
-    "examples.md",
-    "docstrings.md"
-    ]
-Depth = 2
-```
+
 
 ## Contribution
 

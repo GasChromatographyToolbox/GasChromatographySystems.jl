@@ -26,7 +26,7 @@ First, a simple directed graph with 4 vertices is defined:
 ```@example ex_3series
     using GasChromatographySystems
     g = SimpleDiGraph(4)
-    #nothing # hide
+    nothing # hide
 ```
 
 In following steps the vertices are connected by the edges:
@@ -35,7 +35,7 @@ In following steps the vertices are connected by the edges:
     add_edge!(g, 1, 2)
     add_edge!(g, 2, 3)
     add_edge!(g, 3, 4)
-    #nothing # hide
+    nothing # hide
 ```
 
 This graph can be visualized:

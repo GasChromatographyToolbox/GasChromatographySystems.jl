@@ -26,7 +26,7 @@ using Documenter, GasChromatographySystems
 using Graphs, CairoMakie
 
 makedocs(;
-    modules=[GasChromatographySystems],
+    #modules=[GasChromatographySystems],
 	format = Documenter.HTML(
         prettyurls = prettyurls = get(ENV, "CI", nothing) == "true",
     ),

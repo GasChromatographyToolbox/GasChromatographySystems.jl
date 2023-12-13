@@ -45,7 +45,7 @@ This graph can be visualized:
     savefig("sys_3seriers_plot.svg"); nothing # hide
 ```
 
-![](f-plot.svg)
+![](sys_3seriers_plot.svg)
 
 ## Pressure points
 

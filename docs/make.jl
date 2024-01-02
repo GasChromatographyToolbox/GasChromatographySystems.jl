@@ -1,12 +1,18 @@
 using Documenter
 using GasChromatographySystems
+using Graphs
 
 makedocs(
     sitename = "GasChromatographySystems",
-    #format = Documenter.HTML(),
-    #modules = [GasChromatographySystems]
+    format = Documenter.HTML(),
+    modules = [GasChromatographySystems],
     pages = Any[
                 "Home" => "index.md",
+                "Instalation" => "installation.md",
+                "Definition of a GC system" => "definition_sys.md",
+                "Flow calculation" => "flowcalc.md",
+                "Simulation" => "simulation.md",
+                "Examples" => "examples.md",
                 "Docstrings" => "docstrings.md"
             ]
 )
@@ -15,7 +21,6 @@ makedocs(
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
 deploydocs(
-    repo = "github.com/JanLeppert/GasChromatographySystems.jl",
-    devbranch = "main"
+    repo = "github.com/JanLeppert/GasChromatographySystems.jl"#,
+    #devbranch = "main"
 )
-

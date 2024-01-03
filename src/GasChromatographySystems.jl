@@ -164,7 +164,7 @@ function module_temperature(module_::ModuleColumn, sys)
 		temp_steps = module_.T.temp_steps	
 		gf = module_.T.gf
 		a_gf = module_.T.a_gf
-		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L)
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L; ng=module_.opt.ng)
 	elseif typeof(module_.T) <: Number # temperature is a constant value
 		time_steps = if isempty(GasChromatographySystems.common_timesteps(sys))
 			[0.0, 36000.0]
@@ -174,7 +174,7 @@ function module_temperature(module_::ModuleColumn, sys)
 		temp_steps = module_.T.*ones(length(time_steps))
 		gf(x) = zero(x).*ones(length(time_steps))
 		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
-		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L)
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L; ng=module_.opt.ng)
 	end
 	return time_steps, temp_steps, gf, a_gf, T_itp
 end

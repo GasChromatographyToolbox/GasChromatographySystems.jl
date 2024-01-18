@@ -270,6 +270,10 @@ function solve_balance_λ(sys, subst_bal_eq_λ) # should be standard
 				bal_eq_i[i] = findfirst(i_unknown_p[i].==inner_V)
 			end
 		end
+		# convert the equations of `subst_bal_eq_λ` into matrix form a*b=0, where the rows of matrix a contain the factors for P²[i_unknown] in the order of therm_mod
+		# which here is just the order of the pressure points in the system
+		# solution `sol` follows the same order
+		# a different order of the flow balance equations `subst_bal_eq_λ` (e.g. because balance equations for unknown outer pressures points are appended at the end of the flow balance equation array)
 		a, b, lin = Symbolics.linear_expansion([subst_bal_eq_λ[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
 		if lin == true
 			sol = (inv(a)*-b)
@@ -309,6 +313,10 @@ function solve_balance_κ(sys, subst_bal_eq_κ)
 				bal_eq_i[i] = findfirst(i_unknown_p[i].==inner_V)
 			end
 		end
+		# convert the equations of `subst_bal_eq_κ` into matrix form a*b=0, where the rows of matrix a contain the factors for P²[i_unknown] in the order of therm_mod
+		# which here is just the order of the pressure points in the system
+		# solution `sol` follows the same order
+		# a different order of the flow balance equations `subst_bal_eq_κ` (e.g. because balance equations for unknown outer pressures points are appended at the end of the flow balance equation array)
 		a, b, lin = Symbolics.linear_expansion([subst_bal_eq_κ[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
 		if lin == true
 			sol = (inv(a)*-b)
@@ -355,6 +363,7 @@ function build_pressure_squared_functions_λ(sys, solutions)
 	#solutions = GasChromatographySystems.solve_balance_λ(sys)
 	p_solution = Array{Function}(undef, length(i_unknown_p))
 	for i=1:length(i_unknown_p)
+		# order of the parameters defined here, if the system is changed with definition of pressures or flows, this also has to change => reevaluate this equation
 		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [λ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
                expression = Val{false},
                target = Symbolics.JuliaTarget(),
@@ -506,7 +515,7 @@ function pressure_functions(sys, p2fun)
 	# collect all pressure functions of all the vertices into an array of functions of time t. If the pressures are known (defined by time_steps and pressure_steps), than a linear interpolation 
 	# is used, if the pressures are unkown, the symbolic solution functions `p2fun` of these pressures are used with substituted values of the system.
 	# This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
-	pres = substitute_pressure_squared_functions(p2fun, sys)
+	pres = substitute_pressure_squared_functions(p2fun, sys) #!!! mode "λ" "κ" !!!
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
 	#p²s = pressures_squared(sys)
 	p_func = Array{Any}(undef, nv(sys.g))
@@ -532,7 +541,7 @@ Collect all pressure functions as functions of time t at the vertices of the cap
 * `sys`: System structure of the capillary system for which the flow balance is set up.
 """
 function pressure_functions(sys)
-	pres, unk = solve_pressure(sys)
+	pres, unk = solve_pressure(sys) #!!! mode "λ" "κ" !!!
 	#p²s = pressures_squared(sys)
 	p_func = Array{Any}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
@@ -566,7 +575,7 @@ function interpolate_pressure_functions(sys; dt=1)
 		trange = 0:dt:tend
 	end
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	p_func = GasChromatographySystems.pressure_functions(sys)
+	p_func = GasChromatographySystems.pressure_functions(sys) #!!! mode "λ" "κ" !!!
 	p_itp = Array{Any}(undef, length(p_func))
 	for i=1:length(p_func)
 		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
@@ -596,7 +605,7 @@ with flow restriction ``κ_{i,j} = \\int_0^{L_{i,j}} η(T_{i,j})T_{i,j}/d_{i,j}^
 * `sys`: System structure of the capillary system for which the flow balance is set up.
 """
 function flow_functions(sys)
-	p_func = pressure_functions(sys)
+	p_func = pressure_functions(sys) #!!! mode "λ" "κ" !!!
 	F_func = Array{Function}(undef, ne(sys.g))
 	E = collect(edges(sys.g))
 	srcE = src.(E)
@@ -613,7 +622,7 @@ end
 
 # flow_functions version with p2fun
 function flow_functions(sys, p2fun)
-	p_func = pressure_functions(sys, p2fun)
+	p_func = pressure_functions(sys, p2fun) #!!! mode "λ" "κ" !!!
 	F_func = Array{Function}(undef, ne(sys.g))
 	E = collect(edges(sys.g))
 	srcE = src.(E)
@@ -645,7 +654,7 @@ with flow restriction, pressures ``p_i`` resp. ``p_j`` at the vertices ``i`` res
 * `sys`: System structure of the capillary system for which the flow balance is set up.
 """
 function holdup_time_functions(sys)
-	p_func = GasChromatographySystems.pressure_functions(sys)
+	p_func = GasChromatographySystems.pressure_functions(sys) #!!! mode "λ" "κ" !!!
 	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
 	E = collect(GasChromatographySystems.edges(sys.g))
 	srcE = GasChromatographySystems.src.(E)
@@ -662,7 +671,7 @@ end
 
 function holdup_time_functions(sys, p2fun)
 	# collecting the hold-up time functions of every edge as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
-	p_func = pressure_functions(sys, p2fun)
+	p_func = pressure_functions(sys, p2fun) #!!! mode "λ" "κ" !!!
 	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
 	E = collect(GasChromatographySystems.edges(sys.g))
 	srcE = GasChromatographySystems.src.(E)

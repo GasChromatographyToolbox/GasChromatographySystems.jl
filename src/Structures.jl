@@ -316,6 +316,7 @@ end
 Structure describing a GC system. 
 
 # Arguments
+* `name`: Name of the GC system.
 * `g`: The graph representation of the GC system, using `SimpleDiGraph` from `Graphs.jl`. 
 * `pressurepoints`: The vertices of graph `g` and their pressure programs. These are structures of type `PressurePoint`. 
 * `modules`: The edges of graph `g`. These are column segments of type `ModuleColumn` or thermal modulator points of type `ModuleTM`.
@@ -363,6 +364,7 @@ Definition of the graph:
 
 """
 struct System
+	name::String  # Name for the system, can be empty
 	g::Graphs.SimpleDiGraph{Int}
 	pressurepoints::Array{PressurePoint}
 	modules::Array{AbstractModule}

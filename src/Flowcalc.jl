@@ -398,6 +398,84 @@ function build_pressure_squared_functions_κ(sys, solutions)
 end
 
 """
+	save_build_pressure_squared_functions(sys; mode="λ")
+
+Constructs and saves the array of functions of the solutions for the unkown squared pressures of the flow balance equations of the system of capillaries `sys`.
+
+The arguments for the build functions are arrays of the ordered known squared pressures ``p^2``, the ordered known flow permabilities ``λ`` resp. flow restrictions ``κ``, the ordered known flows ``F`` and constant ``A = π/256 p_n/T_n``.  
+
+These build functions have to be evaluated by `eval(p2fun)` before usage.
+
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+* `filename`: Filename, where the solution functions are saved. Default `pwd()*"/p2fun_"*sys.name` attached with `"_λ.jl"` or `"_κ.jl"`, depending on `mode`.
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
+"""
+function save_build_pressure_squared_functions(sys; filename=pwd()*"/p2fun_"*sys.name, mode="λ")
+	if mode == "λ"
+		return save_build_pressure_squared_functions_λ(sys, filename, GasChromatographySystems.solve_balance(sys; mode="λ"))
+	elseif mode == "κ"
+		return save_build_pressure_squared_functions_κ(sys, filename, GasChromatographySystems.solve_balance(sys; mode="κ"))
+	else
+        error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
+	end
+end
+
+function save_build_pressure_squared_functions_λ(sys, filename, solutions)
+	#build the function for the squared pressures at the unknown vertices from the symbolic expressions of the solutions of the solved balance equations
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+	i_unknown_F = GasChromatographySystems.unknown_F(sys)
+	i_unknown_λ = GasChromatographySystems.unknown_λ(sys)
+
+	i_known_p = collect(1:nv(sys.g))[Not(i_unknown_p)]
+	i_known_F = collect(1:ne(sys.g))[Not(i_unknown_F)]
+	i_known_λ = collect(1:ne(sys.g))[Not(i_unknown_λ)]
+	
+	#solutions = GasChromatographySystems.solve_balance_λ(sys)
+	p_solution = Array{Expr}(undef, length(i_unknown_p))
+	for i=1:length(i_unknown_p)
+		# order of the parameters defined here, if the system is changed with definition of pressures or flows, this also has to change => reevaluate this equation
+		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [λ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
+               expression = Val{true}, # must be set to true for saving
+               target = Symbolics.JuliaTarget(),
+               parallel=nothing)
+		p_solution[i] = pfun
+	end
+	file = filename*"_λ.jl"
+	write(file, string(p_solution))
+	return p_solution, file
+end
+
+function save_build_pressure_squared_functions_κ(sys, filename, solutions)
+	#build the function for the squared pressures at the unknown vertices from the symbolic expressions of the solutions of the solved balance equations
+	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
+
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+	i_unknown_F = GasChromatographySystems.unknown_F(sys)
+	i_unknown_λ = GasChromatographySystems.unknown_λ(sys)
+
+	i_known_p = collect(1:nv(sys.g))[Not(i_unknown_p)]
+	i_known_F = collect(1:ne(sys.g))[Not(i_unknown_F)]
+	i_known_λ = collect(1:ne(sys.g))[Not(i_unknown_λ)]
+	
+	#solutions = GasChromatographySystems.solve_balance_κ(sys)
+	p_solution = Array{Function}(undef, length(i_unknown_p))
+	for i=1:length(i_unknown_p)
+		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [κ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
+               expression = Val{true}, # must be set to true for saving
+               target = Symbolics.JuliaTarget(),
+               parallel=nothing)
+		p_solution[i] = pfun
+	end
+	file = filename*"_κ.jl"
+	write(file, string(p_solution))
+	return p_solution, file
+end
+
+
+"""
 	substitute_pressure_squared_functions(p2fun, sys; mode="λ")
 
 Substitutes the the pressure functions (solutions to the flow balance equations) with the known quantities of pressures, flows, flow restictions/permabilities.

@@ -636,6 +636,38 @@ function pressure_functions(sys)
 end
 
 """
+	interpolate_pressure_functions(sys, p2fun; dt=1)
+
+Interpolates (linearly) all pressure funtions at the vertices of the system of capillaries `sys` between the time steps `dt`. For the speed of the simulation these interpolated functions are faster than the pure solution functions of the flow balance equations.
+
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+* `p2fun`: Julia function of the solutions of the flow balance equations from `build_pressure_squared_functions(sys; mode="λ")`
+* `dt`: time steps, where the original pressure function is evaluated. Inbetween these time steps the pressure function is linearly interpolated. 
+"""
+function interpolate_pressure_functions(sys, p2fun; dt=1)
+	tsteps = GasChromatographySystems.common_timesteps(sys)
+	tend = sum(tsteps)
+	if all(degree(sys.g).<3) # no split/merge nodes, straight graph -> pressure at nodes is linear
+		trange = cumsum(tsteps)
+	else
+		trange = 0:dt:tend
+	end
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+	p_func = GasChromatographySystems.pressure_functions(sys, p2fun) #!!! mode "λ" "κ" !!!
+	p_itp = Array{Any}(undef, length(p_func))
+	for i=1:length(p_func)
+		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
+		if i ∈ i_unknown_p
+			p_itp[i] = LinearInterpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
+		else
+			p_itp[i] = p_func[i]
+		end # no additional interpolation, if the pressure is allready defined by a linear program
+	end
+	return p_itp
+end
+
+"""
 	interpolate_pressure_functions(sys; dt=1)
 
 Interpolates (linearly) all pressure funtions at the vertices of the system of capillaries `sys` between the time steps `dt`. For the speed of the simulation these interpolated functions are faster than the pure solution functions of the flow balance equations.

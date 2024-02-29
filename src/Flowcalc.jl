@@ -132,6 +132,26 @@ function substitute_unknown_flows_κ(sys, bal_eq)
 	return sub_bal_eq
 end
 
+function export_balance_equations_for_Mathematica(subst_bal_eq; filename="bal_eq_for_Mathematica.txt")
+	# change format for Mathematica
+	bal_eq_char = collect(replace(string(subst_bal_eq), "Symbolics.Equation[" => "{", "~" => "=="))
+	bal_eq_char[end] = '}'
+	# add the unknown pressure for which the balance equations should be solved
+	unknown_p_char = collect(replace(string([P²[i] for i ∈ GasChromatographySystems.unknown_p(sys)]),  "Symbolics.Num[" => "{"))
+	unknown_p_char[end] = '}'
+	write(filename, "{"*join(bal_eq_char)*", "*join(unknown_p_char)*"}")
+end
+
+function import_solution_from_Mathmatica(file)
+	# do the Symbols have to be defined before?
+	sol_str = read(file, String)
+	# change the format for Julia
+	translate_sol_str = replace(sol_str, r"P²\[([0-9]+)\] -> " => "", "{" => "Symbolics.Num[", "}" => "]")
+	# parse the string to convert it to symbolic expressions
+	solution = eval(Meta.parse(translate_sol_str))
+	return solution
+end
+
 """
    unknown_F(sys)
 
@@ -398,26 +418,78 @@ function build_pressure_squared_functions_κ(sys, solutions)
 end
 
 """
-	save_build_pressure_squared_functions(sys; mode="λ")
+    check_expressions_λ_κ(sol; mode="λ", n=100)
 
-Constructs and saves the array of functions of the solutions for the unkown squared pressures of the flow balance equations of the system of capillaries `sys`.
+Checks the expressions of the array `sol` (solutions to the flow balance equations) if they use the flow permeabilities λ or the flow restrictions κ and substitutes them if needed. 
 
-The arguments for the build functions are arrays of the ordered known squared pressures ``p^2``, the ordered known flow permabilities ``λ`` resp. flow restrictions ``κ``, the ordered known flows ``F`` and constant ``A = π/256 p_n/T_n``.  
+# Arguments
+* `sol`: Symbolic expressions (of the solutions for the flow balance equations) 
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
+* `n`: Maximum of the number of expected symbols λ resp. κ. Could be replaced by the number of edges of the used system `n = ne(sys.g)`. 
+"""
+function check_expressions_λ_κ(sol; mode="λ", n=100)
+	symbols = unique(vcat(Symbolics.get_variables.(sol)...)) # all unique symbols in the array of expressions `sol`
+	@variables λ[1:n], κ[1:n] # how big should they be??? -> count them in `symbols`
+	count_λ = count([any(isequal.(λ[i], symbols)) for i=1:n])
+	count_κ = count([any(isequal.(κ[i], symbols)) for i=1:n])
+	if count_λ == 0 && count_κ == 0
+		error("Solutions do not contain symbols λ or κ.")
+	elseif count_λ != 0 && count_κ != 0
+		error("Solutions contain both symbols λ and κ.")
+	elseif count_λ != 0 && count_κ == 0 && mode == "λ"
+		# everything as it should be
+		return true, sol
+	elseif count_λ == 0 && count_κ != 0 && mode == "κ"
+		# everything as it should be
+		return true, sol
+	elseif count_λ == 0 && count_κ != 0 && mode == "λ"
+		# substitute κ with λ
+		sub_dict = Dict([κ[i] => 1/λ[i] for i=1:count_κ])
+		sub_sol = substitute(sol, sub_dict)
+		return false, sub_sol
+	elseif count_λ != 0 && count_κ == 0 && mode == "κ"
+		# substitute λ with κ
+		sub_dict = Dict([λ[i] => 1/κ[i] for i=1:count_λ])
+		sub_sol = substitute(sol, sub_dict)
+		return false, sub_sol
+	end
+end
 
-These build functions have to be evaluated by `eval(p2fun)` before usage.
+"""
+	save_build_pressure_squared_functions(sys, solution; filename=pwd()*"/p2fun_"*sys.name, mode="λ")
+
+Constructs and saves the array of functions of the solutions `solution` for the unkown squared pressures of the flow balance equations of the system of capillaries `sys`.
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
 * `filename`: Filename, where the solution functions are saved. Default `pwd()*"/p2fun_"*sys.name` attached with `"_λ.jl"` or `"_κ.jl"`, depending on `mode`.
 * `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
+
+# Output
+A dictionary with the folowing keys is saved in a `.jl` file:
+* `"p2fun"`: the build function of the solutions
+* `"i_known_p"`: the indices of the known pressures.
+* `"i_known_λ"`: the indices of the known flow permeabilities.
+* `"i_known_F"`: the indices of the known flows.
+* `"mode"`: mode of the functions using flow permeabilities λ or flow restrictions κ.
+
+# Loading
+The saved dictionary can easily be loaded into Julia by
+```Julia
+p2fun_load = include("p2fun_saved.jl")
+```
+The build functions have to be evaluated by `eval.(p2fun_load["p2fun"])` before usage. The arguments for the squared pressure functions are the ordered known squared pressures ``p^2``, the ordered known flow permabilities ``λ`` resp. flow restrictions ``κ``, the ordered known flows ``F`` and constant ``A = π/256 p_n/T_n``. 
 """
-function save_build_pressure_squared_functions(sys; filename=pwd()*"/p2fun_"*sys.name, mode="λ")
+function save_build_pressure_squared_functions(sys, solution; filename=pwd()*"/p2fun_"*sys.name, mode="λ")
+	# make here a check for the symbols used in the solutions expressions and select the mode based on this
 	if mode == "λ"
-		return save_build_pressure_squared_functions_λ(sys, filename, GasChromatographySystems.solve_balance(sys; mode="λ"))
+		check_sol = check_expressions_λ_κ(solution; mode="λ", n=100)[2]
+		return save_build_pressure_squared_functions_λ(sys, filename, check_sol)
 	elseif mode == "κ"
-		return save_build_pressure_squared_functions_κ(sys, filename, GasChromatographySystems.solve_balance(sys; mode="κ"))
+		check_sol = check_expressions_λ_κ(solution; mode="κ", n=100)[2]
+		return save_build_pressure_squared_functions_κ(sys, filename, check_sol)
 	else
-        error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
+		error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
 	end
 end
 
@@ -438,14 +510,15 @@ function save_build_pressure_squared_functions_λ(sys, filename, solutions)
 	for i=1:length(i_unknown_p)
 		# order of the parameters defined here, if the system is changed with definition of pressures or flows, this also has to change => reevaluate this equation
 		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [λ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
-               expression = Val{true}, # must be set to true for saving
-               target = Symbolics.JuliaTarget(),
-               parallel=nothing)
+			   expression = Val{true}, # must be set to true for saving
+			   target = Symbolics.JuliaTarget(),
+			   parallel=nothing)
 		p_solution[i] = pfun
 	end
 	file = filename*"_λ.jl"
-	write(file, string(p_solution))
-	return p_solution, file
+	p2fun_dict = Dict("p2fun" => p_solution, "i_known_p" => i_known_p, "i_known_λ" => i_known_λ, "i_known_F" => i_known_F, "mode" => "λ")
+	write(file, string(p2fun_dict))
+	return p2fun_dict, file
 end
 
 function save_build_pressure_squared_functions_κ(sys, filename, solutions)
@@ -464,14 +537,15 @@ function save_build_pressure_squared_functions_κ(sys, filename, solutions)
 	p_solution = Array{Function}(undef, length(i_unknown_p))
 	for i=1:length(i_unknown_p)
 		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [κ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
-               expression = Val{true}, # must be set to true for saving
-               target = Symbolics.JuliaTarget(),
-               parallel=nothing)
+			   expression = Val{true}, # must be set to true for saving
+			   target = Symbolics.JuliaTarget(),
+			   parallel=nothing)
 		p_solution[i] = pfun
 	end
 	file = filename*"_κ.jl"
-	write(file, string(p_solution))
-	return p_solution, file
+	p2fun_dict = Dict("p2fun" => p_solution, "i_known_p" => i_known_p, "i_known_λ" => i_known_λ, "i_known_F" => i_known_F, "mode" => "κ")
+	write(file, string(p2fun_dict))
+	return p2fun_dict, file
 end
 
 

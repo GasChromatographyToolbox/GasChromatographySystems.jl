@@ -132,7 +132,9 @@ function substitute_unknown_flows_κ(sys, bal_eq)
 	return sub_bal_eq
 end
 
-function export_balance_equations_for_Mathematica(subst_bal_eq; filename="bal_eq_for_Mathematica.txt")
+function export_balance_equations_for_Mathematica(sys; filename="bal_eq_for_Mathematica.txt")
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+	subst_bal_eq = GasChromatographySystems.substitute_unknown_flows(sys)
 	# change format for Mathematica
 	bal_eq_char = collect(replace(string(subst_bal_eq), "Symbolics.Equation[" => "{", "~" => "=="))
 	bal_eq_char[end] = '}'
@@ -143,6 +145,7 @@ function export_balance_equations_for_Mathematica(subst_bal_eq; filename="bal_eq
 end
 
 function import_solution_from_Mathmatica(file)
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 	# do the Symbols have to be defined before?
 	sol_str = read(file, String)
 	# change the format for Julia

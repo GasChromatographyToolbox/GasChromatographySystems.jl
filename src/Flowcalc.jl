@@ -132,6 +132,29 @@ function substitute_unknown_flows_κ(sys, bal_eq)
 	return sub_bal_eq
 end
 
+function export_balance_equations_for_Mathematica(sys; filename="bal_eq_for_Mathematica.txt")
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+	subst_bal_eq = GasChromatographySystems.substitute_unknown_flows(sys)
+	# change format for Mathematica
+	bal_eq_char = collect(replace(string(subst_bal_eq), "Symbolics.Equation[" => "{", "~" => "=="))
+	bal_eq_char[end] = '}'
+	# add the unknown pressure for which the balance equations should be solved
+	unknown_p_char = collect(replace(string([P²[i] for i ∈ GasChromatographySystems.unknown_p(sys)]),  "Symbolics.Num[" => "{"))
+	unknown_p_char[end] = '}'
+	write(filename, "{"*join(bal_eq_char)*", "*join(unknown_p_char)*"}")
+end
+
+function import_solution_from_Mathmatica(file)
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+	# do the Symbols have to be defined before?
+	sol_str = read(file, String)
+	# change the format for Julia
+	translate_sol_str = replace(sol_str, r"P²\[([0-9]+)\] -> " => "", "{" => "Symbolics.Num[", "}" => "]")
+	# parse the string to convert it to symbolic expressions
+	solution = eval(Meta.parse(translate_sol_str))
+	return solution
+end
+
 """
    unknown_F(sys)
 
@@ -398,6 +421,138 @@ function build_pressure_squared_functions_κ(sys, solutions)
 end
 
 """
+    check_expressions_λ_κ(sol; mode="λ", n=100)
+
+Checks the expressions of the array `sol` (solutions to the flow balance equations) if they use the flow permeabilities λ or the flow restrictions κ and substitutes them if needed. 
+
+# Arguments
+* `sol`: Symbolic expressions (of the solutions for the flow balance equations) 
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
+* `n`: Maximum of the number of expected symbols λ resp. κ. Could be replaced by the number of edges of the used system `n = ne(sys.g)`. 
+"""
+function check_expressions_λ_κ(sol; mode="λ", n=100)
+	symbols = unique(vcat(Symbolics.get_variables.(sol)...)) # all unique symbols in the array of expressions `sol`
+	@variables λ[1:n], κ[1:n] # how big should they be??? -> count them in `symbols`
+	count_λ = count([any(isequal.(λ[i], symbols)) for i=1:n])
+	count_κ = count([any(isequal.(κ[i], symbols)) for i=1:n])
+	if count_λ == 0 && count_κ == 0
+		error("Solutions do not contain symbols λ or κ.")
+	elseif count_λ != 0 && count_κ != 0
+		error("Solutions contain both symbols λ and κ.")
+	elseif count_λ != 0 && count_κ == 0 && mode == "λ"
+		# everything as it should be
+		return true, sol
+	elseif count_λ == 0 && count_κ != 0 && mode == "κ"
+		# everything as it should be
+		return true, sol
+	elseif count_λ == 0 && count_κ != 0 && mode == "λ"
+		# substitute κ with λ
+		sub_dict = Dict([κ[i] => 1/λ[i] for i=1:count_κ])
+		sub_sol = substitute(sol, sub_dict)
+		return false, sub_sol
+	elseif count_λ != 0 && count_κ == 0 && mode == "κ"
+		# substitute λ with κ
+		sub_dict = Dict([λ[i] => 1/κ[i] for i=1:count_λ])
+		sub_sol = substitute(sol, sub_dict)
+		return false, sub_sol
+	end
+end
+
+"""
+	save_build_pressure_squared_functions(sys, solution; filename=pwd()*"/p2fun_"*sys.name, mode="λ")
+
+Constructs and saves the array of functions of the solutions `solution` for the unkown squared pressures of the flow balance equations of the system of capillaries `sys`.
+
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+* `filename`: Filename, where the solution functions are saved. Default `pwd()*"/p2fun_"*sys.name` attached with `"_λ.jl"` or `"_κ.jl"`, depending on `mode`.
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
+
+# Output
+A dictionary with the folowing keys is saved in a `.jl` file:
+* `"p2fun"`: the build function of the solutions
+* `"i_known_p"`: the indices of the known pressures.
+* `"i_known_λ"`: the indices of the known flow permeabilities.
+* `"i_known_F"`: the indices of the known flows.
+* `"mode"`: mode of the functions using flow permeabilities λ or flow restrictions κ.
+
+# Loading
+The saved dictionary can easily be loaded into Julia by
+```Julia
+p2fun_load = include("p2fun_saved.jl")
+```
+The build functions have to be evaluated by `eval.(p2fun_load["p2fun"])` before usage. The arguments for the squared pressure functions are the ordered known squared pressures ``p^2``, the ordered known flow permabilities ``λ`` resp. flow restrictions ``κ``, the ordered known flows ``F`` and constant ``A = π/256 p_n/T_n``. 
+"""
+function save_build_pressure_squared_functions(sys, solution; filename=pwd()*"/p2fun_"*sys.name, mode="λ")
+	# make here a check for the symbols used in the solutions expressions and select the mode based on this
+	if mode == "λ"
+		check_sol = check_expressions_λ_κ(solution; mode="λ", n=100)[2]
+		return save_build_pressure_squared_functions_λ(sys, filename, check_sol)
+	elseif mode == "κ"
+		check_sol = check_expressions_λ_κ(solution; mode="κ", n=100)[2]
+		return save_build_pressure_squared_functions_κ(sys, filename, check_sol)
+	else
+		error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
+	end
+end
+
+function save_build_pressure_squared_functions_λ(sys, filename, solutions)
+	#build the function for the squared pressures at the unknown vertices from the symbolic expressions of the solutions of the solved balance equations
+	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+	i_unknown_F = GasChromatographySystems.unknown_F(sys)
+	i_unknown_λ = GasChromatographySystems.unknown_λ(sys)
+
+	i_known_p = collect(1:nv(sys.g))[Not(i_unknown_p)]
+	i_known_F = collect(1:ne(sys.g))[Not(i_unknown_F)]
+	i_known_λ = collect(1:ne(sys.g))[Not(i_unknown_λ)]
+	
+	#solutions = GasChromatographySystems.solve_balance_λ(sys)
+	p_solution = Array{Expr}(undef, length(i_unknown_p))
+	for i=1:length(i_unknown_p)
+		# order of the parameters defined here, if the system is changed with definition of pressures or flows, this also has to change => reevaluate this equation
+		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [λ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
+			   expression = Val{true}, # must be set to true for saving
+			   target = Symbolics.JuliaTarget(),
+			   parallel=nothing)
+		p_solution[i] = pfun
+	end
+	file = filename*"_λ.jl"
+	p2fun_dict = Dict("p2fun" => p_solution, "i_known_p" => i_known_p, "i_known_λ" => i_known_λ, "i_known_F" => i_known_F, "mode" => "λ")
+	write(file, string(p2fun_dict))
+	return p2fun_dict, file
+end
+
+function save_build_pressure_squared_functions_κ(sys, filename, solutions)
+	#build the function for the squared pressures at the unknown vertices from the symbolic expressions of the solutions of the solved balance equations
+	@variables A, P²[1:nv(sys.g)], κ[1:ne(sys.g)], F[1:ne(sys.g)]
+
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+	i_unknown_F = GasChromatographySystems.unknown_F(sys)
+	i_unknown_λ = GasChromatographySystems.unknown_λ(sys)
+
+	i_known_p = collect(1:nv(sys.g))[Not(i_unknown_p)]
+	i_known_F = collect(1:ne(sys.g))[Not(i_unknown_F)]
+	i_known_λ = collect(1:ne(sys.g))[Not(i_unknown_λ)]
+	
+	#solutions = GasChromatographySystems.solve_balance_κ(sys)
+	p_solution = Array{Function}(undef, length(i_unknown_p))
+	for i=1:length(i_unknown_p)
+		pfun = build_function(solutions[i], [[P²[j] for j=i_known_p]; [κ[j] for j=i_known_λ]; [F[j] for j=i_known_F]; A];
+			   expression = Val{true}, # must be set to true for saving
+			   target = Symbolics.JuliaTarget(),
+			   parallel=nothing)
+		p_solution[i] = pfun
+	end
+	file = filename*"_κ.jl"
+	p2fun_dict = Dict("p2fun" => p_solution, "i_known_p" => i_known_p, "i_known_λ" => i_known_λ, "i_known_F" => i_known_F, "mode" => "κ")
+	write(file, string(p2fun_dict))
+	return p2fun_dict, file
+end
+
+
+"""
 	substitute_pressure_squared_functions(p2fun, sys; mode="λ")
 
 Substitutes the the pressure functions (solutions to the flow balance equations) with the known quantities of pressures, flows, flow restictions/permabilities.
@@ -503,19 +658,20 @@ end
 =#
 
 """
-	pressure_functions(sys, p2fun)
+	pressure_functions(sys, p2fun; mode="λ")
 
 Collect all pressure functions as functions of time t at the vertices of the capillary system `sys`, either from defined input values or from the solutions of the flow balance equations. 
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
 * `p2fun`: Julia function of the solutions of the flow balance equations from `build_pressure_squared_functions(sys; mode="λ")`
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
-function pressure_functions(sys, p2fun)
+function pressure_functions(sys, p2fun; mode="λ")
 	# collect all pressure functions of all the vertices into an array of functions of time t. If the pressures are known (defined by time_steps and pressure_steps), than a linear interpolation 
 	# is used, if the pressures are unkown, the symbolic solution functions `p2fun` of these pressures are used with substituted values of the system.
 	# This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
-	pres = substitute_pressure_squared_functions(p2fun, sys) #!!! mode "λ" "κ" !!!
+	pres = substitute_pressure_squared_functions(p2fun, sys; mode=mode)
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
 	#p²s = pressures_squared(sys)
 	p_func = Array{Any}(undef, nv(sys.g))
@@ -533,15 +689,16 @@ function pressure_functions(sys, p2fun)
 end
 
 """
-	pressure_functions(sys)
+	pressure_functions(sys; mode="λ")
 
 Collect all pressure functions as functions of time t at the vertices of the capillary system `sys`, either from defined input values or from the solutions of the flow balance equations. 
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
-function pressure_functions(sys)
-	pres, unk = solve_pressure(sys) #!!! mode "λ" "κ" !!!
+function pressure_functions(sys; mode="λ")
+	pres, unk = solve_pressure(sys; mode=mode)
 	#p²s = pressures_squared(sys)
 	p_func = Array{Any}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
@@ -558,15 +715,17 @@ function pressure_functions(sys)
 end
 
 """
-	interpolate_pressure_functions(sys; dt=1)
+	interpolate_pressure_functions(sys, p2fun; dt=1, mode="λ")
 
 Interpolates (linearly) all pressure funtions at the vertices of the system of capillaries `sys` between the time steps `dt`. For the speed of the simulation these interpolated functions are faster than the pure solution functions of the flow balance equations.
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
+* `p2fun`: Julia function of the solutions of the flow balance equations from `build_pressure_squared_functions(sys; mode="λ")`
 * `dt`: time steps, where the original pressure function is evaluated. Inbetween these time steps the pressure function is linearly interpolated. 
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
-function interpolate_pressure_functions(sys; dt=1)
+function interpolate_pressure_functions(sys, p2fun; dt=1, mode="λ")
 	tsteps = GasChromatographySystems.common_timesteps(sys)
 	tend = sum(tsteps)
 	if all(degree(sys.g).<3) # no split/merge nodes, straight graph -> pressure at nodes is linear
@@ -575,7 +734,7 @@ function interpolate_pressure_functions(sys; dt=1)
 		trange = 0:dt:tend
 	end
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	p_func = GasChromatographySystems.pressure_functions(sys) #!!! mode "λ" "κ" !!!
+	p_func = GasChromatographySystems.pressure_functions(sys, p2fun; mode=mode) #!!! mode "λ" "κ" !!!
 	p_itp = Array{Any}(undef, length(p_func))
 	for i=1:length(p_func)
 		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
@@ -589,7 +748,39 @@ function interpolate_pressure_functions(sys; dt=1)
 end
 
 """
-	flow_functions(sys)
+	interpolate_pressure_functions(sys; dt=1, mode="λ")
+
+Interpolates (linearly) all pressure funtions at the vertices of the system of capillaries `sys` between the time steps `dt`. For the speed of the simulation these interpolated functions are faster than the pure solution functions of the flow balance equations.
+
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+* `dt`: time steps, where the original pressure function is evaluated. Inbetween these time steps the pressure function is linearly interpolated. 
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
+"""
+function interpolate_pressure_functions(sys; dt=1, mode="λ")
+	tsteps = GasChromatographySystems.common_timesteps(sys)
+	tend = sum(tsteps)
+	if all(degree(sys.g).<3) # no split/merge nodes, straight graph -> pressure at nodes is linear
+		trange = cumsum(tsteps)
+	else
+		trange = 0:dt:tend
+	end
+	i_unknown_p = GasChromatographySystems.unknown_p(sys)
+	p_func = GasChromatographySystems.pressure_functions(sys; mode=mode) #!!! mode "λ" "κ" !!!
+	p_itp = Array{Any}(undef, length(p_func))
+	for i=1:length(p_func)
+		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
+		if i ∈ i_unknown_p
+			p_itp[i] = LinearInterpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
+		else
+			p_itp[i] = p_func[i]
+		end # no additional interpolation, if the pressure is allready defined by a linear program
+	end
+	return p_itp
+end
+
+"""
+	flow_functions(sys; mode="λ")
 
 Collects the flow functions as functions of time t for all edges of the system of capillaries `sys`.
 
@@ -603,9 +794,10 @@ with flow restriction ``κ_{i,j} = \\int_0^{L_{i,j}} η(T_{i,j})T_{i,j}/d_{i,j}^
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
-function flow_functions(sys)
-	p_func = pressure_functions(sys) #!!! mode "λ" "κ" !!!
+function flow_functions(sys; mode="λ")
+	p_func = pressure_functions(sys; mode=mode) #!!! mode "λ" "κ" !!!
 	F_func = Array{Function}(undef, ne(sys.g))
 	E = collect(edges(sys.g))
 	srcE = src.(E)
@@ -621,8 +813,8 @@ function flow_functions(sys)
 end
 
 # flow_functions version with p2fun
-function flow_functions(sys, p2fun)
-	p_func = pressure_functions(sys, p2fun) #!!! mode "λ" "κ" !!!
+function flow_functions(sys, p2fun; mode="λ")
+	p_func = pressure_functions(sys, p2fun, mode=mode)
 	F_func = Array{Function}(undef, ne(sys.g))
 	E = collect(edges(sys.g))
 	srcE = src.(E)
@@ -638,7 +830,7 @@ function flow_functions(sys, p2fun)
 end
 
 """
-	holdup_time_functions(sys)
+	holdup_time_functions(sys; mode="λ")
 
 Collects the hold-up time functions as functions of time t for all edges of the system of capillaries `sys`.
 
@@ -652,9 +844,10 @@ with flow restriction, pressures ``p_i`` resp. ``p_j`` at the vertices ``i`` res
 	
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
-function holdup_time_functions(sys)
-	p_func = GasChromatographySystems.pressure_functions(sys) #!!! mode "λ" "κ" !!!
+function holdup_time_functions(sys; mode="λ")
+	p_func = GasChromatographySystems.pressure_functions(sys; mode=mode) #!!! mode "λ" "κ" !!!
 	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
 	E = collect(GasChromatographySystems.edges(sys.g))
 	srcE = GasChromatographySystems.src.(E)
@@ -669,9 +862,9 @@ function holdup_time_functions(sys)
 	return tM_func
 end
 
-function holdup_time_functions(sys, p2fun)
+function holdup_time_functions(sys, p2fun; mode="λ")
 	# collecting the hold-up time functions of every edge as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
-	p_func = pressure_functions(sys, p2fun) #!!! mode "λ" "κ" !!!
+	p_func = pressure_functions(sys, p2fun; mode=mode) #!!! mode "λ" "κ" !!!
 	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
 	E = collect(GasChromatographySystems.edges(sys.g))
 	srcE = GasChromatographySystems.src.(E)
@@ -687,7 +880,7 @@ function holdup_time_functions(sys, p2fun)
 end
 
 """
-	holdup_time_path(sys, numpaths)
+	holdup_time_path(sys, numpaths; mode="λ")
 
 Calculates the hold-up times of the `numpaths` paths as functions of time t of the system of capillaries `sys`.
 
@@ -696,9 +889,10 @@ The hold-up time over edge `i => j` is calculated as
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
 * `numpaths`: Number of the different paths between inlet and outlets of system `sys`.
+* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
-function holdup_time_path(sys, num_paths)
-	tM = holdup_time_functions(sys)
+function holdup_time_path(sys, num_paths; mode="λ")
+	tM = holdup_time_functions(sys; mode=mode)
 	paths = all_paths(sys.g, num_paths)[2]
 	
 	tMp = Array{Function}(undef, num_paths)
@@ -710,9 +904,9 @@ function holdup_time_path(sys, num_paths)
 	return tMp
 end
 
-function holdup_time_path(sys, p2fun, num_paths)
+function holdup_time_path(sys, p2fun, num_paths; mode="λ")
 	# collecting the hold-up time functions of every path as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
-	tM = holdup_time_functions(sys, p2fun)
+	tM = holdup_time_functions(sys, p2fun; mode=mode)
 	paths = all_paths(sys.g, num_paths)[2]
 	
 	tMp = Array{Function}(undef, num_paths)

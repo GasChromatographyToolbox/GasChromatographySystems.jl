@@ -316,6 +316,7 @@ end
 Structure describing a GC system. 
 
 # Arguments
+* `name`: Name of the GC system.
 * `g`: The graph representation of the GC system, using `SimpleDiGraph` from `Graphs.jl`. 
 * `pressurepoints`: The vertices of graph `g` and their pressure programs. These are structures of type `PressurePoint`. 
 * `modules`: The edges of graph `g`. These are column segments of type `ModuleColumn` or thermal modulator points of type `ModuleTM`.
@@ -363,9 +364,10 @@ Definition of the graph:
 
 """
 struct System
+	name::String  # Name for the system, can be empty
 	g::Graphs.SimpleDiGraph{Int}
 	pressurepoints::Array{PressurePoint}
 	modules::Array{AbstractModule}
 	options::Options
-	System(g_,pressurepoints_,modules_,options_) = nv(g_)!=length(pressurepoints_) || ne(g_)!=length(modules_) ? error("Mismatch between number of nodes ($(nv(g_))) and number of pressure points ($(length(pressurepoints_))) and/or mismatch between number of edges ($(ne(g_))) and number of modules ($(length(modules_))).") : new(g_,pressurepoints_,modules_,options_)
+	System(name_, g_,pressurepoints_,modules_,options_) = nv(g_)!=length(pressurepoints_) || ne(g_)!=length(modules_) ? error("Mismatch between number of nodes ($(nv(g_))) and number of pressure points ($(length(pressurepoints_))) and/or mismatch between number of edges ($(ne(g_))) and number of modules ($(length(modules_))).") : new(name_, g_,pressurepoints_,modules_,options_)
 end

@@ -1066,6 +1066,7 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 #	end
 	return path_pos, peaklists_, solutions_, new_par_sys
 end
+=#
 # end - simulation of system
 
 # begin - thermal modulator specific functions
@@ -1085,7 +1086,7 @@ function smooth_rectangle(x, a, b, m)
 	end
 	return f
 end
-=#
+
 
 # smooth rectangle with mitpoint of the rising flank at 'xstart', after 'width' the falling flank, minimum values 'min' and maximum values 'max'. 
 function smooth_rectangle(x, xstart, width, min, max; flank=20)

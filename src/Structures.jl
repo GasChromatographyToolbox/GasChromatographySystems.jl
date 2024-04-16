@@ -38,7 +38,7 @@ Structure describing options for column modules.
 * `alg`: The algorithm used for the ODE solver. The algorithms `OwrenZen3()`, `OwrenZen4()` and `OwrenZen5()` are recommended.
 * `abstol`: The absolute tolerance for the ODE solver. Recommended value 1e-6 to 1e-8.
 * `reltol`: The relative tolerance for the ODE solver. Recommended value 1e-3 to 1e-5. 
-* `ng`: Option to calculate the simulation without a gradient (`ng = true`) or with a gradient (`ng = false`).
+* `ng`: Option to calculate the simulation without a gradient (`ng = true`, default) or with a gradient (`ng = false`).
 * `Tcontrol`: Option defining at which point of the column the temperature program is calculated. The options are `inlet` (x=0) and `outlet` (x=L).
 """
 struct ModuleColumnOptions
@@ -49,7 +49,7 @@ struct ModuleColumnOptions
 	Tcontrol::String    # temperature control at 'inlet' (top) or 'outlet' (bottom) of the column
 end
 
-function ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")
+function ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
 	ModuleColumnOptions(alg, abstol, reltol, ng, Tcontrol)
 end
 
@@ -66,7 +66,7 @@ Structure describing options for thermal modulator modules.
 * `abstol`: The absolute tolerance for the ODE solver. Recommended value 1e-6 to 1e-12.
 * `reltol`: The relative tolerance for the ODE solver. Recommended value 1e-3 to 1e-10.
 * `dtinit`: The initial step width for the ODE solver. A value of `L*1e-6`, with `L` the length of the modulator module, is recommend. 
-* `ng`: Option to calculate the simulation without a gradient (`ng = true`) or with a gradient (`ng = false`).
+* `ng`: Option to calculate the simulation without a gradient (`ng = true`, default) or with a gradient (`ng = false`).
 * `Tcontrol`: Option defining at which point of the column the temperature program is calculated. The options are `inlet` (x=0) and `outlet` (x=L).
 """
 struct ModuleTMOptions
@@ -143,13 +143,13 @@ function ModuleColumn(name, L, d, df, sp, T, F, opt::ModuleColumnOptions)
 	return col
 end
 
-function ModuleColumn(name, L, d, df, sp, tp; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")
+function ModuleColumn(name, L, d, df, sp, tp; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
 	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol)
 	TM = ModuleColumn(name, L, d, [d], df, [df], sp, tp, NaN, opt)
 	return TM
 end
 
-function ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")
+function ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
 	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol)
 	TM = ModuleColumn(name, L, d, [d], df, [df], sp, tp, flow, opt)
 	return TM
@@ -213,13 +213,13 @@ function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, F, opt::
 	return TM
 end
 
-function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=false, Tcontrol="inlet")
+function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 	opt = ModuleTMOptions(; Tcold_abs=Tcold_abs, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit, ng=ng, Tcontrol=Tcontrol)
 	TM = ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, NaN, opt)
 	return TM
 end
 
-function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=false, Tcontrol="inlet")
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 	opt = ModuleTMOptions(; Tcold_abs=Tcold_abs, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit, ng=ng, Tcontrol=Tcontrol)
 	TM = ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F, opt)
 	return TM

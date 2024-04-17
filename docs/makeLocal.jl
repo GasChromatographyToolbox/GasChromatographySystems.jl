@@ -39,7 +39,7 @@ makedocs(;
         "Examples" => "examples.md",
         "Docstrings" => "docstrings.md"
     ],
-    repo="github.com/JanLeppert/GasChromatographySystems.jl",
+    repo="github.com/GasChromatographyToolbox/GasChromatographySystems.jl",
     sitename="GasChromatographySystems",
     authors="Jan Leppert",
 )

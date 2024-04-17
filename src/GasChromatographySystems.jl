@@ -309,6 +309,7 @@ function plot_graph(sys; lay = Spring(), color=:lightblue, node_size=40, arrow_s
 	return fig
 end
 
+#=
 function plot_graph_with_flow(sys, t; lay = Spring(), color=:lightblue, node_size=80, arrow_size=20, arrow_shift=0.8, dataaspect=false, nlabels_fontsize=14, elabels_fontsize=14, elabels_distance = 20)
 	p_func = pressure_functions(sys)
 	F_func = flow_functions(sys)
@@ -332,6 +333,7 @@ function plot_graph_with_flow(sys, t; lay = Spring(), color=:lightblue, node_siz
 	end
 	return fig
 end
+=#
 
 function plot_graph_with_flow(sys, p2fun, t; lay = GasChromatographySystems.Spring(), color=:lightblue, node_size=80, arrow_size=20, arrow_shift=0.8, dataaspect=false, nlabels_fontsize=14, elabels_fontsize=14, elabels_distance = 20)
 	p_func = GasChromatographySystems.pressure_functions(sys, p2fun)
@@ -357,6 +359,7 @@ function plot_graph_with_flow(sys, p2fun, t; lay = GasChromatographySystems.Spri
 	return fig
 end
 
+#=
 function plot_flow_over_time(sys; dt=60.0)
 	#plotly()
 	F_func = flow_functions(sys)
@@ -368,6 +371,7 @@ function plot_flow_over_time(sys; dt=60.0)
 	end
 	return p_flow
 end
+=#
 
 function plot_flow_over_time(sys, p2fun; dt=60.0)
 	#plotly()
@@ -381,6 +385,7 @@ function plot_flow_over_time(sys, p2fun; dt=60.0)
 	return p_flow
 end
 
+#=
 function plot_pressure_over_time(sys; dt=60.0)
 	#plotly()
 	p_func = pressure_functions(sys)
@@ -392,6 +397,7 @@ function plot_pressure_over_time(sys; dt=60.0)
 	end
 	return p_pres
 end
+=#
 
 function plot_pressure_over_time(sys, p2fun; dt=60.0)
 	#plotly()
@@ -405,6 +411,7 @@ function plot_pressure_over_time(sys, p2fun; dt=60.0)
 	return p_pres
 end
 
+#=
 function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)
 	#plotly()
 	tMp_func = holdup_time_path(sys, num_paths)
@@ -416,6 +423,7 @@ function plot_holdup_time_path_over_time(sys, num_paths; dt=60.0)
 	end
 	return p_tM
 end
+=#
 
 function plot_holdup_time_path_over_time(sys, p2fun, num_paths; dt=60.0)
 	#plotly()
@@ -428,7 +436,9 @@ function plot_holdup_time_path_over_time(sys, p2fun, num_paths; dt=60.0)
 	end
 	return p_tM
 end
+# end - plotting of the graphs and functions
 
+# begin - system to parameters
 # transform system to GasChromatographySimulator.Parameters
 function all_stationary_phases(sys)
 	stat_phases = Array{String}(undef, ne(sys.g))
@@ -437,9 +447,7 @@ function all_stationary_phases(sys)
 	end
 	return stat_phases
 end
-# end - plotting of the graphs and functions
 
-# begin - system to parameters
 function common_solutes(db, sys)
 	# gives the soultes with common stationary phases between the database 'db' and the
 	# GC-System 'GCsys'
@@ -472,6 +480,7 @@ function common_solutes(db, sys)
 	return common_solutes
 end
 
+#=
 function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1)
 	# ng should be taken from the separat module options 
 	E = collect(edges(sys.g))
@@ -519,6 +528,7 @@ function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, d
 	end
 	return parameters
 end
+=#
 
 function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=true, dt=1, mode="λ")
 	# ng should be taken from the separat module options 
@@ -618,6 +628,7 @@ function common_edges(path1, path2)
 	return path2[findall(x->x in path2, path1)]
 end
 
+#=
 function positive_flow(sys)
 	F_func = flow_functions(sys)
 	tend = sum(common_timesteps(sys))
@@ -633,6 +644,7 @@ function positive_flow(sys)
 	end
 	return pos_Flow
 end
+=#
 
 function positive_flow(sys, p2fun; mode="λ")
 	F_func = flow_functions(sys, p2fun; mode=mode)
@@ -650,6 +662,7 @@ function positive_flow(sys, p2fun; mode="λ")
 	return pos_Flow
 end
 
+#=
 function path_possible(sys, paths)
 	#F_func = flow_functions(sys)
 	i_E = index_parameter(sys.g, paths)
@@ -660,6 +673,7 @@ function path_possible(sys, paths)
 	end
 	return possible
 end
+=#
 
 function path_possible(sys, p2fun, paths; mode="λ")
 	#F_func = flow_functions(sys)
@@ -708,11 +722,13 @@ function change_initial_focussed(par::GasChromatographySimulator.Parameters, pl;
 	return newpar
 end
 
+#=
 function simulate_along_paths(sys, paths, db_dataframe, selected_solutes; t₀=zeros(length(selected_solutes)), τ₀=zeros(length(selected_solutes)))
 	par_sys = graph_to_parameters(sys, db_dataframe, selected_solutes)
 	path_pos, peaklists, solutions, new_par_sys = simulate_along_paths(sys, paths, par_sys; t₀=t₀, τ₀=τ₀)
 	return path_pos, peaklists, solutions, new_par_sys
 end
+=#
 
 function simulate_along_paths(sys, p2fun, paths, db_dataframe, selected_solutes; t₀=zeros(length(selected_solutes)), τ₀=zeros(length(selected_solutes)), mode="λ")
 	par_sys = graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes, mode=mode)
@@ -720,6 +736,7 @@ function simulate_along_paths(sys, p2fun, paths, db_dataframe, selected_solutes;
 	return path_pos, peaklists, solutions, new_par_sys
 end
 
+#=
 function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), kwargsTM...)
 	
 	E = collect(edges(sys.g))
@@ -820,6 +837,7 @@ function simulate_along_paths(sys, paths, par_sys; t₀=zeros(length(par_sys[1].
 	end
 	return path_pos, peaklists, solutions, new_par_sys
 end
+=#
 
 function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), mode="λ", kwargsTM...)
 	
@@ -922,7 +940,7 @@ function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_
 	return path_pos, peaklists, solutions, new_par_sys
 end
 
-
+#=
 function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(length(par_sys[1].sub)), τ₀_focus=zeros(length(par_sys[1].sub)), pl_thread=true, kwargsTM...)
 	
 	E = collect(edges(sys.g))
@@ -1048,6 +1066,7 @@ function simulate_along_one_path(sys, path, par_sys; t₀=zeros(length(par_sys[1
 #	end
 	return path_pos, peaklists_, solutions_, new_par_sys
 end
+=#
 # end - simulation of system
 
 # begin - thermal modulator specific functions
@@ -1067,6 +1086,7 @@ function smooth_rectangle(x, a, b, m)
 	end
 	return f
 end
+
 
 # smooth rectangle with mitpoint of the rising flank at 'xstart', after 'width' the falling flank, minimum values 'min' and maximum values 'max'. 
 function smooth_rectangle(x, xstart, width, min, max; flank=20)

@@ -9,7 +9,7 @@ The structure of a complex GC system consists of four parts:
 3. Modules defining the features of the capillaries, e.g. dimensions and temperature.
 4. Additional options, e.g. typ of the mobile phase gas.
 
-ref to GasChromatographySystems.System
+(ref to GasChromatographySystems.System)
 
 ## GC system as a graph
 

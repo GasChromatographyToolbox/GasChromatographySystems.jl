@@ -1,6 +1,6 @@
 # Definition of a GC system
 
-In this segment the structures and function, which are used to define a complex GC system, wil be presented.
+In this segment the structures and function, which are used to define a complex GC system, will be presented.
 
 The structure of a complex GC system consists of four parts:
 

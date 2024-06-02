@@ -20,7 +20,7 @@ using Test, CSV, DataFrames, GasChromatographySystems
 	insertcols!(db_dataframe, 1, :No => collect(1:length(db_dataframe.Name)))
     selected_solutes = ["5-Nonanol", "Undecane", "2-Nonanol"]
     # graph to parameters
-    sol_ex_series = GasChromatographySystems.solve_balance(ex_series, sys);
+    sol_ex_series = GasChromatographySystems.solve_balance(ex_series);
     p2fun_series = GasChromatographySystems.build_pressure_squared_functions(ex_series, sol_ex_series)
     par_series = GasChromatographySystems.graph_to_parameters(ex_series, p2fun_series, db_dataframe, selected_solutes)
     @test par_series[1].col.sp == ex_series.modules[1].sp

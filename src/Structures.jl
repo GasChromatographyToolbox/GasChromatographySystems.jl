@@ -267,7 +267,7 @@ end
 default_TP() = GasChromatographySystems.TemperatureProgram([0.0, 1800.0], [40.0, 340.0])
 
 function TemperatureProgram(CP)
-	time_steps, temp_steps = GasChromatographySimulator.conventional_program([40.0, 2.0, 15.0, 150.0, 1.0, 10.0, 250.0, 3.0, 20.0, 300.0, 1.0])
+	time_steps, temp_steps = GasChromatographySimulator.conventional_program(CP)
 	prog = TemperatureProgram(time_steps, temp_steps)
 	return prog
 end

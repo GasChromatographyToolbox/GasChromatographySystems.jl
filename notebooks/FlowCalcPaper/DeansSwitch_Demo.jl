@@ -29,7 +29,7 @@ begin
 end
 
 # ╔═╡ 06dc4c69-768c-483c-9cf0-8fea965d788c
-p2fun_flow_dict = include("/Users/janleppert/Documents/GitHub/GCxGC_TM/notebooks/p2fun_DeansSwitchSystem_3Fin_λ.jl")
+p2fun_flow_dict = include("/Users/janleppert/Documents/GitHub/GasChromatographySystems/notebooks/FlowCalcPaper/p2fun_DeansSwitchSystem_3Fin_λ.jl")
 
 # ╔═╡ 64c1c01a-8a09-40b1-bfbd-a7668cde9b0b
 html"""<style>

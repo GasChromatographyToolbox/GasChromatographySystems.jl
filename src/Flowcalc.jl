@@ -7,7 +7,7 @@
 
 Constructing the flow balance equations of the capillary system `sys` in the form of an array of symbolic equations.
 
-For every inner vertice, the sum of ingoing flows (positive) and of outgoing flows (negative) are equated to zero.
+For every inner vertice the sum of ingoing flows (positive) and of outgoing flows (negative) are equated to zero.
 
 ```math
 \\Sum  F_{in} + \\Sum F_{out} = 0
@@ -144,7 +144,7 @@ function export_balance_equations_for_Mathematica(sys; filename="bal_eq_for_Math
 	write(filename, "{"*join(bal_eq_char)*", "*join(unknown_p_char)*"}")
 end
 
-function import_solution_from_Mathmatica(file)
+function import_solution_from_Mathmatica(sys, file)
 	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 	# do the Symbols have to be defined before?
 	sol_str = read(file, String)
@@ -321,7 +321,7 @@ function solve_balance_κ(sys, subst_bal_eq_κ)
 end
 
 """
-	build_pressure_squared_functions(sys; mode="λ")
+	build_pressure_squared_functions(sys, solutions; mode="λ")
 
 Construct array of functions of the solutions for the unkown squared pressures of the flow balance equations of the system of capillaries `sys`.
 
@@ -329,13 +329,14 @@ The arguments for the build functions are arrays of the ordered known squared pr
 	
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
+* `solutions`: The solutions of the flow balance equations for the unknown pressures as symbolic expressions.
 * `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
-function build_pressure_squared_functions(sys; mode="λ")
+function build_pressure_squared_functions(sys, solutions; mode="λ")
 	if mode == "λ"
-		return build_pressure_squared_functions_λ(sys, solve_balance(sys; mode="λ"))
+		return build_pressure_squared_functions_λ(sys, solutions)
 	elseif mode == "κ"
-		return build_pressure_squared_functions_κ(sys, solve_balance(sys; mode="κ"))
+		return build_pressure_squared_functions_κ(sys, solutions)
 	else
         error("Unknown `mode` selection. Use `mode = λ` for flow permeabilities or `mode = κ` for flow restrictions.")
 	end

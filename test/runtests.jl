@@ -20,17 +20,20 @@ using Test, CSV, DataFrames, GasChromatographySystems
 	insertcols!(db_dataframe, 1, :No => collect(1:length(db_dataframe.Name)))
     selected_solutes = ["5-Nonanol", "Undecane", "2-Nonanol"]
     # graph to parameters
-    p2fun_series = GasChromatographySystems.build_pressure_squared_functions(ex_series)
+    sol_ex_series = GasChromatographySystems.solve_balance(ex_series)
+    p2fun_series = GasChromatographySystems.build_pressure_squared_functions(ex_series, sol_ex_series)
     par_series = GasChromatographySystems.graph_to_parameters(ex_series, p2fun_series, db_dataframe, selected_solutes)
     @test par_series[1].col.sp == ex_series.modules[1].sp
-    p2fun_split = GasChromatographySystems.build_pressure_squared_functions(ex_split)
+    sol_ex_split = GasChromatographySystems.solve_balance(ex_split)
+    p2fun_split = GasChromatographySystems.build_pressure_squared_functions(ex_split, sol_ex_split)
     par_split = GasChromatographySystems.graph_to_parameters(ex_split, p2fun_split, db_dataframe, selected_solutes)
     @test par_split[2].col.sp == ex_split.modules[2].sp 
     #par_GCxGC_TM_simp = GasChromatographySystems.graph_to_parameters(ex_GCxGC_TM_simp, db_dataframe, selected_solutes)
     #@test par_GCxGC_TM_simp[1].col.sp == ex_GCxGC_TM_simp.modules[1].stationary_phase 
     #par_GCxGC_FM_simp = GasChromatographySystems.graph_to_parameters(ex_GCxGC_FM_simp, db_dataframe, selected_solutes) 
     #@test par_GCxGC_FM_simp[1].col.sp == ex_GCxGC_FM_simp.modules[1].stationary_phase
-    p2fun_GCxGC_TM = GasChromatographySystems.build_pressure_squared_functions(ex_GCxGC_TM)
+    sol_ex_GCxGC_TM = GasChromatographySystems.solve_balance(ex_GCxGC_TM)
+    p2fun_GCxGC_TM = GasChromatographySystems.build_pressure_squared_functions(ex_GCxGC_TM, sol_ex_GCxGC_TM)
     par_GCxGC_TM = GasChromatographySystems.graph_to_parameters(ex_GCxGC_TM, p2fun_GCxGC_TM, db_dataframe, selected_solutes)
     @test par_GCxGC_TM[4].col.sp == ex_GCxGC_TM.modules[4].sp 
 #end

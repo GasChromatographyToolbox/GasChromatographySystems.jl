@@ -1302,12 +1302,15 @@ function peaklist_GCxGC(pl_end, PM)#, shift)
 	tR2 = pl_end.tR .- (fld.(pl_end.tR, PM).*PM)
 	Name = unique(pl_end.Name)
 	nsub = length(Name)
+	CAS = pl_end.CAS[[findfirst(Name[i].==pl_end.Name) for i=1:length(Name)]]
 	
 	sort_heights = Array{Array{Float64}}(undef, nsub)
 	sort_tR1 = Array{Array{Float64}}(undef, nsub)
 	sort_tR2 = Array{Array{Float64}}(undef, nsub)
 	mean_tR1 = Array{Float64}(undef, nsub)
 	mean_tR2 = Array{Float64}(undef, nsub)
+	sort_τR2 = Array{Array{Float64}}(undef, nsub)
+	mean_τR2 = Array{Float64}(undef, nsub)
 	for i=1:nsub
 		ii_name = findall(Name[i].==pl_end.Name)
 		sort_heights[i] = heights[ii_name]
@@ -1315,8 +1318,10 @@ function peaklist_GCxGC(pl_end, PM)#, shift)
 		sort_tR2[i] = tR2[ii_name]
 		mean_tR1[i] = sum(sort_tR1[i].*sort_heights[i])/sum(sort_heights[i])
 		mean_tR2[i] = sum(sort_tR2[i].*sort_heights[i])/sum(sort_heights[i])
+		sort_τR2[i] = pl_end.τR[ii_name]
+		mean_τR2[i] = sum(sort_τR2[i].*sort_heights[i])/sum(sort_heights[i])
 	end
-	return DataFrame(Name=Name, tR1=mean_tR1, tR2=mean_tR2, tR1s=sort_tR1, tR2s=sort_tR2, heights=sort_heights)
+	return DataFrame(Name=Name, CAS=CAS, tR1=mean_tR1, tR2=mean_tR2, τR2=mean_τR2, tR1s=sort_tR1, tR2s=sort_tR2, τR2s=sort_τR2, heights=sort_heights)
 end
 
 function heights_of_peaks(pl)

@@ -28,8 +28,8 @@ begin
 	TableOfContents(depth=4)
 end
 
-# ╔═╡ 06dc4c69-768c-483c-9cf0-8fea965d788c
-p2fun_flow_dict = include("/Users/janleppert/Documents/GitHub/GasChromatographySystems/notebooks/FlowCalcPaper/p2fun_DeansSwitchSystem_3Fin_λ.jl")
+# ╔═╡ 71902736-dea3-4c85-b067-e5d8d7c9ccb2
+p2fun_flow_dict = include(download("https://raw.githubusercontent.com/GasChromatographyToolbox/GasChromatographySystems.jl/main/notebooks/FlowCalcPaper/p2fun_DeansSwitchSystem_3Fin_%CE%BB.jl"))
 
 # ╔═╡ 64c1c01a-8a09-40b1-bfbd-a7668cde9b0b
 html"""<style>
@@ -44,7 +44,7 @@ main {
 md"""
 # Deans Switch System
 
-This notebook shows the example of a GC-System with a Deans Switch and two outlets at different pressures and using different heated zones. This system is described in section 4.2.3 of the corresponding paper **Generalized flow calculator for the gas flow in a network of capillaries used in gas chromatography** by _Jan Leppert_, _Tillman Brehmer_, _Peter Boeker_ and _Matthias Wüst_.
+This notebook shows the example of a GC-System with a Deans Switch and two outlets at different pressures and using different heated zones. This system is described in section 4.2.2 of the corresponding paper **Generalized flow calculator for the gas flow in a network of capillaries used in gas chromatography** by _Jan Leppert_, _Tillman Brehmer_, _Peter Boeker_ and _Matthias Wüst_.
 
 In the first part, "Free setup", all lengths and diameters of the capillaries in the system can be selected, as well as the temperature program of the GC oven, transferlines to atmospheric and vacuum detector and of the ingoing auxillary flow capillaries. The dimensions of the Deans Switch itself are fixed using the values from [1]. Th injector is assumed as an on-column injector with the same temperature as the GC oven. 
 
@@ -515,59 +515,6 @@ md"""
 Time slider (in s): $(@bind select_t_aux Slider(0.0:1.0:sum(TP.time_steps); show_value=true))
 """
 
-# ╔═╡ b9a2552d-d8e9-4d94-b0a5-097e4b03a843
-function UI_system_flow()
-	PlutoUI.combine() do Child
-		@htl("""
-		<table>
-			<tr>
-				<td></td>
-				<td></td>
-				<td></td>
-				<td>$(Child(UI_L_d((1.0, 0.15), "X1")))</td>
-				<td>$(Child(UI_L_d((0.5, 0.25), "X2")))</td>
-				<td>$(Child(UI_L_d_T_pout((1.0, 0.25, 280.0, "atm"), "X3")))</td>
-			</tr>
-			<tr>
-				<td></td>
-				<td></td>
-				<td></td>
-				<td></td>
-				<td></td>
-				<td>$(Child(UI_L_d_F_T((0.5, 1.0, 0.5, 30.0), "aux1")))</td>
-			</tr>
-			<tr>
-				<td>$(Child(UI_L_d_F((0.02, 0.53, 1.0), "Injector")))</td>
-				<td>$(Child(UI_L_d((1.0, 0.53), "Precolumn")))</td>
-				<td>$(Child(UI_L_d_phase((30.0, 0.32, 0.32), "GC column")))</td>
-				<td></td>
-				<td></td>
-				<td></td>
-			</tr>
-			<tr>
-				<td></td>
-				<td></td>
-				<td></td>
-				<td></td>
-				<td></td>
-				<td>$(Child(UI_L_d_F_T((0.5, 1.0, 0.5, 30.0), "aux2")))</td>
-			</tr>
-			<tr>
-				<td></td>
-				<td></td>
-				<td></td>
-				<td>$(Child(UI_L_d((1.0, 0.25), "Y1")))</td>
-				<td>$(Child(UI_L_d((1.0, 0.15), "Y2")))</td>
-				<td>$(Child(UI_L_d_T_pout((0.25, 0.15, 320.0, "vac"), "Y3")))</td>
-			</tr>
-		</table>
-		""")
-	end
-end
-
-# ╔═╡ 39ea740d-a6de-4e68-aaa1-6517935c3a93
-@bind values confirm(UI_system_flow())
-
 # ╔═╡ ed7ea63d-66f7-4fe2-be14-6f916e548d10
 function UI_flowsplit(def, title)
 	PlutoUI.combine() do Child
@@ -812,6 +759,59 @@ function UI_L_d_T_pout(def, title)
 		""")
 	end
 end
+
+# ╔═╡ b9a2552d-d8e9-4d94-b0a5-097e4b03a843
+function UI_system_flow()
+	PlutoUI.combine() do Child
+		@htl("""
+		<table>
+			<tr>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td>$(Child(UI_L_d((1.0, 0.15), "X1")))</td>
+				<td>$(Child(UI_L_d((0.5, 0.25), "X2")))</td>
+				<td>$(Child(UI_L_d_T_pout((1.0, 0.25, 280.0, "atm"), "X3")))</td>
+			</tr>
+			<tr>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td>$(Child(UI_L_d_F_T((0.5, 1.0, 0.5, 30.0), "aux1")))</td>
+			</tr>
+			<tr>
+				<td>$(Child(UI_L_d_F((0.02, 0.53, 1.0), "Injector")))</td>
+				<td>$(Child(UI_L_d((1.0, 0.53), "Precolumn")))</td>
+				<td>$(Child(UI_L_d_phase((30.0, 0.32, 0.32), "GC column")))</td>
+				<td></td>
+				<td></td>
+				<td></td>
+			</tr>
+			<tr>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td>$(Child(UI_L_d_F_T((0.5, 1.0, 0.5, 30.0), "aux2")))</td>
+			</tr>
+			<tr>
+				<td></td>
+				<td></td>
+				<td></td>
+				<td>$(Child(UI_L_d((1.0, 0.25), "Y1")))</td>
+				<td>$(Child(UI_L_d((1.0, 0.15), "Y2")))</td>
+				<td>$(Child(UI_L_d_T_pout((0.25, 0.15, 320.0, "vac"), "Y3")))</td>
+			</tr>
+		</table>
+		""")
+	end
+end
+
+# ╔═╡ 39ea740d-a6de-4e68-aaa1-6517935c3a93
+@bind values confirm(UI_system_flow())
 
 # ╔═╡ ed57c1f5-76de-48a5-bd1e-3e7172b2ad48
 function outpressure_select(pout_str)
@@ -3937,7 +3937,7 @@ version = "1.4.1+1"
 # ╟─f27920a2-00d5-11ef-0209-79647fcea22b
 # ╟─64c1c01a-8a09-40b1-bfbd-a7668cde9b0b
 # ╟─13569378-fba2-4551-8435-aaf2f13bfc66
-# ╠═a8bbc6cc-3bcb-43c8-9b00-f2b3e814c136
+# ╟─a8bbc6cc-3bcb-43c8-9b00-f2b3e814c136
 # ╠═a6a03024-d77d-499a-9617-5c142dad4db6
 # ╟─ec81a4e5-8916-46f5-bf1d-6a4781963bbb
 # ╟─7345afa9-27c7-472f-b8dc-a55b2fb34c78
@@ -3945,7 +3945,7 @@ version = "1.4.1+1"
 # ╟─dc2e6dfb-7f5a-462f-8fe8-912afa76478f
 # ╠═5bcfa4d6-6c4b-44ac-9473-f12d410b0ac7
 # ╟─e2df094e-ab54-43a6-8a9d-778031a576c0
-# ╠═06dc4c69-768c-483c-9cf0-8fea965d788c
+# ╠═71902736-dea3-4c85-b067-e5d8d7c9ccb2
 # ╟─b0451d2d-5a1b-4027-affb-f6531d11d1a5
 # ╠═6c701a8d-d6eb-4303-b000-ce864f222658
 # ╟─b0750420-37d2-4e7f-9c1e-584a4890db00

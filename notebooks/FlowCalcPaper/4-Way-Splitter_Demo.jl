@@ -4,6 +4,16 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 234ff02c-20c3-11ef-38b1-e5dead5ce8aa
 begin
 	using CSV, DataFrames
@@ -19,6 +29,9 @@ begin
 	TableOfContents(depth=4)
 end
 
+# ╔═╡ 97dbcfad-5ea6-480e-ae32-4dc50dd45508
+p2fun_load = include(download("https://raw.githubusercontent.com/GasChromatographyToolbox/GasChromatographySystems.jl/main/notebooks/FlowCalcPaper/p2fun_4WaySplitter_%CE%BB.jl"))
+
 # ╔═╡ 770d513e-48a3-484d-8c7d-b63b18aa7dca
 html"""<style>
 main {
@@ -31,6 +44,8 @@ main {
 # ╔═╡ 051f9b9a-9f20-4f7c-b43b-b0d0bc7504fc
 md"""
 # 4-Way-Splitter System
+
+This notebook shows the example of a GC-System with a 4-Way-Splitter inspired by the work of Tungkijanansin and Kulsing [1]. This system is described in section 4.2.1 of the corresponding paper **Generalized flow calculator for the gas flow in a network of capillaries used in gas chromatography** by _Jan Leppert_, _Tillman Brehmer_, _Peter Boeker_ and _Matthias Wüst_.
 
 Combination of two 2-Way-Splitters in parallal to achieve an even 4-way split of the flow from a 1st D column before send to a 2nd D column.
 
@@ -148,9 +163,9 @@ begin
 	# stationary phases
 	sps = ["Rxi5SilMS"; fill("", 11); ["Rxi17SilMS", ""]]
 	# temperature programs
-	TPs = fill(40.0, 14)
+	TPs = fill(40.0, 14) # same temperature for all segments
 	# inlet flow
-	F = 1.0
+	Flow = 1.0
 	# inlet pressure
 	pinP = NaN
 	# control pressure
@@ -160,7 +175,7 @@ begin
 end;
 
 # ╔═╡ b145f4de-aae3-4c14-8db1-7ed9a9cabb02
-sys = FourParallelComplex(Ls, ds, dfs, sps, TPs, F, pinP, pconP, pout)
+sys = FourParallelComplex(Ls, ds, dfs, sps, TPs, Flow, pinP, pconP, pout)
 
 # ╔═╡ 9759b003-fa32-4398-a15b-38a361c2b5ce
 begin # manipulate positions for the graph plot
@@ -239,17 +254,27 @@ baleq = ReadList[“/path/to/file.txt”];
 sol = Solve[baleq[[1]][[1]], baleq[[1]][[2]]
 Export[“solution.txt”, sol];
 ```
-The solution can than be loaded into Julia:
+The solution can than be loaded into Julia, after the symbols of the flow balance are defined:
 """
 
-# ╔═╡ b1308da2-14a7-454a-b81f-f709daefcbf3
-/Users/janleppert/Documents/GitHub/GasChromatographySystems/notebooks/FlowCalcPaper/DeansSwitchSystem_3pin_solution_of_bal_eq_from_Mathematica.txt
+# ╔═╡ d07a6b77-e68c-4fc5-a1ca-b18858be86e9
+@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 
-# ╔═╡ 558fa393-4ade-43f7-8e44-0cf7e2a78a68
-pwd()*"/4-Way-Splitter_solution_from_Mathematica.txt"
+# ╔═╡ bcbe0eb9-31e7-4585-a871-a82eff72d87a
+function import_solution_from_Mathmatica(file)
+	#@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
+	# do the Symbols have to be defined before?
+	sol_str = read(file, String)
+	# change the format for Julia
+	translate_sol_str = replace(sol_str, r"P²\[([0-9]+)\] -> " => "", "{" => "Symbolics.Num[", "}" => "]")
+	# parse the string to convert it to symbolic expressions
+	#solution = eval(Meta.parse(translate_sol_str))
+	solution = eval(Meta.parse(replace(sol_str, r"P²\[([0-9]+)\] -> " => "", "{" => "Symbolics.Num[", "}" => "]")))
+	return solution
+end
 
-# ╔═╡ ec45d1f9-da35-414a-b34f-0a8eb534907b
-sol_Math = GasChromatographySystems.import_solution_from_Mathmatica(pwd()*"/4-Way-Splitter_solution_from_Mathematica.txt")
+# ╔═╡ 37c630aa-e0e6-4612-979b-20323fef2edf
+sol_Math = import_solution_from_Mathmatica(download("https://raw.githubusercontent.com/GasChromatographyToolbox/GasChromatographySystems.jl/main/notebooks/FlowCalcPaper/4-Way-Splitter_solution_from_Mathematica.txt"));
 
 # ╔═╡ 5c0012b5-d329-4bc0-95f0-48d054a0d64c
 md"""
@@ -258,15 +283,153 @@ The symbolic solutions are translated to a Julia function:
 """
 
 # ╔═╡ 7598d06b-b787-4f8f-840a-2a67f5165c8c
-sol_fun = GasChromatographySystems.build_pressure_squared_functions(sys)#, sol; mode="λ")
+sol_fun = GasChromatographySystems.build_pressure_squared_functions(sys, sol; mode="λ")
 
 # ╔═╡ 3259be0a-85a9-4475-ba40-85f0920a0631
 md"""
 ## Save the solution functions
+The solution functions as Julia functions can be saved in a .jl file to later load the allready calculated solution:
 """
 
 # ╔═╡ a33ba412-9723-4901-9311-23bfe99b4539
 GasChromatographySystems.save_build_pressure_squared_functions(sys, sol; filename=pwd()*"/p2fun_"*sys.name, mode="λ")
+
+# ╔═╡ 788efa35-f475-4c84-9d69-27179463573f
+md"""
+## Load the solution functions
+The previous saved solution functions can be loaded for further use:
+"""
+
+# ╔═╡ 914103c5-dc90-43dc-9bcb-5aedbb41b511
+p2fun_eval = eval.(p2fun_load["p2fun"])
+
+# ╔═╡ 1584e593-005f-4ee0-b390-225c0299c7ca
+md"""
+## Calculated pressure values
+An array of functions of time for the pressures ``p(t)`` at every vertices is created, using the solution functions p2fun for the unknown pressures and the system definition sys for the known pressures:
+"""
+
+# ╔═╡ 47f2e304-6c29-4bd8-bb18-b8eb600d6534
+pfs = GasChromatographySystems.pressure_functions(sys, p2fun_eval)
+
+# ╔═╡ 1e52347f-7a0f-4f8f-a743-b83aa5efc67f
+md"""
+The pressure of the inlet at time `t = 0.0` s can be calculated by:
+"""
+
+# ╔═╡ cba4fd3e-855b-4d28-b94c-c771f43d016c
+pfs[1](0.0)
+
+# ╔═╡ b41e25fa-4c38-47f6-91a5-7a5c05db96d0
+md""" 
+The pressure at vertex `5` at the time `t = 300.0` s is calculated as:
+"""
+
+# ╔═╡ c38d74ff-64ea-4a91-8c57-9650f83b7f17
+pfs[5](300.0)
+
+# ╔═╡ 5dce2e31-4364-46fc-a43c-95aab8fba535
+md"""
+The pressures can be ploted over time:
+"""
+
+# ╔═╡ 4a6001bf-0c9b-4e1d-ae0f-e3307dfaf353
+plotly(); GasChromatographySystems.plot_pressure_over_time(sys, p2fun_eval)
+
+# ╔═╡ 3816d88a-cb6c-4f24-b516-6e2864d95623
+md"""
+## Calculated flow values
+Similar, the flows as an array of functions of time ``F(t)`` can be evaluated by:
+"""
+
+# ╔═╡ 9c9ad5d0-c482-4df9-ac7d-f4e264e4cf8a
+Ffs = GasChromatographySystems.flow_functions(sys, p2fun_eval) 
+
+# ╔═╡ e7cb5e5c-5c53-4865-9e67-0b1895e3097f
+md"""
+The four flows over the splitted paths at `time = 0.0` s are calculated in units of m3/s, by multiplying the values with `60e6`the unit becomes mL/min:
+"""
+
+# ╔═╡ 3647a95c-c219-4e93-be0e-99d5551b189a
+Ffs[4](0.0)*60e6 # D
+
+# ╔═╡ 5af3d6e6-c5e3-45bb-9ea3-54beaaffa02e
+Ffs[5](0.0)*60e6 # E
+
+# ╔═╡ 5cfa475e-4deb-4ce9-acd4-509edfece1e2
+Ffs[7](0.0)*60e6 # F
+
+# ╔═╡ c29d206c-37aa-4cc5-a434-f87bc41fd34e
+Ffs[9](0.0)*60e6 # G
+
+# ╔═╡ 69781a49-eaed-42f2-ac40-6f091f366abb
+md"""
+As can be seen, an equal flow split between the four paths is not achieved with this setup.
+"""
+
+# ╔═╡ b555f643-73e5-4287-b756-f2a40e96fe0d
+md"""
+The flows can be ploted over time:
+"""
+
+# ╔═╡ bd26fb42-130c-4587-95f1-a017ae189420
+plotly(); GasChromatographySystems.plot_flow_over_time(sys, p2fun_eval)
+
+# ╔═╡ 7e56a183-788d-4e64-869c-fc5b3c089ab2
+md"""
+## Calculated hold-up times
+The hold-up times for the different paths as functions of time ``t_\text{M,path}(t)`` can be calculated with:
+"""
+
+# ╔═╡ a4773c49-c2e6-4cb4-bab5-72508f4f92b3
+num_paths = 4 # number of possible paths
+
+# ╔═╡ 108933a3-287b-4ae7-a8a4-465a9f2a6eec
+tMfs = GasChromatographySystems.holdup_time_path(sys, p2fun_eval, num_paths) 
+
+# ╔═╡ 80b253fc-da00-40de-9627-c0103f4833a8
+md"""
+At the `time = 0.0` s the four hold-up times are:
+"""
+
+# ╔═╡ d2841b65-e0c8-4faa-a7d1-7ffaa8505076
+tMfs[1](0.0)
+
+# ╔═╡ 4ccc6c8d-5440-41b5-8507-8340f56f31ad
+tMfs[2](0.0)
+
+# ╔═╡ bdafd730-235b-4eee-95f5-a815c5894d6e
+tMfs[3](0.0)
+
+# ╔═╡ a82aacde-1b9d-4143-b5ef-04dac9630ac0
+tMfs[4](0.0)
+
+# ╔═╡ 68b9032d-270b-48d9-8735-8442edb8265d
+md"""
+The difference between the paths are:
+"""
+
+# ╔═╡ 37b4869d-20be-4164-b104-01217cd41f17
+tMfs[4](0.0) - tMfs[3](0.0)
+
+# ╔═╡ c15cfd8b-48af-4a78-be9d-0f9f7b3e6915
+tMfs[3](0.0) - tMfs[1](0.0)
+
+# ╔═╡ 6a5f9237-934b-4e79-aefe-98a26c096ad5
+tMfs[1](0.0) - tMfs[2](0.0)
+
+# ╔═╡ 5f6f1cf0-5ecc-4f31-a0e4-940a1c4d5fde
+md"""
+For the setup using the capillary dimensions from Tungkijanansin2022 [1] results in unequal hold-up times differences. Other capillary lengths and diameters must be choosen to achieve equal hold-up time differences.
+"""
+
+# ╔═╡ 0b3b5f09-7f54-48fe-a0df-174a81714be2
+md"""
+The hold-up times can be ploted over time:
+"""
+
+# ╔═╡ 153ccbee-7c95-4682-8033-0889d4a5338e
+plotly(); GasChromatographySystems.plot_holdup_time_path_over_time(sys, p2fun_eval, num_paths)
 
 # ╔═╡ c61ba480-6fbc-4dc5-9065-e6863dc99278
 md"""
@@ -276,7 +439,7 @@ Determine all possible paths from the primary inlet (p₁) to the outlets (p₁�
 """
 
 # ╔═╡ 728f45ba-a025-40b2-b595-eb4e80e7f37c
-paths = GasChromatographySystems.all_paths(sys.g, 4)[2]
+paths = GasChromatographySystems.all_paths(sys.g, num_paths)[2]
 
 # ╔═╡ 3628d111-d8fe-4d73-9b74-e57b27c3ec31
 md"""
@@ -291,13 +454,292 @@ Path 3: A, C, **_G1, G2_**, I, J, K
 Path 4: A, C, **_F_**, I, J, K
 """
 
-# ╔═╡ d8ad0bd5-51c8-4927-82dc-1d474e86a89e
+# ╔═╡ ca47ffdd-cab4-4959-bb8e-445bd9f9bfe9
 md"""
-Hold-up times of the four different paths of the _initial_ system:
+### Selection of hold-up time differences
+
+Select the difference of the hold-up times between the different paths.
+
+``Δt_\text{M,0}`` in s: $(@bind ΔtM0_select confirm(NumberField(0.0:1.0:300.0; default=60.0)))
+
+The capillary lengths for selected capillary diameters will be estimated in a next step.
 """
 
-# ╔═╡ 153ccbee-7c95-4682-8033-0889d4a5338e
-plotly(); GasChromatographySystems.plot_holdup_time_path_over_time(sys, p2fun, 4)
+# ╔═╡ 01df6d4b-f0f7-496b-a30c-ecff2d207263
+md"""
+### Estimate capillary lengths
+
+Using the capillary lengths and diameters of capillaries `D1`, `D2`, `E`, `F`, `G1` and `G2` can be selected to achieve the hold-up time difference of ``Δt_\text{M,0}`` between the four paths. The following two conditions are used for this estimation.
+"""
+
+# ╔═╡ 3ba3eee0-97c7-4fff-ba3d-2be372901995
+md"""
+#### 1st condition - flow split
+
+For an even split of the flow between the four paths the following conditions have to be fullfilled:
+
+* ``κ_\text{B} = κ_\text{C} = κ_\text{H} = κ_\text{I}``
+* ``κ_\text{D1} + κ_\text{D2} = κ_\text{E} = κ_\text{F} = κ_\text{G1} + κ_\text{G2}``
+
+If the temperature is the same for all capillaries it follows:
+	
+* ``L_\text{B}/d_\text{B}^4 = L_\text{C}/d_\text{C}^4 = L_\text{H}/d_\text{H}^4 = L_\text{I}/d_\text{I}^4``
+* ``L_\text{D1}/d_\text{D1}^4 + L_\text{D2}/d_\text{D2}^4 = L_\text{E}/d_\text{E}^4 = L_\text{F}/d_\text{F}^4 = L_\text{G1}/d_\text{G1}^4 + L_\text{G2}/d_\text{G2}^4``
+
+The differences in hold-up time should only occure through capillaries D1, D2, E, F, G1 and G2. Therefore, capillaries B, C, H and I should be equal in dimensions:
+
+* ``L_\text{B} = L_\text{C} = L_\text{H} = L_\text{I}``
+* ``d_\text{B} = d_\text{C} = d_\text{H} = d_\text{I}``
+
+Selecting initial values for the lengths of D1, D2 and G1, the lengths of the remaining three capillaries can be calculated as:
+
+* ``L_\text{E} = \left(L_\text{D1}/d_\text{D1}^4 + L_\text{D2}/d_\text{D2}^4\right) d_\text{E}^4``
+* ``L_\text{F} = \left(L_\text{D1}/d_\text{D1}^4 + L_\text{D2}/d_\text{D2}^4\right) d_\text{F}^4``
+* ``L_\text{G2} = \left(L_\text{D1}/d_\text{D1}^4 + L_\text{D2}/d_\text{D2}^4 - L_\text{G1}/d_\text{G1}^4\right) d_\text{G2}^4``
+
+The selection of the diameters of capillaries is restricted by the typical diameters of commercial available capillaries (0.05 mm, 0.1 mm, 0.15 mm, 0.18 mm, 0.25 mm, 0.32 mm).
+"""
+
+# ╔═╡ 89a1e989-deae-4e47-9791-1c321bd745cd
+md"""
+#### 2nd condition - hold-up time differences
+
+The difference of the hold-up times between the four possible paths should be multiples of a fixes, pre-defined value.
+
+Only the capilaries D1, D2, E, F, G1 and G2 should contribute to the hold-up time differences (A, J and K are part of all paths, B, C, H, I are part of at least two paths, for simplification they are assumed as beeing equal).
+
+The order of the capillaries is arbitrarily choosenˣ.
+
+``t_\text{M,E} < t_\text{M,D} < t_\text{M,G} < t_\text{M,F}``
+
+The hold-up time difference, which we want to achieve between the paths is 
+
+``
+Δt_\text{M,0} = t_\text{M,D} - t_\text{M,E} = t_\text{M,G} - t_\text{M,D} = t_\text{M,F} - t_\text{M,G}
+``
+
+Therefore the following equation system is used:
+
+``
+t_\text{M,D} - t_\text{M,E} - Δt_\text{M,0} = 0
+``
+
+``
+t_\text{M,G} - t_\text{M,D} - Δt_\text{M,0} = 0
+``
+
+``
+t_\text{M,F} - t_\text{M,G} - Δt_\text{M,0} = 0
+`` 
+
+A system of three non-linear equations exist, which can be used to estimate the three lengths of capillaries D1, D2 and G2. The lengths of the other three capillaries are determined by them to achieve the equal flow split.
+"""
+
+# ╔═╡ 21e3b0e3-0a99-443c-bfc0-6421df390a67
+md"""
+The following functions are used to calculate the hold-up times for the four paths, resp. the differences of hold-up times, as function of the pre-defined system `sys`, the solution for the pressures `p2fun` and the lengths and diameters for the six capillaries defining the four paths:
+"""
+
+# ╔═╡ 824c9df4-aab8-4c36-89fc-334f386af095
+begin
+	function ΔtM(Ls, ds, dfs, sps, TPs, F, pin, pcon, pout, p2fun)
+		sys_new = FourParallelComplex(Ls, ds, dfs, sps, TPs, F, pin, pcon, pout)
+	
+		tMp = GasChromatographySystems.holdup_time_path(sys_new, p2fun, 4)
+		tM1_D = tMp[1] 
+		tM2_E = tMp[2]
+		tM3_G = tMp[3]
+		tM4_F = tMp[4]
+		ΔtMDE(t) = tM2_E(t) - tM1_D(t) 
+		ΔtMDF(t) = tM4_F(t) - tM1_D(t) 
+		ΔtMDG(t) = tM3_G(t) - tM1_D(t) 
+		
+		paths = GasChromatographySystems.all_paths(sys_new.g, 2)[2]
+		return ΔtMDE, ΔtMDF, ΔtMDG, tM1_D, tM2_E, tM3_G, tM4_F, paths, sys_new
+	end
+
+	function ΔtM(LD1, LD2, LE, LF, LG1, LG2, dD1, dD2, dE, dF, dG1, dG2, sys, p2fun)
+		Ls = [sys.modules[1].L, sys.modules[2].L, sys.modules[3].L, LD1, LD2, LE, LF, LG1, LG2, sys.modules[10].L, sys.modules[11].L, sys.modules[12].L, sys.modules[13].L, sys.modules[14].L]
+		ds = [sys.modules[1].d*1e3, sys.modules[2].d*1e3, sys.modules[3].d*1e3, dD1, dD2, dE, dF, dG1, dG2, sys.modules[10].d*1e3, sys.modules[11].d*1e3, sys.modules[12].d*1e3, sys.modules[13].d*1e3, sys.modules[14].d*1e3]
+		dfs = [sys.modules[i].df*1e6 for i=1:ne(sys.g)]
+		sps = [sys.modules[i].sp for i=1:ne(sys.g)]
+		TPs = [sys.modules[i].T for i=1:ne(sys.g)]
+		F = sys.modules[1].F*60e6
+		pin = sys.pressurepoints[1].P
+		pcon = sys.pressurepoints[12].P 
+		pout = sys.pressurepoints[11].P
+		ΔtMDE, ΔtMDF, ΔtMDG, tM1_D, tM2_E, tM3_G, tM4_F, paths, sys_new = ΔtM(Ls, ds, dfs, sps, TPs, F, pin, pcon, pout, p2fun)
+		return ΔtMDE, ΔtMDF, ΔtMDG, tM1_D, tM2_E, tM3_G, tM4_F, paths, sys_new
+	end
+end
+
+# ╔═╡ 2fe2c45a-f771-4963-9027-3e46323a42cf
+md"""
+The following function estimates the six capillary lengths for selected capillary diameters, pre-defined system `sys`, pressure solutions `p2fun` and selected hold-up time difference ``Δt_\text{M,0}`` using the two conditions described above:
+"""
+
+# ╔═╡ a894447e-d94f-46fd-b1f2-c2c241de432e
+md"""
+The new system with the estimated capillary lengths:
+"""
+
+# ╔═╡ 553b538f-b52b-4b2c-b486-66ab476c65ed
+function update_sys(LD1, LD2, LE, LF, LG1, LG2, dD1, dD2, dE, dF, dG1, dG2, sys)
+	Ls = [sys.modules[1].L, sys.modules[2].L, sys.modules[3].L, LD1, LD2, LE, LF, LG1, LG2, sys.modules[10].L, sys.modules[11].L, sys.modules[12].L, sys.modules[13].L, sys.modules[14].L]
+		ds = [sys.modules[1].d*1e3, sys.modules[2].d*1e3, sys.modules[3].d*1e3, dD1, dD2, dE, dF, dG1, dG2, sys.modules[10].d*1e3, sys.modules[11].d*1e3, sys.modules[12].d*1e3, sys.modules[13].d*1e3, sys.modules[14].d*1e3]
+		dfs = [sys.modules[i].df*1e6 for i=1:ne(sys.g)]
+		sps = [sys.modules[i].sp for i=1:ne(sys.g)]
+		TPs = [sys.modules[i].T for i=1:ne(sys.g)]
+		F = sys.modules[1].F*60e6
+		pin = sys.pressurepoints[1].P
+		pcon = sys.pressurepoints[12].P 
+		pout = sys.pressurepoints[11].P
+	sys_new = FourParallelComplex(Ls, ds, dfs, sps, TPs, F, pin, pcon, pout)
+	return sys_new
+end
+
+# ╔═╡ 9e67238e-2651-4d42-9b4f-53788ff60640
+md"""
+### Estimate control pressure
+
+The control pressure changes the pressure at the merge points of the splitted paths and has an influence on the difference of the hold-up times. To achieve the defined hold-up time difference between the paths for different temperatures it is necessary to change this control pressure. For this a similar approach with a non-linear solver can be used.
+
+The control pressure can also be used to change the hold-up time differences ``Δt_\text{M,0}``, while using the preciously estimated capillary lengths.
+"""
+
+# ╔═╡ c269aac6-ba04-4f9e-9254-22ceec6a7ed2
+md"""
+The following function is used to calculate the hold-up times for the four paths, resp. the differences of hold-up times, as function of the system `sys` with estimated capillary lengths, the solution for the pressures `p2fun`, the temperature `T` and control pressure `pcon`:
+"""
+
+# ╔═╡ 81864aab-b53b-41b9-a788-fd0e2a24a4d5
+function ΔtM(pcon, T, sys, p2fun)
+	Ls = [sys.modules[1].L, sys.modules[2].L, sys.modules[3].L, sys.modules[4].L, sys.modules[8].L, sys.modules[5].L, sys.modules[7].L, sys.modules[6].L, sys.modules[9].L, sys.modules[10].L, sys.modules[11].L, sys.modules[12].L, sys.modules[13].L, sys.modules[14].L]
+	ds = [sys.modules[1].d*1e3, sys.modules[2].d*1e3, sys.modules[3].d*1e3, sys.modules[4].d*1e3, sys.modules[8].d*1e3, sys.modules[5].d*1e3, sys.modules[7].d*1e3, sys.modules[6].d*1e3, sys.modules[9].d*1e3, sys.modules[10].d*1e3, sys.modules[11].d*1e3, sys.modules[12].d*1e3, sys.modules[13].d*1e3, sys.modules[14].d*1e3]
+	dfs = [sys.modules[i].df*1e6 for i=1:ne(sys.g)]
+	sps = [sys.modules[i].sp for i=1:ne(sys.g)]
+	TPs = fill(T, ne(sys.g))
+	F = sys.modules[1].F*60e6
+	pin = sys.pressurepoints[1].P
+	pout = sys.pressurepoints[11].P
+	ΔtMDE, ΔtMDF, ΔtMDG, tM1_D, tM2_E, tM3_G, tM4_F, paths, sys_new = ΔtM(Ls, ds, dfs, sps, TPs, F, pin, pcon, pout, p2fun)
+	return ΔtMDE, ΔtMDF, ΔtMDG, tM1_D, tM2_E, tM3_G, tM4_F, paths, sys_new
+end
+
+# ╔═╡ 7242445c-ca83-4ec6-9dbe-15412dca99a7
+function estimate_lengths(dD1, dD2, dE, dF, dG1, dG2, sys, p2fun, ΔtM0)
+
+	function eq_system(x)
+		# 1st condition - even split:
+		L_E = (x[1]/dD1^4 + x[2]/dD2^4)*dE^4
+		L_F = (x[1]/dD1^4 + x[2]/dD2^4)*dF^4
+		L_G2 = (x[1]/dD1^4 + x[2]/dD2^4 - abs(x[3])/dG1^4)*dG2^4
+		tMD, tME, tMG, tMF = ΔtM(x[1], x[2], L_E, L_F, x[3], L_G2, dD1, dD2, dE, dF, dG1, dG2, sys, p2fun)[4:7]
+		# 2nd condition - hold-up time difference:
+		return [tMF(0.0) - tMG(0.0) - ΔtM0, 
+				tMG(0.0) - tMD(0.0) - ΔtM0, 
+				tMD(0.0) - tME(0.0) - ΔtM0
+			] 
+	end
+	# non-linear solver:
+	sol = nlsolve(eq_system, [sys.modules[4].L, sys.modules[8].L, sys.modules[6].L], method=:trust_region) 
+	if sol.f_converged == true
+		LD1 = sol.zero[1]
+		LD2 = sol.zero[2]
+		LE = (LD1/dD1^4 + LD2/dD2^4)*dE^4
+		LF = (LD1/dD1^4 + LD2/dD2^4)*dF^4
+		LG1 = sol.zero[3]
+		LG2 = (LD1/dD1^4 + LD2/dD2^4 - LG1/dG1^4)*dG2^4
+	else
+		LD1 = NaN
+		LD2 = NaN
+		LE = NaN
+		LF = NaN
+		LG1 = NaN
+		LG2 = NaN
+	end
+	return LD1, LD2, LE, LF, LG1, LG2, sol, eq_system(abs.(sol.zero))
+end
+
+# ╔═╡ 82e8c39b-8841-4e86-a4bb-5fc24f8e0a31
+estimate = estimate_lengths(dD1, dD2, dE, dF, dG1, dG2, sys, p2fun_eval, ΔtM0_select)
+
+# ╔═╡ fd23b80b-b8f8-4323-b6b3-f96738df6461
+md"""
+The estimated column lengths in comparison to the lengths from Tungkijanansin2022 paper [1] for a selected hold-up time difference ``\Delta t_\text{M,0}=`` $(ΔtM0_select) s:
+
+* estimates: $(round.(estimate[1:6]; digits=3)) 
+* initial values: $(LD1, LD2, LE, LF, LG1, LG2)
+"""
+
+# ╔═╡ 266a00ad-ebcb-45aa-a242-111837d1afc8
+sys_estimate = update_sys(estimate[1], estimate[2], estimate[3], estimate[4], estimate[5], estimate[6], dD1, dD2, dE, dF, dG1, dG2, sys)
+
+# ╔═╡ 20f14e2c-2313-495e-bcff-d06115674544
+md"""
+The following function estimates the control pressure for the estimated system `sys`, pressure solutions `p2fun` and selected hold-up time difference ``Δt_\text{M,0}``:
+"""
+
+# ╔═╡ 1a56cb3e-fc83-474f-bf83-2007d687b59d
+function estimate_pcon(T, sys, p2fun, ΔtM0)
+	function eq_system_(x)
+		# x = [pcon]
+		tMD, tME, tMG, tMF = ΔtM(x[1], T, sys, p2fun)[4:7]
+		return [tMG(0.0) - tMD(0.0) - ΔtM0, # use the hold-up time difference in the middle
+				]
+	end
+	
+	sol = nlsolve(eq_system_, [sys.pressurepoints[12].P], method=:trust_region, store_trace=true)
+	pcon = if sol.f_converged == true
+		sol.zero[1]
+	else
+		NaN
+	end
+	return pcon, sol, eq_system_(sol.zero)
+end
+
+# ╔═╡ bcd9d784-ea9c-4fb8-b6f9-b42d435af6c9
+md"""
+The needed control pressure changes with the temperature of the system:
+"""
+
+# ╔═╡ e00d3462-2673-4e37-b97d-7fc1f36be834
+estimate_pcon(40.0, sys_estimate, p2fun_eval, ΔtM0_select)
+
+# ╔═╡ 9825b90b-8d30-4b4f-994b-d5eee8465bb9
+estimate_pcon(340.0, sys_estimate, p2fun_eval, ΔtM0_select)
+
+# ╔═╡ c53153bf-e214-47eb-847c-c20e5a83f9d8
+begin
+	Trange = 40.0:20.0:400.0
+	pcons20 = Array{Float64}(undef, length(Trange))
+	pcons60 = Array{Float64}(undef, length(Trange))
+	pcons120 = Array{Float64}(undef, length(Trange))
+	pcons240 = Array{Float64}(undef, length(Trange))
+	for i=1:length(Trange)
+		pcons20[i] = estimate_pcon(Trange[i], sys_estimate, p2fun_eval, 20.0)[1]
+		pcons60[i] = estimate_pcon(Trange[i], sys_estimate, p2fun_eval, 60.0)[1]
+		pcons120[i] = estimate_pcon(Trange[i], sys_estimate, p2fun_eval, 120.0)[1]
+		pcons240[i] = estimate_pcon(Trange[i], sys_estimate, p2fun_eval, 240.0)[1]
+	end
+end
+
+# ╔═╡ a3f881e0-e7c4-4a3a-be2f-b7d61adad331
+begin
+	p_pcon = Plots.plot(Trange, pcons20, xlabel="T in °C", ylabel="pcon in Pa", label="ΔtM=20s", legend=:topleft)
+	Plots.plot!(p_pcon, Trange, pcons60, label="ΔtM=60s")
+	Plots.plot!(p_pcon, Trange, pcons120, label="ΔtM=120s")
+	Plots.plot!(p_pcon, Trange, pcons240, label="ΔtM=240s")
+	md"""
+	$(embed_display(p_pcon))
+	_The needed pressures for the control inlet to achieve the wanted hold-up time difference for different temperatures._
+	"""
+end
+
+# ╔═╡ c66cc7a7-70b6-4e32-b459-e97429b6ec01
+md"""
+# End
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -318,7 +760,7 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 CSV = "~0.10.14"
 DataFrames = "~1.6.1"
 GasChromatographySimulator = "~0.4.6"
-GasChromatographySystems = "~0.2.0"
+GasChromatographySystems = "~0.2.1"
 Graphs = "~1.11.0"
 HypertextLiteral = "~0.9.5"
 NLsolve = "~4.5.1"
@@ -333,7 +775,7 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "66cb8e7850995b89b44dbe3bff4dba36dfe10785"
+project_hash = "4066318838d5938d5d0a2651bf9c99574e8d4fb5"
 
 [[deps.AbstractAlgebra]]
 deps = ["GroupsCore", "InteractiveUtils", "LinearAlgebra", "MacroTools", "Preferences", "Random", "RandomExtensions", "SparseArrays", "Test"]
@@ -565,9 +1007,9 @@ version = "0.5.1"
 
 [[deps.ChainRulesCore]]
 deps = ["Compat", "LinearAlgebra"]
-git-tree-sha1 = "575cd02e080939a33b6df6c5853d14924c08e35b"
+git-tree-sha1 = "71acdbf594aab5bbb2cec89b208c41b4c411e49f"
 uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-version = "1.23.0"
+version = "1.24.0"
 weakdeps = ["SparseArrays"]
 
     [deps.ChainRulesCore.extensions]
@@ -599,9 +1041,9 @@ version = "0.7.4"
 
 [[deps.CodecZstd]]
 deps = ["TranscodingStreams", "Zstd_jll"]
-git-tree-sha1 = "23373fecba848397b1705f6183188a0c0bc86917"
+git-tree-sha1 = "0d0612d8646ed6157adaceff420b3bacbc2510a9"
 uuid = "6b39b394-51ab-5f42-8807-6242bab2b4c2"
-version = "0.8.2"
+version = "0.8.3"
 
 [[deps.ColorBrewer]]
 deps = ["Colors", "JSON", "Test"]
@@ -855,9 +1297,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["AliasTables", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SpecialFunctions", "Statistics", "StatsAPI", "StatsBase", "StatsFuns"]
-git-tree-sha1 = "22c595ca4146c07b16bcf9c8bea86f731f7109d2"
+git-tree-sha1 = "9c405847cc7ecda2dc921ccf18b47ca150d7317e"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.108"
+version = "0.25.109"
 
     [deps.Distributions.extensions]
     DistributionsChainRulesCoreExt = "ChainRulesCore"
@@ -1155,9 +1597,9 @@ version = "0.4.6"
 
 [[deps.GasChromatographySystems]]
 deps = ["CSV", "CairoMakie", "DataFrames", "DifferentialEquations", "EzXML", "ForwardDiff", "GLMakie", "GasChromatographySimulator", "GraphIO", "GraphMakie", "GraphRecipes", "Graphs", "HypertextLiteral", "Integrals", "IntegralsCubature", "Interpolations", "Intervals", "JSServe", "LsqFit", "NetworkLayout", "OrdinaryDiffEq", "Plots", "Pluto", "PlutoUI", "QuadGK", "Reexport", "SpecialFunctions", "Symbolics", "UrlDownload", "Waveforms"]
-git-tree-sha1 = "8f41365e1882dc23f0d42177720b560ed15ed4aa"
+git-tree-sha1 = "234d834dcb225b1c620c10f4c0c309d128a3d591"
 uuid = "2a17fa6e-c440-4af9-acac-c1be9e3a006f"
-version = "0.2.0"
+version = "0.2.1"
 
 [[deps.GenericSchur]]
 deps = ["LinearAlgebra", "Printf"]
@@ -1361,9 +1803,9 @@ uuid = "9b13fd28-a010-5f03-acff-a1bbcff69959"
 version = "1.0.0"
 
 [[deps.Inflate]]
-git-tree-sha1 = "ea8031dea4aff6bd41f1df8f2fdfb25b33626381"
+git-tree-sha1 = "d1b1b796e47d94588b3757fe84fbf65a5ec4a80d"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
-version = "0.1.4"
+version = "0.1.5"
 
 [[deps.InlineStrings]]
 deps = ["Parsers"]
@@ -1421,9 +1863,9 @@ weakdeps = ["Unitful"]
 
 [[deps.IntervalArithmetic]]
 deps = ["CRlibm_jll", "MacroTools", "RoundingEmulator"]
-git-tree-sha1 = "e75c4e33afbc631aa62671ebba12863321c1d46e"
+git-tree-sha1 = "90709228dc114e599a2b62b7d23482a4f50938ee"
 uuid = "d1acc4aa-44c8-5952-acd4-ba5d80a2a253"
-version = "0.22.12"
+version = "0.22.13"
 weakdeps = ["DiffRules", "ForwardDiff", "RecipesBase"]
 
     [deps.IntervalArithmetic.extensions]
@@ -1725,9 +2167,9 @@ version = "1.34.1"
 
 [[deps.LogExpFunctions]]
 deps = ["DocStringExtensions", "IrrationalConstants", "LinearAlgebra"]
-git-tree-sha1 = "18144f3e9cbe9b15b070288eef858f71b291ce37"
+git-tree-sha1 = "a2d09619db4e765091ee5c6ffe8872849de0feea"
 uuid = "2ab3a3ac-af41-5b50-aa03-7779005ae688"
-version = "0.3.27"
+version = "0.3.28"
 
     [deps.LogExpFunctions.extensions]
     LogExpFunctionsChainRulesCoreExt = "ChainRulesCore"
@@ -2112,9 +2554,9 @@ version = "0.3.3"
 
 [[deps.PlotThemes]]
 deps = ["PlotUtils", "Statistics"]
-git-tree-sha1 = "1f03a2d339f42dca4a4da149c7e15e9b896ad899"
+git-tree-sha1 = "6e55c6841ce3411ccb3457ee52fc48cb698d6fb0"
 uuid = "ccf2f8ad-2431-5c83-bf29-c5338b663b6a"
-version = "3.1.0"
+version = "3.2.0"
 
 [[deps.PlotUtils]]
 deps = ["ColorSchemes", "Colors", "Dates", "PrecompileTools", "Printf", "Random", "Reexport", "Statistics"]
@@ -2231,9 +2673,9 @@ version = "1.4.3"
 
 [[deps.PrettyTables]]
 deps = ["Crayons", "LaTeXStrings", "Markdown", "PrecompileTools", "Printf", "Reexport", "StringManipulation", "Tables"]
-git-tree-sha1 = "88b895d13d53b5577fd53379d913b9ab9ac82660"
+git-tree-sha1 = "66b20dd35966a748321d3b2537c4584cf40387c7"
 uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
-version = "2.3.1"
+version = "2.3.2"
 
 [[deps.Primes]]
 deps = ["IntegerMathUtils"]
@@ -2747,9 +3189,9 @@ version = "0.10.0"
 
 [[deps.TimeZones]]
 deps = ["Dates", "Downloads", "InlineStrings", "Mocking", "Printf", "Scratch", "TZJData", "Unicode", "p7zip_jll"]
-git-tree-sha1 = "6505890535a2b2e5145522ac77bddeda85c250c4"
+git-tree-sha1 = "a6ae8d7a27940c33624f8c7bde5528de21ba730d"
 uuid = "f269a46b-ccf7-5d73-abea-4c690281aa53"
-version = "1.16.1"
+version = "1.17.0"
 weakdeps = ["RecipesBase"]
 
     [deps.TimeZones.extensions]
@@ -2762,9 +3204,9 @@ uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 version = "0.5.24"
 
 [[deps.TranscodingStreams]]
-git-tree-sha1 = "5d54d076465da49d6746c647022f3b3674e64156"
+git-tree-sha1 = "a947ea21087caba0a798c5e494d0bb78e3a1a3a0"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
-version = "0.10.8"
+version = "0.10.9"
 weakdeps = ["Random", "Test"]
 
     [deps.TranscodingStreams.extensions]
@@ -3216,9 +3658,9 @@ version = "1.4.1+1"
 # ╠═da4314c4-fb53-4a48-931c-aad0ff86de65
 # ╠═b3b4369f-ad3b-4c3a-901f-ce0bb47e1889
 # ╠═b145f4de-aae3-4c14-8db1-7ed9a9cabb02
-# ╠═9759b003-fa32-4398-a15b-38a361c2b5ce
-# ╠═6c0b1104-d06c-4114-9a82-94142cf5dd80
-# ╠═eb9f312f-118b-41d7-b00f-b742013d8881
+# ╟─9759b003-fa32-4398-a15b-38a361c2b5ce
+# ╟─6c0b1104-d06c-4114-9a82-94142cf5dd80
+# ╟─eb9f312f-118b-41d7-b00f-b742013d8881
 # ╟─699823e1-f66d-4e44-af18-a7ee34ca2d1a
 # ╠═f8e4daab-4b7f-48f5-b50f-086788872de3
 # ╟─e3e02278-1946-4f65-ba13-0983abfdc623
@@ -3229,18 +3671,76 @@ version = "1.4.1+1"
 # ╠═eb04f24c-c433-491b-9e35-7820cf12853b
 # ╟─74666c2d-d08b-47d8-8082-999e692309dc
 # ╠═1ecfbef0-845e-46da-a46a-d4b90d27576c
-# ╠═5ea6cb98-afce-4117-9f1f-e0a4092fcf95
-# ╠═b1308da2-14a7-454a-b81f-f709daefcbf3
-# ╠═558fa393-4ade-43f7-8e44-0cf7e2a78a68
-# ╠═ec45d1f9-da35-414a-b34f-0a8eb534907b
-# ╠═5c0012b5-d329-4bc0-95f0-48d054a0d64c
+# ╟─5ea6cb98-afce-4117-9f1f-e0a4092fcf95
+# ╠═d07a6b77-e68c-4fc5-a1ca-b18858be86e9
+# ╠═37c630aa-e0e6-4612-979b-20323fef2edf
+# ╟─bcbe0eb9-31e7-4585-a871-a82eff72d87a
+# ╟─5c0012b5-d329-4bc0-95f0-48d054a0d64c
 # ╠═7598d06b-b787-4f8f-840a-2a67f5165c8c
-# ╠═3259be0a-85a9-4475-ba40-85f0920a0631
+# ╟─3259be0a-85a9-4475-ba40-85f0920a0631
 # ╠═a33ba412-9723-4901-9311-23bfe99b4539
+# ╟─788efa35-f475-4c84-9d69-27179463573f
+# ╠═97dbcfad-5ea6-480e-ae32-4dc50dd45508
+# ╠═914103c5-dc90-43dc-9bcb-5aedbb41b511
+# ╟─1584e593-005f-4ee0-b390-225c0299c7ca
+# ╠═47f2e304-6c29-4bd8-bb18-b8eb600d6534
+# ╟─1e52347f-7a0f-4f8f-a743-b83aa5efc67f
+# ╠═cba4fd3e-855b-4d28-b94c-c771f43d016c
+# ╟─b41e25fa-4c38-47f6-91a5-7a5c05db96d0
+# ╠═c38d74ff-64ea-4a91-8c57-9650f83b7f17
+# ╟─5dce2e31-4364-46fc-a43c-95aab8fba535
+# ╠═4a6001bf-0c9b-4e1d-ae0f-e3307dfaf353
+# ╟─3816d88a-cb6c-4f24-b516-6e2864d95623
+# ╠═9c9ad5d0-c482-4df9-ac7d-f4e264e4cf8a
+# ╟─e7cb5e5c-5c53-4865-9e67-0b1895e3097f
+# ╠═3647a95c-c219-4e93-be0e-99d5551b189a
+# ╠═5af3d6e6-c5e3-45bb-9ea3-54beaaffa02e
+# ╠═5cfa475e-4deb-4ce9-acd4-509edfece1e2
+# ╠═c29d206c-37aa-4cc5-a434-f87bc41fd34e
+# ╟─69781a49-eaed-42f2-ac40-6f091f366abb
+# ╟─b555f643-73e5-4287-b756-f2a40e96fe0d
+# ╠═bd26fb42-130c-4587-95f1-a017ae189420
+# ╟─7e56a183-788d-4e64-869c-fc5b3c089ab2
+# ╠═a4773c49-c2e6-4cb4-bab5-72508f4f92b3
+# ╠═108933a3-287b-4ae7-a8a4-465a9f2a6eec
+# ╟─80b253fc-da00-40de-9627-c0103f4833a8
+# ╠═d2841b65-e0c8-4faa-a7d1-7ffaa8505076
+# ╠═4ccc6c8d-5440-41b5-8507-8340f56f31ad
+# ╠═bdafd730-235b-4eee-95f5-a815c5894d6e
+# ╠═a82aacde-1b9d-4143-b5ef-04dac9630ac0
+# ╟─68b9032d-270b-48d9-8735-8442edb8265d
+# ╠═37b4869d-20be-4164-b104-01217cd41f17
+# ╠═c15cfd8b-48af-4a78-be9d-0f9f7b3e6915
+# ╠═6a5f9237-934b-4e79-aefe-98a26c096ad5
+# ╟─5f6f1cf0-5ecc-4f31-a0e4-940a1c4d5fde
+# ╟─0b3b5f09-7f54-48fe-a0df-174a81714be2
+# ╠═153ccbee-7c95-4682-8033-0889d4a5338e
 # ╟─c61ba480-6fbc-4dc5-9065-e6863dc99278
 # ╠═728f45ba-a025-40b2-b595-eb4e80e7f37c
-# ╠═3628d111-d8fe-4d73-9b74-e57b27c3ec31
-# ╠═d8ad0bd5-51c8-4927-82dc-1d474e86a89e
-# ╠═153ccbee-7c95-4682-8033-0889d4a5338e
+# ╟─3628d111-d8fe-4d73-9b74-e57b27c3ec31
+# ╟─ca47ffdd-cab4-4959-bb8e-445bd9f9bfe9
+# ╟─01df6d4b-f0f7-496b-a30c-ecff2d207263
+# ╟─3ba3eee0-97c7-4fff-ba3d-2be372901995
+# ╟─89a1e989-deae-4e47-9791-1c321bd745cd
+# ╟─21e3b0e3-0a99-443c-bfc0-6421df390a67
+# ╠═824c9df4-aab8-4c36-89fc-334f386af095
+# ╟─2fe2c45a-f771-4963-9027-3e46323a42cf
+# ╠═7242445c-ca83-4ec6-9dbe-15412dca99a7
+# ╠═82e8c39b-8841-4e86-a4bb-5fc24f8e0a31
+# ╟─fd23b80b-b8f8-4323-b6b3-f96738df6461
+# ╟─a894447e-d94f-46fd-b1f2-c2c241de432e
+# ╠═266a00ad-ebcb-45aa-a242-111837d1afc8
+# ╟─553b538f-b52b-4b2c-b486-66ab476c65ed
+# ╟─9e67238e-2651-4d42-9b4f-53788ff60640
+# ╟─c269aac6-ba04-4f9e-9254-22ceec6a7ed2
+# ╠═81864aab-b53b-41b9-a788-fd0e2a24a4d5
+# ╟─20f14e2c-2313-495e-bcff-d06115674544
+# ╠═1a56cb3e-fc83-474f-bf83-2007d687b59d
+# ╟─bcd9d784-ea9c-4fb8-b6f9-b42d435af6c9
+# ╠═e00d3462-2673-4e37-b97d-7fc1f36be834
+# ╠═9825b90b-8d30-4b4f-994b-d5eee8465bb9
+# ╟─c53153bf-e214-47eb-847c-c20e5a83f9d8
+# ╟─a3f881e0-e7c4-4a3a-be2f-b7d61adad331
+# ╟─c66cc7a7-70b6-4e32-b459-e97429b6ec01
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

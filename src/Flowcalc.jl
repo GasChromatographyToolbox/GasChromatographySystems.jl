@@ -144,14 +144,12 @@ function export_balance_equations_for_Mathematica(sys; filename="bal_eq_for_Math
 	write(filename, "{"*join(bal_eq_char)*", "*join(unknown_p_char)*"}")
 end
 
-function import_solution_from_Mathmatica(sys, file)
-	@variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
-	# do the Symbols have to be defined before?
+function import_solution_from_Mathmatica(file)
+	# before the use of this function the needed variables have to be defined as symbols by:
+	# @variables A, P²[1:nv(sys.g)], λ[1:ne(sys.g)], F[1:ne(sys.g)]
 	sol_str = read(file, String)
-	# change the format for Julia
-	translate_sol_str = replace(sol_str, r"P²\[([0-9]+)\] -> " => "", "{" => "Symbolics.Num[", "}" => "]")
-	# parse the string to convert it to symbolic expressions
-	solution = eval(Meta.parse(translate_sol_str))
+	# change the format for Julia and parse the string to convert it to symbolic expressions
+	solution = eval(Meta.parse(replace(sol_str, r"P²\[([0-9]+)\] -> " => "", "{" => "Symbolics.Num[", "}" => "]")))
 	return solution
 end
 

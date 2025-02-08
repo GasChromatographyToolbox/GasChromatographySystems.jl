@@ -685,7 +685,7 @@ function interpolate_pressure_functions(sys, p2fun; dt=1, mode="λ")
 	for i=1:length(p_func)
 		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
 		if i ∈ i_unknown_p
-			p_itp[i] = LinearInterpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
+			p_itp[i] = linear_interpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
 		else
 			p_itp[i] = p_func[i]
 		end # no additional interpolation, if the pressure is allready defined by a linear program
@@ -718,7 +718,7 @@ function interpolate_pressure_functions(sys; dt=1, mode="λ")
 	for i=1:length(p_func)
 		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
 		if i ∈ i_unknown_p
-			p_itp[i] = LinearInterpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
+			p_itp[i] = linear_interpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
 		else
 			p_itp[i] = p_func[i]
 		end # no additional interpolation, if the pressure is allready defined by a linear program

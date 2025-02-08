@@ -236,7 +236,7 @@ function temperature_interpolation(GCsys, Option)
 				xstart = sum(L[1:end-1])
 			end
 			push!(xshift, xstart)
-			push!(T_itp, LinearInterpolation((nx_i, nt_i), Tmat_i, extrapolation_bc=Flat()))
+			push!(T_itp, linear_interpolation((nx_i, nt_i), Tmat_i, extrapolation_bc=Flat()))
 		end
 	end
 	return T_itp, xshift, L
@@ -250,7 +250,7 @@ function pressure_interpolation(Modul::Pressure_Point)
 		nt = cumsum(Modul.timesteps)
 		p = Modul.pressure_steps
 	end
-	p_itp = LinearInterpolation((nt, ), p, extrapolation_bc=Flat())
+	p_itp = linear_interpolation((nt, ), p, extrapolation_bc=Flat())
 	return p_itp
 end
 
@@ -315,7 +315,7 @@ function new_gradient_parameter_steps(Module::Column, new_times)
 	a_gf = Module.temperature_program.a_gradient_function
 	new_a_gf = Array{Float64}(undef, length(new_times), size(a_gf)[2])
 	for i=1:size(a_gf)[2]
-		itp = LinearInterpolation((cumsum(old_times), ), a_gf[:,i], extrapolation_bc=Flat())
+		itp = linear_interpolation((cumsum(old_times), ), a_gf[:,i], extrapolation_bc=Flat())
 		for j=1:length(new_times)
 			new_a_gf[j,i] = itp(cumsum(new_times)[j])
 		end
@@ -447,8 +447,8 @@ function pressure_at_moduls_itp(L, new_times, press) # -> GasChromatographySyste
 	pi_itp = Array{Any}(undef, length(L))
 	po_itp = Array{Any}(undef, length(L))
 	for i=1:length(L)
-		pi_itp[i] = LinearInterpolation((cumsum(new_times), ), press[i,:,1], extrapolation_bc=Flat())
-		po_itp[i] = LinearInterpolation((cumsum(new_times), ), press[i,:,2], extrapolation_bc=Flat())
+		pi_itp[i] = linear_interpolation((cumsum(new_times), ), press[i,:,1], extrapolation_bc=Flat())
+		po_itp[i] = linear_interpolation((cumsum(new_times), ), press[i,:,2], extrapolation_bc=Flat())
 	end
 	return pi_itp, po_itp
 end

@@ -1163,7 +1163,9 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 			# approximated integrals
 			#prob_focussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM, init_t_start[i]+(j-1)*PM+tcold, p)
 			#prob_unfocussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM+tcold, init_t_start[i]+(j-1)*PM+tcold+thot, p)
-			prob_focussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM, init_t_start[i]+(j-1)*PM+PM, p)
+			# all focussed:
+			domain = (init_t_start[i]+(j-1)*PM, init_t_start[i]+j*PM)
+			prob_focussed = IntegralProblem(g, domain, p)
 			A_focussed[ii] = solve(prob_focussed, QuadGKJL(); reltol = reltol, abstol = abstol).u * AR[i]
 			#A_unfocussed[ii] = solve(prob_unfocussed, QuadGKJL(); reltol = 1e-18, abstol = 1e-30).u * AR[i]
 			# Areas in the same order as sub_TM_focussed

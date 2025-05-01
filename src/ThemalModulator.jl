@@ -28,26 +28,26 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 		for j=1:n_slice[i]
 			if n_slice[i] == 1 # no slicing, peak fits completly inside the modulation periode
 				t₀ = tR[i]
+                A_focussed[ii] = AR[i]
 			else
 				t₀ = init_t_start[i]+(j-1)*PM # initial start time
+                # Integrals:
+                p = [tR[i], τR[i]]
+                # approximated integrals
+                #prob_focussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM, init_t_start[i]+(j-1)*PM+tcold, p)
+                #prob_unfocussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM+tcold, init_t_start[i]+(j-1)*PM+tcold+thot, p)
+                # all focussed:
+                domain = (init_t_start[i]+(j-1)*PM, init_t_start[i]+j*PM)
+                    println("domain: $(domain), i=$(i), j=$(j), type: $(typeof(domain))")
+                prob_focussed = IntegralProblem(g, domain, p)
+                    #println("prob_focussed: $(prob_focussed)")
+                A_focussed[ii] = solve(prob_focussed, QuadGKJL(); reltol = reltol, abstol = abstol).u * AR[i]
+                #A_unfocussed[ii] = solve(prob_unfocussed, QuadGKJL(); reltol = 1e-18, abstol = 1e-30).u * AR[i]
 			end
-
+            println("A_focussed[ii] = $(A_focussed[ii])")
 			CAS_par = [par.sub[i].CAS for i in 1:length(par.sub)]
 			i_sub = findfirst(pl.CAS[i] .== CAS_par)
 			sub_TM_focussed[ii] = GasChromatographySimulator.Substance(par.sub[i_sub].name, par.sub[i_sub].CAS, par.sub[i_sub].Tchar, par.sub[i_sub].θchar, par.sub[i_sub].ΔCp, par.sub[i_sub].φ₀, "s$(j)_"*pl.Annotations[i], par.sub[i_sub].Cag, t₀, τ₀[i])
-
-			# Integrals:
-			p = [tR[i], τR[i]]
-			# approximated integrals
-			#prob_focussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM, init_t_start[i]+(j-1)*PM+tcold, p)
-			#prob_unfocussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM+tcold, init_t_start[i]+(j-1)*PM+tcold+thot, p)
-			# all focussed:
-			domain = (init_t_start[i]+(j-1)*PM, init_t_start[i]+j*PM)
-				println("domain: $(domain), i=$(i), j=$(j), type: $(typeof(domain))")
-			prob_focussed = IntegralProblem(g, domain, p)
-				#println("prob_focussed: $(prob_focussed)")
-			A_focussed[ii] = solve(prob_focussed, QuadGKJL(); reltol = reltol, abstol = abstol).u * AR[i]
-			#A_unfocussed[ii] = solve(prob_unfocussed, QuadGKJL(); reltol = 1e-18, abstol = 1e-30).u * AR[i]
 			# Areas in the same order as sub_TM_focussed
 			Name[ii] = sub_TM_focussed[ii].name
 			CAS[ii] = sub_TM_focussed[ii].CAS
@@ -68,7 +68,6 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 end
 
 function simplifiedTM(T, par, df_A, PM, ratio, shift, Thot;)
-	# rename to 'simplifiedTM'
 	# rectangular function is assumed -> does this work with a changed definition (start modulation with the hot jet)
 	tcold = PM*ratio
 	thot = PM*(1-ratio)
@@ -79,7 +78,8 @@ function simplifiedTM(T, par, df_A, PM, ratio, shift, Thot;)
 	No = [parse(Int, split(sort_df_A.Annotations[x], " ")[end]) for x in 1:length(sort_df_A.Annotations)]
 	Name = sort_df_A.Name
 	CAS = sort_df_A.CAS
-	tR = t₀ .+ tcold
+    number_of_modulation = cld.(t₀ .+ shift, PM)
+	tR = (number_of_modulation + 1) .* PM .- shift .- thot # the next hot jet is set as tR
 	#println("simplifiedTM(): t₀ = $(t₀)s, tR = $(tR)s.")
 
 	# using par.prog.T_itp can result in wrong temperatures at tR, because of rounding errors for Float64 in `mod()`-function inside the `therm_mod()`-function.

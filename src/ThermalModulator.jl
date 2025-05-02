@@ -56,7 +56,7 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 	# start time of the peaks, rounded down to multiple of PM:
 	init_t_start = (mod_number.(tR .- nτ.*τR, shift, PM, ratio) .- 1).*PM .- totalshift 
 	# end time of the peaks, rounded down to multiple of PM (rounding up leads to an additional slice)
-	init_t_end = (mod_number.(tR .+ nτ.*τR, shift, PM, ratio)).*PM .- totalshift 
+	init_t_end = (mod_number.(tR .+ nτ.*τR, shift, PM, ratio) .- 1).*PM .- totalshift 
 	# number of slices for every substance: 
  	n_slice = round.(Int, (init_t_end .- init_t_start)./PM .+ 1) 
 	println("slicing(): init_t_start=$(init_t_start)s, init_t_end=$(init_t_end)s, n_slice=$(n_slice).")

@@ -130,6 +130,42 @@ function simulate_along_paths(sys, p2fun, paths, db_dataframe, selected_solutes;
 	return path_pos, peaklists, solutions, new_par_sys
 end
 
+"""
+    simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), mode="λ", kwargsTM...)
+
+Simulate solute transport along multiple paths in a gas chromatography system.
+
+This function simulates the transport of solutes through a network of GC modules (columns and thermal modulators)
+along specified paths. It handles both direct simulation of new segments and reuse of previously simulated
+segments when possible.
+
+# Arguments
+- `sys`: The GC system structure containing the network of modules
+- `p2fun`: Pressure functions for the system
+- `paths`: Array of paths to simulate, where each path is a sequence of edges in the system graph
+- `par_sys`: Array of parameter sets for each module in the system
+
+# Keyword Arguments
+- `t₀`: Initial times for solutes (default: zeros)
+- `τ₀`: Initial peak widths for solutes (default: zeros)
+- `nτ`: Number of peak widths to consider for slicing in the thermal modulator (default: 6)
+- `refocus`: Boolean array indicating which modules should refocus peaks (default: all false)
+- `τ₀_focus`: Initial peak widths for refocusing (default: zeros)
+- `mode`: Mode for flow calculations ("λ" for permeability or "κ" for restriction) (default: "λ")
+- `kwargsTM`: Additional keyword arguments for thermal modulator simulation
+
+# Returns
+- `path_pos`: Array of strings indicating if each path is possible and any issues encountered
+- `peaklists`: Array of peak lists for each path, containing retention times and peak widths
+- `solutions`: Array of solutions for each path, containing detailed simulation results
+- `new_par_sys`: Updated parameter sets for the system
+
+# Notes
+- Reuses simulation results from previous paths when possible to improve efficiency
+- Handles both ModuleColumn and ModuleTM (thermal modulator) types
+- Checks for negative flows to determine if paths are possible
+- First segment after injection is assumed to be a ModuleColumn
+"""
 function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), mode="λ", kwargsTM...)
 	
 	E = collect(edges(sys.g))
@@ -171,11 +207,11 @@ function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_
 					solutions_[j] = solutions[i_path][i_edge]
 				else # new simulated segments
 					if j == 1 # first segment, directly after injection, it is assumed to be a segment of type `ModuleColumn`
-						peaklists_[j], solutions_[j] = simulate_ModuleColumn(par_sys[i_par[j]], t₀, τ₀)
+						new_par_sys[j], peaklists_[j], solutions_[j] = simulate_ModuleColumn(par_sys[i_par[j]], t₀, τ₀)
 					elseif typeof(sys.modules[i_par[j]]) == GasChromatographySystems.ModuleTM
-						peaklists_[j], solutions_[j] = simulate_ModuleTM(par_sys[i_par[j]], sys.modules[i_par[j]], peaklists_[j-1]; nτ=nτ, τ₀_focus=τ₀_focus, refocus=refocus, kwargsTM...)
+						new_par_sys[j], peaklists_[j], solutions_[j] = simulate_ModuleTM(par_sys[i_par[j]], sys.modules[i_par[j]], peaklists_[j-1]; nτ=nτ, τ₀_focus=τ₀_focus, refocus=refocus, kwargsTM...)
 					else # ModuleColumn
-						peaklists_[j], solutions_[j] = simulate_ModuleColumn(par_sys[i_par[j]], peaklists_[j-1])
+						new_par_sys[j], peaklists_[j], solutions_[j] = simulate_ModuleColumn(par_sys[i_par[j]], peaklists_[j-1])
 					end
 				end
 			end

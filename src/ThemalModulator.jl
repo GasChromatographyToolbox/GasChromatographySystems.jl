@@ -5,16 +5,60 @@
 # A_focussed calculated in relation to it
 # A_focussed is the complete area during a modulation period
 # not focussed segment is already included in the focussed segment, assuming it will be focussed in the 2nd modulation in a multi stage modulation
+"""
+    slicing(pl, PM, ratio, shift, par; nτ=6, τ₀=zeros(length(pl.τR)), abstol=1e-8, reltol=1e-8, alg=OwrenZen5())
+
+Slice peaks into segments based on thermal modulation periods and calculate their areas.
+
+This function handles the slicing of chromatographic peaks into segments that align with thermal
+modulation periods. It calculates the areas of these segments and creates new substance parameters
+for each slice. The function is designed to work with both single-stage and multi-stage modulation
+systems.
+
+# Arguments
+- `pl`: Peak list containing retention times, peak widths, and areas
+- `PM`: Modulation period in seconds
+- `ratio`: Ratio of cold phase duration to total period (0 < ratio < 1)
+- `shift`: Time shift of the modulation pattern in seconds
+- `par`: Original simulation parameters
+
+# Keyword Arguments
+- `nτ`: Number of peak widths to consider for slicing (default: 6)
+- `τ₀`: Initial peak widths for new slices (default: zeros)
+- `abstol`: Absolute tolerance for numerical integration (default: 1e-8)
+- `reltol`: Relative tolerance for numerical integration (default: 1e-8)
+- `alg`: Numerical integration algorithm (default: OwrenZen5())
+
+# Returns
+- `newpar_focussed`: New parameters object containing the sliced substances
+- `df_A_foc`: DataFrame containing:
+  - Name: Substance names
+  - CAS: CAS numbers
+  - Annotations: Slice annotations (e.g., "s1_", "s2_", etc.)
+  - A: Calculated areas for each slice
+  - t0: Start times of each slice
+
+# Notes
+- Uses mod_number for consistent modulation period calculations
+- Handles peaks that span multiple modulation periods
+- Calculates areas using Gaussian peak approximation
+- For peaks within a single modulation period, uses the original area
+- For multi-period peaks, integrates the Gaussian function over each period
+- Appoximation: integration over the whole period, in reality the segment of the peak during the hot-jet is not included. Assuming a second focussing the not focussed segment should be focussed there.
+- Maintains substance properties while creating new slice annotations
+"""
 function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(pl.τR)), abstol=1e-8, reltol=1e-8, alg=OwrenZen5())
 	tR = pl.tR
 	τR = pl.τR
 	AR = pl.A
 	tcold = PM*ratio
 	totalshift = tcold - shift
-	thot = PM*(1-ratio)
-	init_t_start = (fld.(tR .+ totalshift .- nτ.*τR, PM)).*PM .- totalshift # start time of the peaks, rounded down to multiple of PM
-	init_t_end = (fld.(tR .+ totalshift .+ nτ.*τR, PM)).*PM .- totalshift # end time of the peaks, rounded down to multiple of PM (rounding up leads to an additional slice)
- 	n_slice = round.(Int, (init_t_end .- init_t_start)./PM .+ 1) # number of slices for every substance
+	# start time of the peaks, rounded down to multiple of PM:
+	init_t_start = (mod_number.(tR .- nτ.*τR, shift, PM, ratio) .- 1).*PM .- totalshift 
+	# end time of the peaks, rounded down to multiple of PM (rounding up leads to an additional slice)
+	init_t_end = (mod_number.(tR .+ nτ.*τR, shift, PM, ratio)).*PM .- totalshift 
+	# number of slices for every substance: 
+ 	n_slice = round.(Int, (init_t_end .- init_t_start)./PM .+ 1) 
 	println("slicing(): init_t_start=$(init_t_start)s, init_t_end=$(init_t_end)s, n_slice=$(n_slice).")
 	sub_TM_focussed = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice))
 	A_focussed = Array{Float64}(undef, sum(n_slice))
@@ -79,8 +123,8 @@ function simplifiedTM(T, par, df_A, PM, ratio, shift, Thot;)
 	No = [parse(Int, split(sort_df_A.Annotations[x], " ")[end]) for x in 1:length(sort_df_A.Annotations)]
 	Name = sort_df_A.Name
 	CAS = sort_df_A.CAS
-    number_of_modulation = cld.(t₀ .+ shift, PM)
-	tR = (number_of_modulation + 1) .* PM .- shift .- thot # the next hot jet is set as tR
+	number_of_modulation = GasChromatographySystems.mod_number.(t₀, shift, PM, ratio)
+	tR = number_of_modulation .* PM .- (tcold - shift) # time of the start of the next hot jet 
 	#println("simplifiedTM(): t₀ = $(t₀)s, tR = $(tR)s.")
 
 	# using par.prog.T_itp can result in wrong temperatures at tR, because of rounding errors for Float64 in `mod()`-function inside the `therm_mod()`-function.

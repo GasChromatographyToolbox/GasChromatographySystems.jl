@@ -112,6 +112,53 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 	return newpar_focussed, df_A_foc
 end
 
+"""
+    simplifiedTM(T, par, df_A, PM, ratio, shift, Thot)
+
+Simulate thermal modulation using a simplified model that assumes rectangular temperature modulation.
+
+This function simulates the behavior of solutes in a thermal modulator using a simplified approach
+that assumes instantaneous temperature changes between hot and cold phases. It calculates retention
+times, peak widths, and other chromatographic parameters for each modulated peak.
+
+# Arguments
+- `T`: Temperature program or constant temperature value
+- `par`: Simulation parameters for the system
+- `df_A`: DataFrame containing sliced peak information (from slicing function)
+- `PM`: Modulation period in seconds
+- `ratio`: Ratio of cold phase duration to total period (0 < ratio < 1)
+- `shift`: Time shift of the modulation pattern in seconds
+- `Thot`: Temperature difference for the hot phase in °C
+
+# Returns
+- Tuple containing:
+  1. DataFrame with chromatographic parameters:
+     - No: Modulation number
+     - Name: Substance names
+     - CAS: CAS numbers
+     - tR: Retention times
+     - τR: Peak widths
+     - TR: Temperatures at retention
+     - σR: Peak standard deviations
+     - uR: Linear velocities
+     - kR: Retention factors
+     - Res: Resolution between adjacent peaks
+     - Δs: Separation measure
+     - Annotations: Peak annotations
+     - A: Peak areas
+  2. Array of solution tuples containing:
+     - t: Time points [0, column length]
+     - u: Tuples of (time, variance) at start and end points
+
+# Notes
+- Assumes rectangular temperature modulation (instantaneous temperature changes)
+- Calculates retention times based on the start of the next hot phase
+- Calculates peak widths as time to flush the modulator once. Length divided by velocity of the substance.
+- Handles both constant and programmed temperature conditions
+- Includes resolution and separation calculations for adjacent peaks
+- Uses mod_number for consistent modulation period calculations
+- Temperature values are converted between °C and K as needed
+"""
 function simplifiedTM(T, par, df_A, PM, ratio, shift, Thot;)
 	# rectangular function is assumed -> does this work with a changed definition (start modulation with the hot jet)
 	tcold = PM*ratio

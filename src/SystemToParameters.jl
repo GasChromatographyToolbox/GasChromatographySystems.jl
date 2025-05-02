@@ -40,15 +40,46 @@ function common_solutes(db, sys)
 	return common_solutes
 end
 
+"""
+    graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=true, dt=1, mode="λ")
+
+Convert a gas chromatography system graph into simulation parameters for each module.
+
+This function processes a GC system graph and generates the necessary parameters for simulating
+solute transport through each module in the system. It handles both column modules and thermal
+modulators, setting up temperature programs, pressure functions, and substance parameters.
+
+# Arguments
+- `sys`: The GC system structure containing the network of modules
+- `p2fun`: Pressure functions for the system
+- `db_dataframe`: Database containing solute properties
+- `selected_solutes`: List of solutes to include in the simulation
+
+# Keyword Arguments
+- `interp`: Whether to use interpolated pressure functions (default: true)
+- `dt`: Time step for pressure function interpolation (default: 1)
+- `mode`: Mode for flow calculations ("λ" for permeability or "κ" for restriction) (default: "λ")
+
+# Returns
+- Array of `GasChromatographySimulator.Parameters` objects, one for each module in the system
+
+# Notes
+- Handles both constant and programmed temperature/pressure conditions
+- Sets up column parameters including length, diameter, and stationary phase
+- Configures temperature programs with interpolation functions
+- Loads solute properties from the database for the specified stationary phase
+- Applies module-specific options including numerical solver settings
+- Supports both ModuleColumn and ModuleTM (thermal modulator) types
+"""
 function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=true, dt=1, mode="λ")
 	# ng should be taken from the separat module options 
 	E = collect(edges(sys.g))
 	srcE = src.(E) # source indices
 	dstE = dst.(E) # destination indices
 	if interp == true # linear interpolation of pressure functions with step width dt
-		p_func = GasChromatographySystems.interpolate_pressure_functions(sys, p2fun; dt=dt, mode=mode)
+		p_func = interpolate_pressure_functions(sys, p2fun; dt=dt, mode=mode)
 	else
-		p_func = GasChromatographySystems.pressure_functions(sys, p2fun; mode=mode)
+		p_func = pressure_functions(sys, p2fun; mode=mode)
 	end
 	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
@@ -56,13 +87,13 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
 
 		# program parameters
-		time_steps, temp_steps, gf, a_gf, T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)
-		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) <: GasChromatographySystems.PressureProgram
+		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
+		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) <: PressureProgram
 			sys.pressurepoints[srcE[i]].P.pressure_steps
 		else
 			fill(sys.pressurepoints[srcE[i]].P, length(time_steps))
 		end
-		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) <: GasChromatographySystems.PressureProgram
+		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) <: PressureProgram
 			sys.pressurepoints[dstE[i]].P.pressure_steps
 		else
 			fill(sys.pressurepoints[dstE[i]].P, length(time_steps))

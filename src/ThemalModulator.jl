@@ -214,7 +214,41 @@ function simplifiedTM(T, par, df_A, PM, ratio, shift, Thot;)
 	return select(pl, [:No, :Name, :CAS, :tR, :τR, :TR, :σR, :uR, :kR, :Res, :Δs, :Annotations, :A]), sol
 end
 
-# thermal modulator segment 
+"""
+    simulate_ModuleTM(segment_par, segment_module, prev_peaklist; nτ=6, τ₀_focus=zeros(length(segment_par.sub)), refocus=false, kwargsTM...)
+
+Simulate solute transport through a thermal modulator module in a gas chromatography system.
+
+This function simulates the behavior of solutes in a thermal modulator, handling both simplified
+and full simulation approaches. It includes peak slicing, temperature modulation, and optional
+refocusing of peaks.
+
+# Arguments
+- `segment_par`: Simulation parameters for the thermal modulator
+- `segment_module`: Thermal modulator module configuration
+- `prev_peaklist`: Peak list from previous module
+
+# Keyword Arguments
+- `nτ`: Number of peak widths to consider for slicing (default: 6)
+- `τ₀_focus`: Initial peak widths for refocusing (default: zeros)
+- `refocus`: Whether to refocus peaks (default: false)
+- `kwargsTM`: Additional keyword arguments for simulation
+
+# Returns
+- Tuple containing:
+  1. Updated simulation parameters
+  2. Peak list with chromatographic parameters
+  3. Solution trajectories
+
+# Notes
+- Supports two simulation algorithms:
+  - "simplifiedTM": Uses simplified rectangular temperature modulation
+  - Full simulation: Uses ODE solving with adaptive time steps (this only works if the segment has a stationary phase)
+- Performs peak slicing based on modulation periods
+- Checks for peak widths exceeding modulation period
+- Handles temperature programs and constant temperatures
+- Preserves peak areas through the modulation process
+"""
 function simulate_ModuleTM(segment_par, segment_module, prev_peaklist; nτ=6, τ₀_focus=zeros(length(segment_par.sub)), refocus=false, kwargsTM...) # segment_par = par_sys[i_par[j]] , segment_module = sys.modules[i_par[j]], prev_peaklist = peaklists_[j-1]
 	if refocus == true
 		τ₀=τ₀_focus

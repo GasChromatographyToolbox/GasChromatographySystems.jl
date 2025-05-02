@@ -108,7 +108,34 @@ function change_initial_focussed(par::GasChromatographySimulator.Parameters, pl;
 	return newpar
 end
 
-# first column segment
+"""
+    simulate_ModuleColumn(segment_par, t₀, τ₀)
+    simulate_ModuleColumn(segment_par, prev_peaklist)
+
+Simulate solute transport through a column module in a gas chromatography system.
+
+This function simulates the behavior of solutes in a column module, either starting from initial
+conditions or continuing from a previous module's results. It calculates retention times, peak
+widths, and other chromatographic parameters.
+
+# Arguments
+- `segment_par`: Simulation parameters for the column module
+- `t₀`: Initial time points (first variant)
+- `τ₀`: Initial peak widths (first variant)
+- `prev_peaklist`: Peak list from previous module (second variant)
+
+# Returns
+- Tuple containing:
+  1. Updated simulation parameters
+  2. Peak list with chromatographic parameters
+  3. Solution trajectories
+
+# Notes
+- First variant is used for the initial column segment
+- Second variant is used for subsequent column segments
+- Peak areas are preserved between segments
+- Initial areas are set to 1.0 for the first segment
+"""
 function simulate_ModuleColumn(segment_par, t₀, τ₀)
 	new_segment_par = GasChromatographySystems.change_initial(segment_par, t₀, τ₀)
 	peaklist, solutions = GasChromatographySimulator.simulate(new_segment_par)
@@ -116,7 +143,6 @@ function simulate_ModuleColumn(segment_par, t₀, τ₀)
 	return new_segment_par, peaklist, solutions
 end
 
-# later column segments
 function simulate_ModuleColumn(segment_par, prev_peaklist)
 	new_segment_par = GasChromatographySystems.change_initial(segment_par, prev_peaklist)
 	peaklist, solutions = GasChromatographySimulator.simulate(new_segment_par)

@@ -255,6 +255,7 @@ function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 		therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15; flank=module_.opt.tflank) .+ 273.15 
 	end
 	
+	# for what is 'spot' used?
 	spot(x,t) = if module_.opt.ng == false
 		GasChromatographySystems.smooth_rectangle(x, 0.0, sys.modules[5].L, T_itp_(x, t), T_itp(x,t); flank=module_.opt.sflank)
 	else

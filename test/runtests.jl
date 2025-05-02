@@ -1,6 +1,6 @@
 using Test, CSV, DataFrames, GasChromatographySystems
 
-#@testset "example systems" begin
+@testset "example systems" begin
     # define some example systems
     ex_series = GasChromatographySystems.SeriesSystem(sps = ["SLB5ms", "SPB50", "Wax", "Wax"])
     ex_series_ = GasChromatographySystems.SeriesSystem(sps = ["SLB5ms", "SPB50", "Wax", "Wax"]; abstol=1e-9)
@@ -36,6 +36,6 @@ using Test, CSV, DataFrames, GasChromatographySystems
     p2fun_GCxGC_TM = GasChromatographySystems.build_pressure_squared_functions(ex_GCxGC_TM, sol_ex_GCxGC_TM)
     par_GCxGC_TM = GasChromatographySystems.graph_to_parameters(ex_GCxGC_TM, p2fun_GCxGC_TM, db_dataframe, selected_solutes)
     @test par_GCxGC_TM[4].col.sp == ex_GCxGC_TM.modules[4].sp 
-#end
+end
 
 println("Test run successful.")

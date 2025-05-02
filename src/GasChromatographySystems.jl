@@ -599,11 +599,14 @@ Calculate the modulation number for a given time point using the same timing log
 - Uses the same timing logic as `therm_mod`
 - Returns 1 for the first modulation period
 - Uses 4 digits precision to avoid rounding issues
+- Calculates modulation number directly from time value
 """
 function mod_number(t, shift, PM, ratio)
     tcold = ratio*PM
     totalshift = tcold - shift
-    return cld(round(t + totalshift, digits=4), PM)
+    # Calculate modulation number directly: n = (t + totalshift)/PM
+    # Round to 4 digits and add 1 to get 1-based indexing
+    return Int(floor(round((t + totalshift)/PM, digits=4))) + 1
 end
 
 function add_A_to_pl!(pl, df_A)

@@ -154,6 +154,31 @@ function inner_vertices(g)
 	return inner
 end
 
+"""
+    module_temperature(module_::ModuleColumn, sys)
+
+Calculate temperature parameters for a column module in a gas chromatography system.
+
+This function handles temperature calculations for a standard column module, supporting both
+constant temperature and temperature programs. It returns the necessary parameters for
+temperature interpolation along the column.
+
+# Arguments
+- `module_`: A ModuleColumn instance containing column parameters
+- `sys`: The GC system structure containing the network of modules
+
+# Returns
+- `time_steps`: Array of time points for the temperature program
+- `temp_steps`: Array of temperature values at each time point
+- `gf`: Gradient function for temperature program
+- `a_gf`: Gradient coefficients
+- `T_itp`: Temperature interpolation function that takes position and time as arguments
+
+# Notes
+- For constant temperature, uses system's common timesteps or default [0.0, 36000.0]
+- Handles NaN column length by defaulting to 1.0
+- Supports both constant temperature and temperature program modes
+"""
 function module_temperature(module_::ModuleColumn, sys)
 	L = if isnan(module_.L)
 		1.0
@@ -180,6 +205,32 @@ function module_temperature(module_::ModuleColumn, sys)
 	return time_steps, temp_steps, gf, a_gf, T_itp
 end
 
+"""
+    module_temperature(module_::ModuleTM, sys)
+
+Calculate temperature parameters for a thermal modulator module in a gas chromatography system.
+
+This function handles temperature calculations for a thermal modulator, combining a base
+temperature program with periodic modulation between hot and cold phases. It supports both
+absolute and relative temperature modes for the cold jet.
+
+# Arguments
+- `module_`: A ModuleTM instance containing thermal modulator parameters
+- `sys`: The GC system structure containing the network of modules
+
+# Returns
+- `time_steps`: Array of time points for the temperature program
+- `temp_steps`: Array of temperature values at each time point
+- `gf`: Gradient function for temperature program
+- `a_gf`: Gradient coefficients
+- `spot`: Temperature function that combines base temperature with modulation
+
+# Notes
+- Supports both constant temperature and temperature program modes
+- Cold jet temperature can be either absolute (Tcold_abs=true) or relative to base temperature
+- Includes spatial temperature distribution (spot function) when ng=false
+- Temperature values are converted between °C and K as needed
+"""
 function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 	if typeof(module_.T) <: GasChromatographySystems.TemperatureProgram # temperature is a TemperatureProgram
 		time_steps = module_.T.time_steps

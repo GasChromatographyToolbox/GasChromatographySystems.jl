@@ -171,7 +171,7 @@ function simplifiedTM(T, par, df_A, PM, ratio, shift, Thot;)
 	Name = sort_df_A.Name
 	CAS = sort_df_A.CAS
 	number_of_modulation = GasChromatographySystems.mod_number.(t₀, shift, PM, ratio)
-	tR = number_of_modulation .* PM .- (tcold - shift) # time of the start of the next hot jet 
+	tR = number_of_modulation .* PM .- (tcold - shift)  .- thot # time of the start of the next hot jet 
 	#println("simplifiedTM(): t₀ = $(t₀)s, tR = $(tR)s.")
 
 	# using par.prog.T_itp can result in wrong temperatures at tR, because of rounding errors for Float64 in `mod()`-function inside the `therm_mod()`-function.

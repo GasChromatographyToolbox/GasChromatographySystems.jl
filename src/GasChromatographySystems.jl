@@ -439,149 +439,6 @@ function plot_holdup_time_path_over_time(sys, p2fun, num_paths; dt=60.0)
 end
 # end - plotting of the graphs and functions
 
-# begin - system to parameters
-# transform system to GasChromatographySimulator.Parameters
-function all_stationary_phases(sys)
-	stat_phases = Array{String}(undef, ne(sys.g))
-	for i=1:ne(sys.g)
-		stat_phases[i] = sys.modules[i].sp
-	end
-	return stat_phases
-end
-
-function common_solutes(db, sys)
-	# gives the soultes with common stationary phases between the database 'db' and the
-	# GC-System 'GCsys'
-	usp = setdiff(unique(GasChromatographySystems.all_stationary_phases(sys)), [""])
-	if length(usp)==0 # no stationary phase
-		common_solutes = DataFrame(Name=db.Name, CAS=db.CAS)
-	else
-		filter_db = Array{DataFrame}(undef, length(usp))
-		for i=1:length(usp)
-			filter_db[i] = filter([:Phase] => x -> x==usp[i], db)
-		end
-		if length(usp)==1 # only one stationary phase
-			common_db = filter_db[1]
-		else
-			common_db = innerjoin(filter_db[1], filter_db[2], on=:CAS, makeunique=true)
-			if length(usp)>2 # more than two stationary phases
-				for i=3:length(usp)
-				common_db = innerjoin(common_db, filter_db[i], on=:CAS, makeunique=true)
-				end
-			end
-		end
-		CAS = unique(common_db.CAS)
-		Name = Array{String}(undef, length(CAS))
-		for i=1:length(CAS)
-			ii = findfirst(common_db.CAS.==CAS[i])
-			Name[i] = common_db.Name[ii]
-		end
-		common_solutes = DataFrame(Name=Name, CAS=CAS)
-	end	
-	return common_solutes
-end
-
-#=
-function graph_to_parameters(sys, db_dataframe, selected_solutes; interp=true, dt=1)
-	# ng should be taken from the separat module options 
-	E = collect(edges(sys.g))
-	srcE = src.(E) # source indices
-	dstE = dst.(E) # destination indices
-	if interp == true # linear interpolation of pressure functions with step width dt
-		p_func = interpolate_pressure_functions(sys; dt=dt)
-	else
-		p_func = pressure_functions(sys)
-	end
-	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
-	for i=1:ne(sys.g)
-		# column parameters
-		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
-
-		# program parameters
-		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
-		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) <: PressureProgram
-			sys.pressurepoints[srcE[i]].P.pressure_steps
-		else
-			fill(sys.pressurepoints[srcE[i]].P, length(time_steps))
-		end
-		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) <: PressureProgram
-			sys.pressurepoints[dstE[i]].P.pressure_steps
-		else
-			fill(sys.pressurepoints[dstE[i]].P, length(time_steps))
-		end
-		pin_itp = p_func[srcE[i]]
-		pout_itp = p_func[dstE[i]]	
-		
-		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
-
-		# substance parameters
-		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].sp, sys.options.gas, selected_solutes, NaN.*ones(length(selected_solutes)), NaN.*ones(length(selected_solutes)))
-
-		# option parameters
-		#opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM 
-		opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		#else
-			# put options for ModuleColumn in separat options structure?
-		#	GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		#end
-
-		parameters[i] = GasChromatographySimulator.Parameters(col, prog, sub, opt)
-	end
-	return parameters
-end
-=#
-
-function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=true, dt=1, mode="λ")
-	# ng should be taken from the separat module options 
-	E = collect(edges(sys.g))
-	srcE = src.(E) # source indices
-	dstE = dst.(E) # destination indices
-	if interp == true # linear interpolation of pressure functions with step width dt
-		p_func = GasChromatographySystems.interpolate_pressure_functions(sys, p2fun; dt=dt, mode=mode)
-	else
-		p_func = GasChromatographySystems.pressure_functions(sys, p2fun; mode=mode)
-	end
-	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
-	for i=1:ne(sys.g)
-		# column parameters
-		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
-
-		# program parameters
-		time_steps, temp_steps, gf, a_gf, T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)
-		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) <: GasChromatographySystems.PressureProgram
-			sys.pressurepoints[srcE[i]].P.pressure_steps
-		else
-			fill(sys.pressurepoints[srcE[i]].P, length(time_steps))
-		end
-		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) <: GasChromatographySystems.PressureProgram
-			sys.pressurepoints[dstE[i]].P.pressure_steps
-		else
-			fill(sys.pressurepoints[dstE[i]].P, length(time_steps))
-		end
-		pin_itp = p_func[srcE[i]]
-		pout_itp = p_func[dstE[i]]	
-		
-		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
-
-		# substance parameters
-		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].sp, sys.options.gas, selected_solutes, NaN.*ones(length(selected_solutes)), NaN.*ones(length(selected_solutes)))
-
-		# option parameters
-		#opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM 
-		opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		#else
-			# put options for ModuleColumn in separat options structure?
-		#	GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		#end
-
-		parameters[i] = GasChromatographySimulator.Parameters(col, prog, sub, opt)
-	end
-	return parameters
-end
-
-# end - system to parameters
-
-
 # begin - thermal modulator specific functions
 # general smooth rectangle function
 function smooth_rectangle(x, a, b, m)
@@ -669,6 +526,31 @@ function rect(x, x0, min, max, width)
 	elseif abs(x-x0) < width/2
 		max
 	end
+end
+
+# periodic repeated smoothed rectangle function with period 'PM', a shift by 'shift', 'ratio' of time of Tcold to time of Thot. A small shift is incorporated to move the falling flank from the beginning to the end
+"""
+    mod_number(t, shift, PM, ratio)
+
+Calculate the modulation number for a given time point using the same timing logic as `therm_mod`.
+
+# Arguments
+- `t`: Time point at which to calculate the modulation number
+- `shift`: Time shift of the modulation pattern (in seconds)
+- `PM`: Modulation period (in seconds)
+- `ratio`: Ratio of cold phase duration to total period (0 < ratio < 1)
+
+# Returns
+- Integer modulation number (1-based)
+
+# Notes
+- Uses the same timing logic as `therm_mod`
+- Returns 1 for the first modulation period
+"""
+function mod_number(t, shift, PM, ratio)
+    tcold = ratio*PM
+    totalshift = tcold - shift
+    return cld(t + totalshift, PM)
 end
 
 function add_A_to_pl!(pl, df_A)

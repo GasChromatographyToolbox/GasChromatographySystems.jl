@@ -611,16 +611,51 @@ function smooth_rectangle(x, xstart, width, min, max; flank=20)
 end
 
 # periodic repeated smoothed rectangle function with period 'PM', a shift by 'shift', 'ratio' of time of Tcold to time of Thot. A small shift is incorporated to move the falling flank from the beginning to the end
+"""
+    therm_mod(t, shift, PM, ratio, Tcold, Thot; flank=20)
+
+Generate a periodic temperature modulation pattern for thermal modulation in gas chromatography.
+
+The function creates a temperature profile that alternates between cold (Tcold) and hot (Thot) phases
+with a specified period (PM). The pattern can be either a sharp rectangular function or a smoothed
+version with controlled transition flanks.
+
+# Arguments
+- `t`: Time point(s) at which to evaluate the temperature
+- `shift`: Time shift of the modulation pattern (in seconds)
+- `PM`: Modulation period (in seconds)
+- `ratio`: Ratio of cold phase duration to total period (0 < ratio < 1)
+- `Tcold`: Temperature during the cold phase (in °C)
+- `Thot`: Temperature during the hot phase (in °C)
+
+# Keyword Arguments
+- `flank`: Controls the smoothness of temperature transitions. Use `Inf` for sharp transitions,
+          or a positive number for smoothed transitions (default: 20)
+
+# Returns
+- Temperature value(s) at the specified time point(s)
+
+# Notes
+- on modulation consists of a cold phase and a hot phase in this order
+- The cold phase duration is `ratio * PM`
+- The hot phase duration is `(1 - ratio) * PM`
+- When `shift = 0`, the pattern starts with the hot phase
+- The `flank` parameter controls the width of the temperature transition regions
+"""
 function therm_mod(t, shift, PM, ratio, Tcold, Thot; flank=20) 
 	# add warning, if flank value is to low -> jumps in the function
-	width = (1-ratio)*PM
-	tmod = mod(t+shift, PM)
-	tstart = ratio*PM
+	
+	tcold = ratio*PM
+	thot = (1-ratio)*PM
+	width = thot
+	totalshift = tcold - shift
+	tmod = mod(t + totalshift, PM)
+	tstart = tcold
 	if flank == Inf # rectangle function
-		# ceil() to assure, that the rounding errors of (mod) do not affect the rectangle function at the rising flank (but what is at the falling flank?) 
+		# ceil() with 4 digits precision ensures consistent switching between cold and hot phases
 		return ifelse(ceil(tmod, digits=4) < tstart, Tcold, Thot)
 	else # smoothed rectangle
-		return smooth_rectangle.(tmod, tstart, width, Tcold, Thot; flank=flank) 
+		return GasChromatographySystems.smooth_rectangle.(tmod, tstart, width, Tcold, Thot; flank=flank) 
 	end
 end
 

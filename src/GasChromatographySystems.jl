@@ -553,7 +553,6 @@ version with controlled transition flanks.
 """
 function therm_mod(t, shift, PM, ratio, Tcold, Thot; flank=20) 
 	# add warning, if flank value is to low -> jumps in the function
-	
 	tcold = ratio*PM
 	thot = (1-ratio)*PM
 	width = thot
@@ -609,6 +608,19 @@ function mod_number(t, shift, PM, ratio)
     return Int(floor(round((t + totalshift)/PM, digits=4))) + 1
 end
 
+# use following two functions to replace fld() functions.
+# Helper function to calculate modulation time
+function mod_time(t, PM)
+    # Calculate time within modulation period using mod with rounding
+    return round(mod(t, PM), digits=4)
+end
+
+# Helper function to calculate modulation base time
+function mod_base_time(t, PM)
+    # Calculate base time (start of modulation period) using floor division with rounding
+    return round(floor(t/PM) * PM, digits=4)
+end
+
 function add_A_to_pl!(pl, df_A)
 	# add the areas in the dataframe df_A to the peaklist, same CAS and Annotations are used to identify the correct solute
 #	sort_A_foc = Array{Float64}(undef, length(df_A.A_foc))
@@ -649,14 +661,15 @@ function peaklist_GCxGC(pl_end, pl_1D, PM)#, shift)
 	return DataFrame(Name=fit_D1.Name, tR1=tR1, tR2=tR2)
 end
 
-function peaklist_GCxGC(pl_end, PM)#, shift)
+function peaklist_GCxGC(pl_end, PM)
 	# estimated from the weighted (height) means of projected retention times
-	# here the shift is not known
+	# here the shift is not known and therefore ignored
 	heights = GasChromatographySystems.heights_of_peaks(pl_end)
-	#tR1 = fld.(pl_end.tR .+ shift, PM).*PM .- shift
-	#tR2 = pl_end.tR .- (fld.(pl_end.tR .+ shift, PM).*PM .- shift)
+	# test this change replace fld() with e.g. mod_time():
 	tR1 = fld.(pl_end.tR, PM).*PM
-	tR2 = pl_end.tR .- (fld.(pl_end.tR, PM).*PM)
+	tR2 = pl_end.tR .- fld.(pl_end.tR, PM).*PM
+	#tR1 = mod_base_time.(pl_end.tR, PM)
+	#tR2 = mod_time.(pl_end.tR, PM)
 	Name = unique(pl_end.Name)
 	nsub = length(Name)
 	CAS = pl_end.CAS[[findfirst(Name[i].==pl_end.Name) for i=1:length(Name)]]
@@ -710,11 +723,12 @@ function fit_envelope(pl_D2, pl_D1)
 	return DataFrame(Name=Name, tRs=sort_tR, heights=sort_heights, fits=fits)
 end
 
-function fit_gauss_D1(pl_D2, pl_D1, PM)#, shift) # shift?
-	# here the shift is not known
+function fit_gauss_D1(pl_D2, pl_D1, PM)
+	# here the shift is not known and therefore ignored
 	heights = heights_of_peaks(pl_D2)
-	#tR = fld.(pl_D2.tR .+ shift, PM).*PM .- shift
+	# test this change replace fld() with e.g. mod_time():
 	tR = fld.(pl_D2.tR, PM).*PM
+	#tR = mod_base_time.(pl_D2.tR, PM)
 	Name = unique(pl_D2.Name)
 	nsub = length(Name)
 
@@ -733,11 +747,12 @@ function fit_gauss_D1(pl_D2, pl_D1, PM)#, shift) # shift?
 	return DataFrame(Name=Name, tRs=sort_tR, heights=sort_heights, fits=fits)
 end
 
-function fit_gauss_D2(pl_D2, PM)#, shift) # shift ?
-	# here the shift is not known
+function fit_gauss_D2(pl_D2, PM)
+	# here the shift is not known and therefore ignored
 	heights = heights_of_peaks(pl_D2)
-	#tR = pl_D2.tR .- (fld.(pl_D2.tR .+ shift, PM).*PM .- shift)
+	# test this change replace fld() with e.g. mod_time():
 	tR = pl_D2.tR .- (fld.(pl_D2.tR, PM).*PM)
+	#tR = mod_time.(pl_D2.tR, PM)
 	Name = unique(pl_D2.Name)
 	nsub = length(Name)
 
@@ -798,7 +813,9 @@ function chrom_marked(pl, PM, ratio, shift; nτ=6)
 	p_chrom, t_sum, c_sum, t, c = chrom(pl; nτ=nτ)
 	max_y = maximum(c_sum)
 	# add modulation period
+	# test this change replace fld() with e.g. mod_time():
 	n = unique(fld.(t_sum, PM + shift))
+	#n = unique(mod_number.(t_sum, shift, PM, ratio))
 	for i=1:length(n)
 		Plots.plot!(p_chrom, [n[i]*PM-shift, n[i]*PM-shift], [0.0, 1.1*maximum(c_sum)], c=:black, label="")
 		Plots.plot!(p_chrom, [n[i]*PM-shift+PM*ratio, n[i]*PM-shift+PM*ratio], [0.0, 1.1*maximum(c_sum)], c=:black, linestyle=:dash, label="")
@@ -856,6 +873,7 @@ function chrom2d(pl_final, sys, PM)
 
 	t_D1 = (0.0:PM:t[end])
 	
+	# replace fld() with e.g. mod_number():
 	n = Int.(fld.(collect(t), PM))
 	slices = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
 	t_D2 = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
@@ -910,14 +928,18 @@ function comparison_meas_sim(meas, pl_sim)
 end
 
 function chrom_slicing(t1, c, PM)
+	# test this change replace fld() with e.g. mod_time():
 	n = Int.(fld.(collect(t1), PM)) # number of the slices
+	#n = mod_number.(collect(t1), 0.0, PM, 0.5) # number of the slices
 	slices = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
 	t_D2 = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
 	for i=1:length(unique(n))
 		i1 = findfirst(unique(n)[i].==n)
 		i2 = findlast(unique(n)[i].==n)
 		slices[i] = c[i1:i2]
-		t_D2[i] = t1[i1:i2] .- unique(n)[i] * PM
+		# test this change replace fld() with e.g. mod_time():
+		#t_D2[i] = t1[i1:i2] .- unique(n)[i] * PM
+		t_D2[i] = mod_time.(t1[i1:i2], PM)
 	end
 	t_D1 = 0.0:PM:t1[end]
 	return slices, t_D1, t_D2

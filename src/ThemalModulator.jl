@@ -264,6 +264,7 @@ function simulate_ModuleTM(segment_par, segment_module, prev_peaklist; nτ=6, τ
 			dt = segment_module.opt.dtinit
 			sol[i_sub] = GasChromatographySimulator.solving_odesystem_r(new_segment_par.col, new_segment_par.prog, new_segment_par.sub[i_sub], new_segment_par.opt; kwargsTM..., dt=dt)
 			tR = sol[i_sub].u[end][1]
+			# replace fld() with mod_number() and fix shift to total shift
 			while (fld(tR + segment_module.shift, segment_module.PM) > fld(new_segment_par.sub[i_sub].t₀ + segment_module.shift, segment_module.PM) && dt > eps()) || (sol[i_sub].retcode != ReturnCode.Success && dt > eps()) # solute elutes not in the same modulation periode or the solving failed
 				dt = dt/10 # reduce initial step-width
 				dtmax = dt*1000

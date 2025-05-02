@@ -26,8 +26,10 @@ const pn = 101300 # Pa
 include("./Structures.jl")
 include("./Flowcalc.jl")
 include("./Systems.jl")
+include("./SystemToParameters.jl")
 include("./SolvingSystems.jl")
 include("./ThermalModulator.jl")
+
 # functions
 
 # begin - misc, for update_system

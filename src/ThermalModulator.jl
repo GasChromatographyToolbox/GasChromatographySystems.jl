@@ -59,7 +59,7 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 	init_t_end = (mod_number.(tR .+ nτ.*τR, shift, PM, ratio) .- 1).*PM .- totalshift 
 	# number of slices for every substance: 
  	n_slice = round.(Int, (init_t_end .- init_t_start)./PM .+ 1) 
-	println("slicing(): init_t_start=$(init_t_start)s, init_t_end=$(init_t_end)s, n_slice=$(n_slice).")
+	#println("slicing(): init_t_start=$(init_t_start)s, init_t_end=$(init_t_end)s, n_slice=$(n_slice).")
 	sub_TM_focussed = Array{GasChromatographySimulator.Substance}(undef, sum(n_slice))
 	A_focussed = Array{Float64}(undef, sum(n_slice))
 	#A_unfocussed = Array{Float64}(undef, sum(n_slice))
@@ -83,13 +83,13 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
                 #prob_unfocussed = IntegralProblem(g, init_t_start[i]+(j-1)*PM+tcold, init_t_start[i]+(j-1)*PM+tcold+thot, p)
                 # all focussed:
                 domain = (init_t_start[i]+(j-1)*PM, init_t_start[i]+j*PM)
-                    println("domain: $(domain), i=$(i), j=$(j), type: $(typeof(domain))")
+                    #println("domain: $(domain), i=$(i), j=$(j), type: $(typeof(domain))")
                 prob_focussed = IntegralProblem(g, domain, p)
                     #println("prob_focussed: $(prob_focussed)")
                 A_focussed[ii] = solve(prob_focussed, QuadGKJL(); reltol = reltol, abstol = abstol).u * AR[i]
                 #A_unfocussed[ii] = solve(prob_unfocussed, QuadGKJL(); reltol = 1e-18, abstol = 1e-30).u * AR[i]
 			end
-            println("A_focussed[ii] = $(A_focussed[ii])")
+            #println("A_focussed[ii] = $(A_focussed[ii])")
 			CAS_par = [par.sub[i].CAS for i in 1:length(par.sub)]
 			i_sub = findfirst(pl.CAS[i] .== CAS_par)
 			sub_TM_focussed[ii] = GasChromatographySimulator.Substance(par.sub[i_sub].name, par.sub[i_sub].CAS, par.sub[i_sub].Tchar, par.sub[i_sub].θchar, par.sub[i_sub].ΔCp, par.sub[i_sub].φ₀, "s$(j)_"*pl.Annotations[i], par.sub[i_sub].Cag, t₀, τ₀[i])

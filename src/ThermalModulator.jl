@@ -313,15 +313,11 @@ function simplifiedTM_mod2(T, par, df_A, PM, ratio, shift, Thot, Tcold;)
 	ΔCp = [new_segment_par.sub[i].ΔCp for i=1:length(new_segment_par.sub)]
 	φ₀ = [new_segment_par.sub[i].φ₀ for i=1:length(new_segment_par.sub)]
 	Cag = [new_segment_par.sub[i].Cag for i=1:length(new_segment_par.sub)]
-	#t₀ = [new_segment_par.sub[i].Tchar for i=1:length(new_segment_par.sub)]
-	#τ₀ = [new_segment_par.sub[i].Tchar for i=1:length(new_segment_par.sub)]
 	peaklist, solutions = GasChromatographySimulator.simulate(par.col.L, par.col.d, par.col.df, par.col.gas, T_itp_cold, par.prog.Fpin_itp, par.prog.pout_itp, Name, CAS, ann, Tchar, θchar, ΔCp, φ₀, Cag, tstart, fill(tcold, length(par.sub)), new_segment_par.opt)
-	# No. is not assigned 
 	No = [parse(Int, split(ann[i], ", No: ")[end]) for i=1:length(ann)]
 	peaklist[!, "No"] = No
 	GasChromatographySystems.add_A_to_pl!(peaklist, df_A)
 	return peaklist, solutions, T_itp_cold, T_itp_hot
-	#GasChromatographySimulator.solve_system(par.col.L, par.col.d, par.col.df, par.col.gas, T_itp_cold, par.prog.Fpin_itp, par.prog.pout_itp, Tchar, θchar, ΔCp, φ₀, Cag, tstart, fill(tcold, length(par.sub)), new_segment_par.opt)
 end
 
 """
@@ -375,15 +371,7 @@ function simplifiedTM_mod3(T, par, df_A, PM, ratio, shift, Thot;)
 	number_of_modulation = mod_number.(tstart, shift, PM, ratio)
 	t_next_hot = number_of_modulation .* PM .- (tcold - shift) .- thot # time of the start of the next hot jet 
 	#println("simplifiedTM(): tstart = $(tstart)s, t_next_hot = $(t_next_hot)s.")
-	t₀ = Array{Float64}(undef, length(tstart))
-	for i=1:length(tstart)
-		if tstart[i] - t_next_hot[i] <= tcold
-			t₀[i] = t_next_hot[i] # but it could be that the substance already migrates during cold jet
-		else # peak arrives during hot jet
-			t₀[i] = tstart[i]
-			@warn "Peak $(i), $(Name[i]) arrives during hot jet." 
-		end
-	end
+	t₀ = modulator_phase(tstart, t_next_hot, tcold)[1]
 		
 	# using par.prog.T_itp can result in wrong temperatures at tR, because of rounding errors for Float64 in `mod()`-function inside the `therm_mod()`-function.
 	# take the temperature/temperature program defined for the module and add Thot 
@@ -422,6 +410,106 @@ function simplifiedTM_mod3(T, par, df_A, PM, ratio, shift, Thot;)
 	peaklist[!, "No"] = No
 	GasChromatographySystems.add_A_to_pl!(peaklist, df_A)
 	return peaklist, solutions
+end
+
+"""
+    modulator_phase(tstart, t_next_hot, tcold)
+
+Determine the phase of the modulation and initial timesfor each peak based on the start time and the time of the start of the next hot jet. 
+
+# Arguments
+- `tstart`: Start time of the peak
+- `t_next_hot`: Time of the start of the next hot jet
+- `tcold`: Duration of the cold jet
+
+# Returns
+- `t₀`: initial time of the peak
+- `phase`: Phase of the modulation ('cold' or 'hot')
+"""
+function modulator_phase(tstart, t_next_hot, tcold)
+	t₀ = Array{Float64}(undef, length(tstart))
+	phase = Array{String}(undef, length(tstart))
+	for i=1:length(tstart)
+		if tstart[i] - t_next_hot[i] <= tcold
+			t₀[i] = t_next_hot[i]
+			phase[i] = "cold"
+		else # peak arrives during hot jet
+			t₀[i] = tstart[i]
+			@warn "Peak $(i), $(Name[i]) arrives during hot jet." 
+			phase[i] = "hot"
+		end
+	end
+	return t₀, phase
+end
+
+"""
+    check_retention_cold_jet(T, par, df_A, PM, ratio, shift, Thot, Tcold)
+
+Check if solutes are retained during the cold phase of thermal modulation by calculating their migration distance.
+
+This function analyzes whether solutes will be retained in the column during the cold phase of thermal modulation
+by calculating their migration distance under cold phase conditions. It determines if solutes will reach the end
+of the column before the cold phase ends.
+
+# Arguments
+- `T`: Base temperature or temperature program for the column
+- `par`: Parameters structure containing column, program, and substance information
+- `df_A`: DataFrame containing peak areas and initial times from slicing
+- `PM`: Modulation period in seconds
+- `ratio`: Ratio of cold phase duration to total period (0 < ratio < 1)
+- `shift`: Time shift of the modulation pattern in seconds
+- `Thot`: Temperature difference for hot phase in °C
+- `Tcold`: Temperature difference for cold phase in °C (absolute or relative)
+
+# Returns
+- DataFrame containing:
+  - Name: Substance names
+  - retained: Boolean array indicating if solutes are retained during cold phase
+  - x_cold: Calculated migration distance during cold phase
+  - k_cold: Retention factors during cold phase
+  - t_start_cold: Start times of cold phases
+  - tstart: Initial start times of peaks
+
+# Notes
+- Uses mod_number for consistent modulation period calculations
+- Calculates migration distance based on cold phase duration and retention factors
+- Considers both absolute and relative cold phase temperatures
+- A solute is considered retained if its migration distance is less than column length
+- Useful for predicting breakthrough during cold phase of modulation
+"""
+function check_retention_cold_jet(T, par, df_A, PM, ratio, shift, Thot, Tcold;)
+	tcold = PM*ratio
+	thot = PM*(1-ratio)
+	sort_df_A = sort(df_A, :t0)
+	tstart = sort_df_A.t0 # no need to again calculate the time as it was already calculated with the slicing in df_A.t0
+	Name = sort_df_A.Name
+
+	number_of_modulation = mod_number.(tstart, shift, PM, ratio)
+	t_start_cold = (number_of_modulation .- 1) .* PM .- (tcold - shift)
+
+	Tmin = if opt_values[2] == "absolut"
+		Tcold
+	else
+		T + Tcold
+	end
+	T_itp_cold = if typeof(T) <: Number
+		gf(x) = zero(x).*ones(2)
+		GasChromatographySimulator.temperature_interpolation([0.0, 3600.0], [Tmin, Tmin], gf, par.col.L)
+	else
+		GasChromatographySimulator.temperature_interpolation(T.time_steps, fill(Tmin, length(T.time_steps)), T.gf, par.col.L)
+	end
+	tM_cold = Array{Float64}(undef, length(Name))
+	k_cold = Array{Float64}(undef, length(Name))
+	x_cold = Array{Float64}(undef, length(Name))
+	retained = Array{Bool}(undef, length(Name))
+	for i=1:length(Name)
+		tM_cold[i] = GasChromatographySimulator.holdup_time(tstart[i], T_itp_cold, par.prog.Fpin_itp, par.prog.pout_itp, par.col.L, par.col.d, par.col.gas; ng=par.opt.ng, vis=par.opt.vis, control=par.opt.control)
+		i_sub = findfirst(Name[i] .== df_A.Name)
+		k_cold[i] = GasChromatographySimulator.retention_factor(par.col.L, tstart[i], T_itp_cold, par.col.d, par.col.df, par.sub[i_sub].Tchar, par.sub[i_sub].θchar, par.sub[i_sub].ΔCp, par.sub[i_sub].φ₀)
+	end
+	x_cold = tcold./tM_cold*par.col.L./(1 .+ k_cold) # longer than L -> problem
+	retained .= x_cold .< par.col.L
+	return DataFrame(Name=Name, retained=retained, x_cold=x_cold, k_cold=k_cold, t_start_cold=t_start_cold, tstart=tstart)
 end
 
 """

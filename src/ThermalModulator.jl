@@ -555,7 +555,7 @@ function simulate_ModuleTM(segment_par, segment_module, prev_peaklist; nτ=6, τ
 	end
 	new_segment_par, df_A = slicing(prev_peaklist, segment_module.PM, segment_module.ratio, segment_module.shift, segment_par; nτ=nτ, τ₀=τ₀, abstol=segment_module.opt.abstol, reltol=segment_module.opt.reltol, alg=segment_module.opt.alg)
 	if segment_module.opt.alg == "simplifiedTM"
-		peaklist, solutions = simplifiedTM_mod1(segment_module.T, new_segment_par, df_A, segment_module.PM, segment_module.ratio, segment_module.shift, segment_module.Thot)
+		peaklist, solutions = simplifiedTM(segment_module.T, new_segment_par, df_A, segment_module.PM, segment_module.ratio, segment_module.shift, segment_module.Thot)
 	elseif segment_module.opt.alg == "simplifiedTM2"
 		peaklist, solutions = simplifiedTM_mod2(segment_module.T, new_segment_par, df_A, segment_module.PM, segment_module.ratio, segment_module.shift, segment_module.Thot, segment_module.Tcold)
 	elseif segment_module.opt.alg == "simplifiedTM3"

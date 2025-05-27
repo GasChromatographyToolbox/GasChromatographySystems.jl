@@ -38,4 +38,23 @@ using Test, CSV, DataFrames, GasChromatographySystems
     @test par_GCxGC_TM[4].col.sp == ex_GCxGC_TM.modules[4].sp 
 end
 
-println("Test run successful.")
+@testset "system with temperature gradient" begin
+    # temperature program without gradient
+    TP = GasChromatographySystems.TemperatureProgram(GasChromatographySystems.GasChromatographySimulator.conventional_program([40.0, 1.0, 5.0, 200.0, 2.0, 15.0, 300.0, 3.0])...)
+    # temperature program with gradient
+    ΔT = [0.0, 40.0, 80.0]
+	x0 = [0.0, 0.0, 0.0]
+	L0 = [2.0, 2.0, 2.0]
+	alpha = [0.0, 3.0, 6.0]
+	a_gf = [ΔT x0 L0 alpha]
+	gf(x) = GasChromatographySystems.GasChromatographySimulator.gradient(x, a_gf)
+	TP_grad = GasChromatographySystems.TemperatureProgram([0.0, 2000.0, 3000.0], [40.0, 160.0, 260.0], gf, a_gf)
+    series_grad = GasChromatographySystems.SeriesSystem([10.0, 2.0], [0.25, 0.25], [0.25, 0.25], ["SLB5ms", "SLB5ms"], [TP, TP_grad], 1.0, NaN, 0.0; name="SeriesSystem", opt=GasChromatographySystems.Options())
+    
+    @test series_grad.modules[1].T.time_steps == series_grad.modules[2].T.time_steps
+    @test series_grad.modules[1].opt.ng == true
+    @test series_grad.modules[2].opt.ng == false
+    @test series_grad.modules[2].T.gf(2.0)[end] == -ΔT[end]
+end
+
+    println("Test run successful.")

@@ -11,24 +11,12 @@ function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; name="SeriesSystem", 
 	for i=1:n
 		add_edge!(g, i, i+1) 
 	end
-	# common time steps
-	#com_timesteps = []
-	#for i=1:length(TPs)
-	#	if typeof(TPs[i]) <: GasChromatographySystems.TemperatureProgram
-	#		com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, TPs[i].time_steps)
-	#	end
-	#end
-	#if isempty(com_timesteps)
-	#	com_timesteps = [0.0, 36000.0]
-	#end
 	# pressure points
 	pp = Array{GasChromatographySystems.PressurePoint}(undef, n+1)
-	#pins = pin*1000.0.*ones(length(com_timesteps))
-	#nans = NaN.*ones(length(com_timesteps))
 	if pout == 0.0
 		pouts = eps(Float64)
 	else 
-		pouts = pout#*1000.0.*ones(length(com_timesteps))
+		pouts = pout
 	end
 	pp[1] = GasChromatographySystems.PressurePoint("p1", pin) # inlet
 	for i=2:n
@@ -39,9 +27,9 @@ function SeriesSystem(Ls, ds, dfs, sps, TPs, F, pin, pout; name="SeriesSystem", 
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, n)
 	for i=1:n
 		if i==1
-			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6; kwargs...)
+			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], F/60e6; ng=!check_temperature_gradient(TPs[i]), kwargs...)
 		else
-			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], NaN; kwargs...)
+			modules[i] = GasChromatographySystems.ModuleColumn("$(i) -> $(i+1)", Ls[i], ds[i]*1e-3, dfs[i]*1e-6, sps[i], TPs[i], NaN; ng=!check_temperature_gradient(TPs[i]), kwargs...)
 		end
 	end
 	# system
@@ -93,9 +81,9 @@ function SplitSystem(Ls, ds, dfs, sps, TPs, Fs, pin, pout1, pout2; name="SplitSy
 	pp[4] = GasChromatographySystems.PressurePoint("p₄", pout2s) # outlet 2
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
-	modules[1] = GasChromatographySystems.ModuleColumn("1 -> 2", Ls[1], ds[1]*1e-3, dfs[1]*1e-6, sps[1], TPs[1], Fs[1]/60e6; kwargs...)
-	modules[2] = GasChromatographySystems.ModuleColumn("2 -> 3", Ls[2], ds[2]*1e-3, dfs[2]*1e-6, sps[2], TPs[2], Fs[2]/60e6; kwargs...)
-	modules[3] = GasChromatographySystems.ModuleColumn("2 -> 4", Ls[3], ds[3]*1e-3, dfs[3]*1e-6, sps[3], TPs[3], Fs[3]/60e6; kwargs...)
+	modules[1] = GasChromatographySystems.ModuleColumn("1 -> 2", Ls[1], ds[1]*1e-3, dfs[1]*1e-6, sps[1], TPs[1], Fs[1]/60e6; ng=!check_temperature_gradient(TPs[1]), kwargs...)
+	modules[2] = GasChromatographySystems.ModuleColumn("2 -> 3", Ls[2], ds[2]*1e-3, dfs[2]*1e-6, sps[2], TPs[2], Fs[2]/60e6; ng=!check_temperature_gradient(TPs[2]), kwargs...)
+	modules[3] = GasChromatographySystems.ModuleColumn("2 -> 4", Ls[3], ds[3]*1e-3, dfs[3]*1e-6, sps[3], TPs[3], Fs[3]/60e6; ng=!check_temperature_gradient(TPs[3]), kwargs...)
 	# system
 	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(name, g, pp, modules, opt))
 
@@ -109,6 +97,7 @@ function SplitSystem(; Ls = [10.0, 1.0, 5.0], ds = [0.25, 0.1, 0.25], dfs = [0.2
 end
 
 # definition GCxGC system with thermal modulator
+# does not work with temperature gradient yet (other implementation of gradients needed)
 function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
 
 	TPs = [TP1, TP2, TPM]

@@ -692,7 +692,7 @@ end
 
 # periodic repeated smoothed rectangle function with period 'PM', a shift by 'shift', 'ratio' of time of Tcold to time of Thot. A small shift is incorporated to move the falling flank from the beginning to the end
 """
-    mod_number(t, shift, PM, ratio)
+    mod_number(t, shift, PM, ratio; digits=6)
 
 Calculate the modulation number for a given time point using the same timing logic as `therm_mod`.
 
@@ -701,6 +701,7 @@ Calculate the modulation number for a given time point using the same timing log
 - `shift`: Time shift of the modulation pattern (in seconds)
 - `PM`: Modulation period (in seconds)
 - `ratio`: Ratio of cold phase duration to total period (0 < ratio < 1)
+- `digits`: Number of digits to use for rounding (default: 6)
 
 # Returns
 - Integer modulation number (1-based)
@@ -708,28 +709,28 @@ Calculate the modulation number for a given time point using the same timing log
 # Notes
 - Uses the same timing logic as `therm_mod`
 - Returns 1 for the first modulation period
-- Uses 4 digits precision to avoid rounding issues
+- Uses 6 digits precision to avoid rounding issues
 - Calculates modulation number directly from time value
 """
-function mod_number(t, shift, PM, ratio)
+function mod_number(t, shift, PM, ratio; digits=6)
     tcold = ratio*PM
     totalshift = tcold - shift
     # Calculate modulation number directly: n = (t + totalshift)/PM
     # Round to 4 digits and add 1 to get 1-based indexing
-    return Int(floor(round((t + totalshift)/PM, digits=4))) + 1
+    return Int(floor(round((t + totalshift)/PM, digits=digits))) + 1
 end
 
 # use following two functions to replace fld() functions.
 # Helper function to calculate modulation time
-function mod_time(t, PM)
+function mod_time(t, PM; digits=6)
     # Calculate time within modulation period using mod with rounding
-    return round(mod(t, PM), digits=4)
+    return round(mod(t, PM), digits=digits)
 end
 
 # Helper function to calculate modulation base time
-function mod_base_time(t, PM)
+function mod_base_time(t, PM; digits=6)
     # Calculate base time (start of modulation period) using floor division with rounding
-    return round(floor(t/PM) * PM, digits=4)
+    return round(floor(t/PM) * PM, digits=digits)
 end
 
 function add_A_to_pl!(pl, df_A)

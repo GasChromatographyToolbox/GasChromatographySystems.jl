@@ -773,15 +773,54 @@ function peaklist_GCxGC(pl_end, pl_1D, PM)#, shift)
 	return DataFrame(Name=fit_D1.Name, tR1=tR1, tR2=tR2)
 end
 
-function peaklist_GCxGC(pl_end, PM)
+"""
+    peaklist_GCxGC(pl_end, PM; digits=6)
+
+Calculate retention times and peak widths for compounds in comprehensive two-dimensional gas chromatography (GC×GC).
+
+This function processes a peak list from a GC×GC separation to calculate:
+1. First dimension retention times (tR1) and peak widths (τR1)
+2. Second dimension retention times (tR2) and peak widths (τR2)
+3. Weighted averages of these parameters based on peak heights
+
+# Arguments
+- `pl_end`: DataFrame containing the peak list with columns:
+  - `Name`: Compound names
+  - `CAS`: CAS numbers
+  - `tR`: Retention times
+  - `τR`: Peak widths
+  - `A`: Peak areas
+- `PM`: Modulation period in seconds
+- `digits`: Number of digits for rounding (default: 6)
+
+# Returns
+A DataFrame containing:
+- `Name`: Unique compound names
+- `CAS`: CAS numbers
+- `tR1`: Weighted mean retention time in first dimension
+- `tR2`: Weighted mean retention time in second dimension
+- `τR1`: Peak width in first dimension (weighted standard deviation)
+- `τR2`: Peak width in second dimension (weighted mean)
+- `tR1s`: Array of individual retention times in first dimension
+- `tR2s`: Array of individual retention times in second dimension
+- `τR2s`: Array of individual peak widths in second dimension
+- `heights`: Array of peak heights used for weighting
+
+# Notes
+- First dimension retention times (tR1) are calculated using `mod_base_time`
+- Second dimension retention times (tR2) are calculated using `mod_time`
+- Peak widths are calculated using weighted statistics:
+  - τR1: Weighted standard deviation of tR1 values
+  - τR2: Weighted mean of individual τR values
+- Weights are based on peak heights to give more importance to larger peaks
+- The function handles multiple peaks of the same compound by combining their parameters
+"""
+function peaklist_GCxGC(pl_end, PM; digits=6)
 	# estimated from the weighted (height) means of projected retention times
 	# here the shift is not known and therefore ignored
 	heights = GasChromatographySystems.heights_of_peaks(pl_end)
-	# test this change replace fld() with e.g. mod_time():
-	tR1 = fld.(pl_end.tR, PM).*PM
-	tR2 = pl_end.tR .- fld.(pl_end.tR, PM).*PM
-	#tR1 = mod_base_time.(pl_end.tR, PM)
-	#tR2 = mod_time.(pl_end.tR, PM)
+	tR1 = mod_base_time.(pl_end.tR, PM; digits=digits)
+	tR2 = mod_time.(pl_end.tR, PM; digits=digits)
 	Name = unique(pl_end.Name)
 	nsub = length(Name)
 	CAS = pl_end.CAS[[findfirst(Name[i].==pl_end.Name) for i=1:length(Name)]]
@@ -793,6 +832,7 @@ function peaklist_GCxGC(pl_end, PM)
 	mean_tR2 = Array{Float64}(undef, nsub)
 	sort_τR2 = Array{Array{Float64}}(undef, nsub)
 	mean_τR2 = Array{Float64}(undef, nsub)
+	τR1 = Array{Float64}(undef, nsub)  # standard deviation (peak width) in 1st dimension
 	for i=1:nsub
 		ii_name = findall(Name[i].==pl_end.Name)
 		sort_heights[i] = heights[ii_name]
@@ -802,8 +842,12 @@ function peaklist_GCxGC(pl_end, PM)
 		mean_tR2[i] = sum(sort_tR2[i].*sort_heights[i])/sum(sort_heights[i])
 		sort_τR2[i] = pl_end.τR[ii_name]
 		mean_τR2[i] = sum(sort_τR2[i].*sort_heights[i])/sum(sort_heights[i])
+		
+		# Calculate weighted variance and standard deviation for 1st dimension
+		weighted_squared_dev = sum(sort_heights[i] .* (sort_tR1[i] .- mean_tR1[i]).^2)
+		τR1[i] = sqrt(weighted_squared_dev / sum(sort_heights[i]))
 	end
-	return DataFrame(Name=Name, CAS=CAS, tR1=mean_tR1, tR2=mean_tR2, τR2=mean_τR2, tR1s=sort_tR1, tR2s=sort_tR2, τR2s=sort_τR2, heights=sort_heights)
+	return DataFrame(Name=Name, CAS=CAS, tR1=mean_tR1, tR2=mean_tR2, τR1=τR1, τR2=mean_τR2, tR1s=sort_tR1, tR2s=sort_tR2, τR2s=sort_τR2, heights=sort_heights)
 end
 
 function heights_of_peaks(pl)
@@ -971,8 +1015,35 @@ end
 	return slices, t_D1, t_D2
 end=#
 
+"""
+    chrom2d(pl_final, sys, PM)
+
+Generate a 2D chromatogram from a peak list by slicing the chromatogram into modulation periods.
+
+# Arguments
+- `pl_final`: DataFrame containing the peak list with columns for retention times (tR), 
+              peak widths (τR), and peak areas (A)
+- `sys`: System structure containing the GC system configuration
+- `PM`: Modulation period in seconds
+
+# Returns
+- `slice_mat`: 2D matrix containing the sliced chromatogram data, where:
+  - rows represent modulation periods
+  - columns represent time points within each period
+- `t_D1`: Array of first dimension retention times (start of each modulation period)
+- `t_D2`: Array of arrays containing second dimension retention times for each slice
+- `slices`: Array of arrays containing the chromatogram data for each slice
+- `t`: Time points used for chromatogram generation
+- `chrom_sum`: Summed chromatogram before slicing
+
+# Notes
+- The function generates a chromatogram by summing individual peak contributions
+- Time points are generated with 0.01s intervals
+- The chromatogram is sliced into modulation periods of length PM
+- For incomplete slices at the end, the matrix is padded with zeros
+- Shift and ratio parameters are not used as they are not needed for 2D chromatogram generation
+"""
 function chrom2d(pl_final, sys, PM)
-	# a shift is unknown here
 	t = 0.0:0.01:sum(GasChromatographySystems.common_timesteps(sys))
 	chrom = Array{Array{Float64}}(undef, length(pl_final.tR))
 	for i=1:length(pl_final.tR)
@@ -986,7 +1057,8 @@ function chrom2d(pl_final, sys, PM)
 	t_D1 = (0.0:PM:t[end])
 	
 	# replace fld() with e.g. mod_number():
-	n = Int.(fld.(collect(t), PM))
+	# a shift and ratio are unknown here (e.g. in ChromSpace only PM is defined at 2D chromatogram generation) 
+	n = Int.(floor.(t./PM))
 	slices = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
 	t_D2 = Array{Array{Float64, 1}, 1}(undef, length(unique(n)))
 	for i=1:length(unique(n))
@@ -995,14 +1067,20 @@ function chrom2d(pl_final, sys, PM)
 		slices[i] = chrom_sum[i1:i2]
 		t_D2[i] = t[i1:i2] .- (unique(n)[i] * PM )
 	end
-	
-	slice_mat = Array{Float64}(undef, length(slices)-1, length(t_D2[1]))
+
+	# expected number of complete slices
+	expected_slices = Int(floor(t[end]/PM))
+	slice_mat = Array{Float64}(undef, expected_slices, length(t_D2[1]))
 	for j=1:length(t_D2[1])
-		for i=1:(length(slices)-1)
-			slice_mat[i,j] = slices[i][j]
+		for i=1:expected_slices
+			 if i <= length(slices) && j <= length(slices[i])
+                slice_mat[i,j] = slices[i][j]
+            else
+                slice_mat[i,j] = 0.0  # default value
+            end
 		end
 	end
-	return slice_mat, t_D1, t_D2, slices, t, chrom_sum#, chrom_sliced 
+	return slice_mat, t_D1, t_D2, slices, t, chrom_sum
 end
 
 function comparison_meas_sim(meas, pl_sim)

@@ -106,10 +106,54 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
 
 	#df_A_foc = DataFrame(Name=Name, CAS=CAS, Annotations=Ann_focussed, A=A_focussed+A_unfocussed, t0=t0_foc)
 	df_A_foc = DataFrame(Name=Name, CAS=CAS, Annotations=Ann_focussed, A=A_focussed, t0=t0_foc)
+	# merge duplicates, add the areas of the duplicates
+	df_A_foc = merge_duplicates(df_A_foc)
 	# t0 is the start time of the slice
 	# A the area of the sliced peak (including the section during hot-jet [source of error])
 	
 	return newpar_focussed, df_A_foc
+end
+
+"""
+    merge_duplicates(slice_df)
+
+Remove/merge duplicate entries from a chromatogram slice DataFrame by combining their areas.
+
+# Arguments
+- `slice_df`: DataFrame containing chromatogram slice data with columns:
+  - `CAS`: CAS numbers of compounds
+  - `t0`: Initial retention times
+  - `A`: Peak areas
+
+# Returns
+- DataFrame with duplicate entries removed, where:
+  - Duplicate entries (same CAS and t0) are combined
+  - Areas of duplicate entries are summed
+  - Only unique combinations of CAS and t0 are kept
+
+# Notes
+- Duplicates are identified by matching both CAS numbers and initial retention times (t0)
+- When duplicates are found, their areas are summed and assigned to the first occurrence
+- The function preserves all other columns in the DataFrame
+- Useful for cleaning up chromatogram data where the same compound appears multiple times
+  with the same initial retention time
+"""
+function merge_duplicates(slice_df)
+	# index of duplicated substance with same t0 (original should be at index before)
+	duplicates = findall(nonunique(slice_df, [:CAS, :t0])) 
+	# find all the duplicated and original entries
+	originals_duplicates = [findall(slice_df.CAS[index] .== slice_df.CAS .&& slice_df.t0[index] .== slice_df.t0) for index in duplicates]
+	# adding the areas of the duplicates
+	combined_areas = [sum(slice_df.A[indices]) for indices in originals_duplicates]
+	# removed duplicated entrys (of CAS and t0)
+	unique_df = unique(slice_df, [:CAS, :t0])
+	# update the area
+	# index of the originals of duplicates in new dataframe
+	originals_index = [findall(slice_df.CAS[index] .== unique_df.CAS .&& slice_df.t0[index] .== unique_df.t0) for index in duplicates]
+	for i=1:length(originals_index)
+		unique_df.A[originals_index[i][1]] = combined_areas[i]
+	end
+	return unique_df
 end
 
 """

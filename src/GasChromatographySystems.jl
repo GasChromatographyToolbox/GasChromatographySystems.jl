@@ -691,6 +691,7 @@ function rect(x, x0, min, max, width)
 end
 
 # periodic repeated smoothed rectangle function with period 'PM', a shift by 'shift', 'ratio' of time of Tcold to time of Thot. A small shift is incorporated to move the falling flank from the beginning to the end
+# mod-functions could/should be moved to Chromatogram.jl
 """
     mod_number(t, shift, PM, ratio; digits=6)
 

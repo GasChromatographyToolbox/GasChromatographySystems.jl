@@ -845,8 +845,9 @@ function peaklist_GCxGC(pl_end, PM; digits=6)
 		mean_τR2[i] = sum(sort_τR2[i].*sort_heights[i])/sum(sort_heights[i])
 		
 		# Calculate weighted variance and standard deviation for 1st dimension
-		weighted_squared_dev = sum(sort_heights[i] .* (sort_tR1[i] .- mean_tR1[i]).^2)
-		τR1[i] = sqrt(weighted_squared_dev / sum(sort_heights[i]))
+		τR1[i] = sqrt(sum(sort_heights[i] .* (sort_tR1[i] .- mean_tR1[i]).^2) / sum(sort_heights[i]))
+		# for second dimension this value is not used as it is smaller than the widths of each peak 
+		#τR2[i] = sqrt(sum(sort_heights[i] .* (sort_tR2[i] .- mean_tR2[i]).^2) / sum(sort_heights[i]))
 	end
 	return DataFrame(Name=Name, CAS=CAS, tR1=mean_tR1, tR2=mean_tR2, τR1=τR1, τR2=mean_τR2, tR1s=sort_tR1, tR2s=sort_tR2, τR2s=sort_τR2, heights=sort_heights)
 end

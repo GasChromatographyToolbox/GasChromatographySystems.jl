@@ -98,37 +98,100 @@ end
 
 # definition GCxGC system with thermal modulator
 # does not work with temperature gradient yet (other implementation of gradients needed)
-function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
 
-	TPs = [TP1, TP2, TPM]
-	
+"""
+    GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name, opt, optTM, optCol)
+
+Create a comprehensive GC×GC (two-dimensional gas chromatography) system with thermal modulator.
+
+This function constructs a complete GC×GC system consisting of:
+- First dimension GC column
+- Thermal modulator with hot/cold zones
+- Second dimension GC column  
+- Transfer line to detector
+
+# Arguments
+
+## Column Parameters
+- `L1`: Length of first dimension column (m)
+- `d1`: Diameter of first dimension column (mm)
+- `df1`: Film thickness of first dimension column (μm)
+- `sp1`: Stationary phase of first dimension column
+- `TP1`: Temperature program for first dimension column
+- `L2`: Length of second dimension column (m)
+- `d2`: Diameter of second dimension column (mm)
+- `df2`: Film thickness of second dimension column (μm)
+- `sp2`: Stationary phase of second dimension column
+- `TP2`: Temperature program for second dimension column
+- `LTL`: Length of transfer line (m)
+- `dTL`: Diameter of transfer line (mm)
+- `dfTL`: Film thickness of transfer line (μm)
+- `spTL`: Stationary phase of transfer line
+- `TPTL`: Temperature of transfer line (°C)
+
+## Modulator Parameters
+- `LM`: Array of modulator lengths consisting of 4 [in, hot1, loop, hot2] or 5 elements[in, hot1, loop, hot2, out] (m)
+- `dM`: Diameter of modulator tubing (mm)
+- `dfM`: Film thickness of modulator tubing (μm)
+- `spM`: Stationary phase of modulator tubing
+- `shift`: Modulation time shift (s)
+- `PM`: Modulation period (s)
+- `ratioM`: Modulation ratio
+- `HotM`: Hot zone temperature (°C)
+- `ColdM`: Cold zone temperature (°C)
+- `TPM`: Temperature program for modulator
+
+## Flow and Pressure Parameters
+- `F`: Flow rate (mL/min)
+- `pin`: Inlet pressure (Pa)
+- `pout`: Outlet pressure (Pa)
+
+## Optional Parameters
+- `name`: System name (default: "GCxGC_TM")
+- `opt`: System options
+- `optTM`: Thermal modulator options
+- `optCol`: Column module options
+
+# Returns
+- `System`: Configured GC×GC system with thermal modulator
+
+# Example
+```julia
+sys = GCxGC_TM(
+    30.0, 0.25, 0.25, "ZB1ms", default_TP(),  # 1st dimension
+    2.0, 0.1, 0.1, "Stabilwax", default_TP(),   # 2nd dimension
+    0.25, 0.1, 0.1, "Stabilwax", 280.0,        # Transfer line
+    [0.30, 0.01, 0.90, 0.01, 0.30],            # Modulator lengths
+    0.1, 0.1, "Stabilwax", 0.0, 4.0, 0.9125,   # Modulator parameters
+    30.0, -120.0, default_TP(),                  # Temperature settings
+    0.8, NaN, 0.0                               # Flow and pressure
+)
+```
+"""
+function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=GasChromatographySystems.ModuleTMOptions(), optCol=GasChromatographySystems.ModuleColumnOptions())
+	if length(LM) == 4
+		sys = GCxGC_TM_8(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name=name, opt=opt, optTM=optTM, optCol=optCol)
+	elseif length(LM) == 5
+		sys = GCxGC_TM_9(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name=name, opt=opt, optTM=optTM, optCol=optCol)
+	else
+		error("Invalid number of modulator lengths")
+	end
+	return sys
+end
+
+function GCxGC_TM_9(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=GasChromatographySystems.ModuleTMOptions(), optCol=GasChromatographySystems.ModuleColumnOptions())
+	# definition of the graph
 	g = SimpleDiGraph(9)
 	add_edge!(g, 1, 2) # 1st-D GC
 	add_edge!(g, 2, 3) # modulator
 	add_edge!(g, 3, 4) # hot/cold 1
-	add_edge!(g, 4, 5) # modulator
+	add_edge!(g, 4, 5) # modulator/loop
 	add_edge!(g, 5, 6) # hot/cold 2 
 	add_edge!(g, 6, 7) # modulator
 	add_edge!(g, 7, 8) # 2nd-D GC
 	add_edge!(g, 8, 9) # TL
-	
-	# common time steps
-	#com_timesteps = []
-	#for i=1:length(TPs)
-	#	if typeof(TPs[i]) <: TemperatureProgram
-	#		com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, TPs[i].time_steps)
-	#	end
-	#end
-	#if isempty(com_timesteps)
-	#	com_timesteps = [0.0, 36000.0]
-	#end
-	
-	# pressure points
-	#if length(pin) == 1
-	#	pins = pin*1000.0.*ones(length(com_timesteps))
-	#else
-	#end
-	#nans = NaN.*ones(length(com_timesteps))
+
+	# definition of pressures at vertices
 	if pout == 0.0
 		pouts = eps(Float64)#.*ones(length(com_timesteps))
 	else 
@@ -140,7 +203,7 @@ function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, 
 		pp[i] = PressurePoint("p$(i)", NaN)
 	end
 	pp[end] = PressurePoint("p$(nv(g))", pouts) # outlet
-	# modules
+	# definition of modules at edges
 	modules = Array{AbstractModule}(undef, ne(g))
 	modules[1] = ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6, optCol)
 	modules[2] = ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
@@ -155,6 +218,44 @@ function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, 
 	return sys
 end
 
+function GCxGC_TM_8(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
+	# graph
+	g = SimpleDiGraph(8)
+	add_edge!(g, 1, 2) # 1st-D GC
+	add_edge!(g, 2, 3) # modulator
+	add_edge!(g, 3, 4) # hot/cold 1
+	add_edge!(g, 4, 5) # modulator
+	add_edge!(g, 5, 6) # hot/cold 2 
+	add_edge!(g, 6, 7) # 2nd-D GC
+	add_edge!(g, 7, 8) # TL
+	
+	if pout == 0.0
+		pouts = eps(Float64)
+	else 
+		pouts = pout
+	end
+	# pressurepoints
+	pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(g))
+	pp[1] = GasChromatographySystems.PressurePoint("p1", pin) # inlet 
+	for i=2:(nv(g)-1)
+		pp[i] = GasChromatographySystems.PressurePoint("p$(i)", NaN)
+	end
+	pp[end] = GasChromatographySystems.PressurePoint("p$(nv(g))", pouts) # outlet
+	# modules
+	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
+	modules[1] = GasChromatographySystems.ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6, optCol)
+	modules[2] = GasChromatographySystems.ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
+	modules[3] = GasChromatographySystems.ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
+	modules[4] = GasChromatographySystems.ModuleColumn("mod loop", LM[3], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
+	modules[5] = GasChromatographySystems.ModuleTM("TM2", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
+	modules[6] = GasChromatographySystems.ModuleColumn("GC column 2", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN, optCol)
+	modules[7] = GasChromatographySystems.ModuleColumn("TL", LTL, dTL*1e-3, dfTL*1e-6, spTL, TPTL, NaN, optCol)
+	# system
+	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(name, g, pp, modules, opt))
+	return sys
+end
+
+# default definition
 function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = default_TP(), L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), LTL = 0.25, dTL = 0.1, dfTL = 0.1, spTL = "Stabilwax", TPTL = 280.0, LM = [0.30, 0.01, 0.90, 0.01, 0.30], dM = 0.1, dfM = 0.1, spM = "Stabilwax", shift = 0.0, PM = 4.0, ratioM = 0.9125, HotM = 30.0, ColdM = -120.0, TPM = default_TP(), F = 0.8, pin = NaN, pout = 0.0, name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
 	sys = GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name=name, opt=opt, optTM=optTM, optCol=optCol)
 	return sys

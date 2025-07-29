@@ -130,7 +130,7 @@ This function constructs a complete GC×GC system consisting of:
 - `TPTL`: Temperature of transfer line (°C)
 
 ## Modulator Parameters
-- `LM`: Array of modulator lengths consisting of 4 [in, hot1, loop, hot2] or 5 elements[in, hot1, loop, hot2, out] (m)
+- `LM`: Array of modulator lengths consisting of 4 elements (in, hot1, loop, hot2) or 5 elements (in, hot1, loop, hot2, out) (m)
 - `dM`: Diameter of modulator tubing (mm)
 - `dfM`: Film thickness of modulator tubing (μm)
 - `spM`: Stationary phase of modulator tubing
@@ -179,6 +179,21 @@ function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, 
 	return sys
 end
 
+"""
+    GCxGC_TM_9(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name, opt, optTM, optCol)
+
+Create a GC×GC system with thermal modulator using 9-vertex graph (5 modulator elements).
+
+This is an internal helper function for the 9-vertex system configuration.
+The system includes a first dimension column, thermal modulator with 5 segments,
+second dimension column, and transfer line to detector.
+
+# Arguments
+Same as `GCxGC_TM` but requires `LM` to have exactly 5 elements.
+
+# Returns
+- `System`: Configured GC×GC system with thermal modulator (9 vertices)
+"""
 function GCxGC_TM_9(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=GasChromatographySystems.ModuleTMOptions(), optCol=GasChromatographySystems.ModuleColumnOptions())
 	# definition of the graph
 	g = SimpleDiGraph(9)
@@ -218,6 +233,21 @@ function GCxGC_TM_9(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL
 	return sys
 end
 
+"""
+    GCxGC_TM_8(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name, opt, optTM, optCol)
+
+Create a GC×GC system with thermal modulator using 8-vertex graph (4 modulator elements).
+
+This is an internal helper function for the 8-vertex system configuration.
+The system includes a first dimension column, thermal modulator with 4 segments,
+second dimension column, and transfer line to detector.
+
+# Arguments
+Same as `GCxGC_TM` but requires `LM` to have exactly 4 elements.
+
+# Returns
+- `System`: Configured GC×GC system with thermal modulator (8 vertices)
+"""
 function GCxGC_TM_8(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
 	# graph
 	g = SimpleDiGraph(8)
@@ -255,6 +285,81 @@ function GCxGC_TM_8(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL
 	return sys
 end
 
+"""
+    GCxGC_TM(; L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout, name, opt, optTM, optCol)
+
+Create a GC×GC system with thermal modulator using default parameters.
+
+This is a convenience constructor that provides sensible defaults for all parameters.
+The system includes a first dimension column, thermal modulator, second dimension column,
+and transfer line to detector.
+
+# Keyword Arguments
+
+## Column Parameters
+- `L1`: Length of first dimension column (m), default: 30.0
+- `d1`: Diameter of first dimension column (mm), default: 0.25
+- `df1`: Film thickness of first dimension column (μm), default: 0.25
+- `sp1`: Stationary phase of first dimension column, default: "ZB1ms"
+- `TP1`: Temperature program for first dimension column, default: default_TP()
+- `L2`: Length of second dimension column (m), default: 2.0
+- `d2`: Diameter of second dimension column (mm), default: 0.1
+- `df2`: Film thickness of second dimension column (μm), default: 0.1
+- `sp2`: Stationary phase of second dimension column, default: "Stabilwax"
+- `TP2`: Temperature program for second dimension column, default: default_TP()
+- `LTL`: Length of transfer line (m), default: 0.25
+- `dTL`: Diameter of transfer line (mm), default: 0.1
+- `dfTL`: Film thickness of transfer line (μm), default: 0.1
+- `spTL`: Stationary phase of transfer line, default: "Stabilwax"
+- `TPTL`: Temperature of transfer line (°C), default: 280.0
+
+## Modulator Parameters
+- `LM`: Array of modulator lengths with 5 elements (in, hot1, loop, hot2, out) (m), default: [0.30, 0.01, 0.90, 0.01, 0.30]
+- `dM`: Diameter of modulator tubing (mm), default: 0.1
+- `dfM`: Film thickness of modulator tubing (μm), default: 0.1
+- `spM`: Stationary phase of modulator tubing, default: "Stabilwax"
+- `shift`: Modulation time shift (s), default: 0.0
+- `PM`: Modulation period (s), default: 4.0
+- `ratioM`: Modulation ratio, default: 0.9125
+- `HotM`: Hot zone temperature (°C), default: 30.0
+- `ColdM`: Cold zone temperature (°C), default: -120.0
+- `TPM`: Temperature program for modulator, default: default_TP()
+
+## Flow and Pressure Parameters
+- `F`: Flow rate (mL/min), default: 0.8
+- `pin`: Inlet pressure (Pa), default: NaN
+- `pout`: Outlet pressure (Pa), default: 0.0
+
+## Optional Parameters
+- `name`: System name, default: "GCxGC_TM"
+- `opt`: System options, default: GasChromatographySystems.Options()
+- `optTM`: Thermal modulator options, default: ModuleTMOptions()
+- `optCol`: Column module options, default: ModuleColumnOptions()
+
+# Returns
+- `System`: Configured GC×GC system with thermal modulator
+
+# Example
+```julia
+# Use all defaults
+sys = GCxGC_TM()
+
+# Customize specific parameters
+sys = GCxGC_TM(
+    L1 = 25.0,
+    L2 = 1.5,
+    F = 1.0,
+    PM = 6.0,
+    HotM = 40.0,
+    ColdM = -100.0
+)
+```
+
+# Notes
+- The thermal modulator consists of two hot zones and a loop section
+- The system is designed for comprehensive two-dimensional chromatography
+- Temperature gradients are not yet supported in this implementation
+"""
 # default definition
 function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = default_TP(), L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), LTL = 0.25, dTL = 0.1, dfTL = 0.1, spTL = "Stabilwax", TPTL = 280.0, LM = [0.30, 0.01, 0.90, 0.01, 0.30], dM = 0.1, dfM = 0.1, spM = "Stabilwax", shift = 0.0, PM = 4.0, ratioM = 0.9125, HotM = 30.0, ColdM = -120.0, TPM = default_TP(), F = 0.8, pin = NaN, pout = 0.0, name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
 	sys = GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name=name, opt=opt, optTM=optTM, optCol=optCol)

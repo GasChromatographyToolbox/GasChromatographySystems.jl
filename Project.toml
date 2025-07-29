@@ -1,7 +1,7 @@
 name = "GasChromatographySystems"
 uuid = "2a17fa6e-c440-4af9-acac-c1be9e3a006f"
 authors = ["Jan Leppert <jleppert@uni-bonn.de>"]
-version = "0.2.5"
+version = "0.2.6"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"

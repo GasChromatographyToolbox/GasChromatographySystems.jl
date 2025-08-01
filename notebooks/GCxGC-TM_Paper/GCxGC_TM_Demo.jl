@@ -22,15 +22,13 @@ begin
     # activate a temporary environment
     Pkg.activate(mktempdir())
     Pkg.add([
-        Pkg.PackageSpec(name="GasChromatographySystems", version="v0.2.5"),
+        Pkg.PackageSpec(name="GasChromatographySystems", version="v0.2.6"),
 		Pkg.PackageSpec(name="GasChromatographySimulator", version="v0.5.4"),
 		Pkg.PackageSpec(name="HypertextLiteral", version="v0.9.5"),
 		Pkg.PackageSpec(name="OrdinaryDiffEq", version="v6.95.1"),
 		Pkg.PackageSpec(name="Plots", version="v1.40.11"),
 		Pkg.PackageSpec(name="PlutoUI", version="v0.7.61"),
 		Pkg.PackageSpec(name="UrlDownload", version="v1.0.1"),
-
-		Pkg.PackageSpec(name="NetCDF", version="v0.12.2")
     ])
     using CSV, DataFrames
 	using GasChromatographySystems
@@ -41,12 +39,6 @@ begin
 	using PlutoUI
 	using UrlDownload
 
-	# Chromatogram
-	using NetCDF
-	include("/Users/janleppert/Documents/GitHub/Chromatogram.jl/src/gcms.jl")
-	
-	#using OrdinaryDiffEq
-	#using Interpolations
 	TableOfContents(depth=4)
 end
 
@@ -65,57 +57,6 @@ md"""
 
 Zoex 2 Setup: One Cold-/Hot-Jet used twice by looping the 2nd D column.
 """
-
-# ╔═╡ 842cf87f-b5e7-4208-b86e-a540a6a38052
-#md"""
-## Measurement
-
-#$(@bind meas_csv FilePicker())
-#"""
-
-# ╔═╡ 5554c6a8-2eec-4a1a-8a08-7be8e2a530d6
-# /Users/janleppert/Documents/GitHub/GCxGC_TM/data/exp_pro/GCxGC_simulation/FAMEplus_3_3.csv
-
-# ╔═╡ 985f756a-2f30-4d94-892a-045bdc3be631
-#meas_csv
-
-# ╔═╡ c6e11d10-b6c4-48a6-a613-6f17fc163ff9
-#function read_meas(data)
-#	meas_settings = Dict(pairs(eachcol(DataFrame(CSV.File(data; limit=1, stringtype=String)))))
-#	meas_prog_ = DataFrame(CSV.File(data; header=3, limit=1))
-#	meas_prog = Dict(pairs(eachcol(meas_prog_[!, [ any(x -> !ismissing(x), col) for col in eachcol(meas_prog_) ]])))
-#	meas_RT_ = DataFrame(CSV.File(data; header=5))
-#	meas_RT = meas_RT_[!, [ any(x -> !ismissing(x), col) for col in eachcol(meas_RT_) ]]
-#	return meas_settings, meas_prog, meas_RT
-#end
-
-# ╔═╡ f5c33bdd-6819-431f-9c7d-f46af20c764b
-#meas = read_meas(meas_csv["data"])
-
-# ╔═╡ d431de6c-2427-4d2d-b33b-014fe2667574
-function UI_options()
-	PlutoUI.combine() do Child
-		@htl("""
-		<table>
-			<caption> General Options </capiton>
-			<tr>
-				<td> modus </td>
-				<td><center> $(Child(Select(["simplifiedTM", "uniformTM"]; default="simplifiedTM"))) </center></td> 
-			</tr>
-			<tr>
-				<td> cold jet temperature </td>
-				<td><center> $(Child(Select(["absolut", "relativ"]; default="absolut"))) </center></td>
-			</tr>
-		</table>
-		""")
-	end
-end
-
-# ╔═╡ a27fa3ed-e573-48f2-9884-9d5b94f27292
-#md"""
-### Optional settings
-#$(@bind opt_values confirm(UI_options()))
-#"""
 
 # ╔═╡ 370950e7-7c8e-4503-a771-01227f56874d
 function UI_column(;title="Columns", def=(29.5, 0.3, 0.005, 0.9, 0.005, 0.545, 0.235, 0.25, 0.25, 0.25, 0.25), sp=["Rxi5SilMS", "Rxi17SilMS"], sp_def=("Rxi5SilMS", "Rxi17SilMS"))
@@ -298,7 +239,7 @@ begin
 	else
 		def_TP = [[50.0, 2.0, 160.3]; reduce(vcat, [[i*3.0, i*225.0/n_ramp, 5.0, 274.96] for i=1:n_ramp])]
 		md"""
-		$(@bind TP_values confirm(UI_TP_pressure(n_ramp; def=def_TP, def_TTL=225.0)))
+		$(@bind TP_values confirm(UI_TP_pressure(n_ramp; def=def_TP, def_TTL=250.0)))
 		"""
 	end
 end
@@ -374,7 +315,7 @@ function setup_GCxGC_TM(col_values, flow_mode, flow_values, n_ramp, TP_values, m
 	dTL = d2
 	dfTL = df2
 	spTL = sp2
-	LM = [col_values[2], col_values[3], col_values[4]/2, col_values[4]/2, col_values[5]]
+	LM = [col_values[2], col_values[3], col_values[4], col_values[5]]
 	dM = d2
 	dfM = df2
 	spM = sp2
@@ -402,44 +343,6 @@ function setup_GCxGC_TM(col_values, flow_mode, flow_values, n_ramp, TP_values, m
 	ColdM = mod_values[5]
 	
 	sys = GasChromatographySystems.GCxGC_TM(L1, d1, df1, sp1, TP, L2, d2, df2, sp2, TP, LTL, dTL, dfTL, spTL, TPTL, LM, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TP, F, PP, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=optTM, optCol=GasChromatographySystems.ModuleColumnOptions(ng=true))
-	return sys
-end
-
-# ╔═╡ 522129de-21a0-48f9-8e25-03b1820bfff5
-function GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name="GCxGC_TM", opt=GasChromatographySystems.Options(), optTM=ModuleTMOptions(), optCol=ModuleColumnOptions())
-	# graph
-	g = SimpleDiGraph(8)
-	add_edge!(g, 1, 2) # 1st-D GC
-	add_edge!(g, 2, 3) # modulator
-	add_edge!(g, 3, 4) # hot/cold 1
-	add_edge!(g, 4, 5) # modulator
-	add_edge!(g, 5, 6) # hot/cold 2 
-	add_edge!(g, 6, 7) # 2nd-D GC
-	add_edge!(g, 7, 8) # TL
-	
-	if pout == 0.0
-		pouts = eps(Float64)
-	else 
-		pouts = pout
-	end
-	# pressurepoints
-	pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(g))
-	pp[1] = GasChromatographySystems.PressurePoint("p1", pin) # inlet 
-	for i=2:(nv(g)-1)
-		pp[i] = GasChromatographySystems.PressurePoint("p$(i)", NaN)
-	end
-	pp[end] = GasChromatographySystems.PressurePoint("p$(nv(g))", pouts) # outlet
-	# modules
-	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
-	modules[1] = GasChromatographySystems.ModuleColumn("GC column 1", L1, d1*1e-3, df1*1e-6, sp1, TP1, F/60e6, optCol)
-	modules[2] = GasChromatographySystems.ModuleColumn("mod in", LM[1], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
-	modules[3] = GasChromatographySystems.ModuleTM("TM1", LM[2], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
-	modules[4] = GasChromatographySystems.ModuleColumn("mod loop", LM[3], dM*1e-3, dfM*1e-6, spM, TPM, optCol)
-	modules[5] = GasChromatographySystems.ModuleTM("TM2", LM[4], dM*1e-3, dfM*1e-6, spM, TPM, shift, PM, ratioM, HotM, ColdM, NaN, optTM)
-	modules[6] = GasChromatographySystems.ModuleColumn("GC column 2", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN, optCol)
-	modules[7] = GasChromatographySystems.ModuleColumn("TL", LTL, dTL*1e-3, dfTL*1e-6, spTL, TPTL, NaN, optCol)
-	# system
-	sys = GasChromatographySystems.update_system(GasChromatographySystems.System(name, g, pp, modules, opt))
 	return sys
 end
 
@@ -571,31 +474,23 @@ md"""
 """
 
 # ╔═╡ Cell order:
-# ╠═9d7383a1-d34f-4b0c-977a-fd53919ce93d
+# ╟─9d7383a1-d34f-4b0c-977a-fd53919ce93d
 # ╠═98217474-a16f-406a-83a7-17fee89c951a
 # ╟─22091a27-80e1-4e98-abe7-4b9652cb832c
-# ╠═842cf87f-b5e7-4208-b86e-a540a6a38052
-# ╠═5554c6a8-2eec-4a1a-8a08-7be8e2a530d6
-# ╠═985f756a-2f30-4d94-892a-045bdc3be631
-# ╠═c6e11d10-b6c4-48a6-a613-6f17fc163ff9
-# ╠═f5c33bdd-6819-431f-9c7d-f46af20c764b
-# ╠═d431de6c-2427-4d2d-b33b-014fe2667574
-# ╠═a27fa3ed-e573-48f2-9884-9d5b94f27292
-# ╠═370950e7-7c8e-4503-a771-01227f56874d
-# ╠═43f92dc5-7911-40d9-978c-54f0873736a9
-# ╠═ef6820c9-baba-4185-ac1a-5187cb9aa736
-# ╠═5ccefb78-a43d-45c0-bf85-b98997e3f0fc
-# ╠═b1524be6-14f7-4f33-9fed-390d755b1f99
+# ╟─370950e7-7c8e-4503-a771-01227f56874d
+# ╟─43f92dc5-7911-40d9-978c-54f0873736a9
+# ╟─ef6820c9-baba-4185-ac1a-5187cb9aa736
+# ╟─5ccefb78-a43d-45c0-bf85-b98997e3f0fc
+# ╟─b1524be6-14f7-4f33-9fed-390d755b1f99
 # ╟─2514f7a9-2e58-4716-8b61-3a3c4e35360d
-# ╠═53c91d41-18d8-4ad2-8dfa-65df326746c4
-# ╠═7aebd4d7-c190-4ea8-a09d-b33c19fbb990
-# ╠═cf17e634-98ab-4fe0-bf9f-4f87d426bbc4
-# ╠═54af6817-92bd-4094-9c12-1515c44b0f5d
-# ╠═62173d6c-7e66-4952-a0e5-919230be481e
+# ╟─53c91d41-18d8-4ad2-8dfa-65df326746c4
+# ╟─7aebd4d7-c190-4ea8-a09d-b33c19fbb990
+# ╟─cf17e634-98ab-4fe0-bf9f-4f87d426bbc4
+# ╟─54af6817-92bd-4094-9c12-1515c44b0f5d
+# ╟─62173d6c-7e66-4952-a0e5-919230be481e
 # ╟─91c8369f-b5cb-4f06-bcb5-740859c63718
-# ╠═a2b5fb96-9738-4a2e-8c18-fc830fef295e
-# ╠═522129de-21a0-48f9-8e25-03b1820bfff5
-# ╟─863fad4d-d3cf-4d37-aa67-11ddcf3c5827
+# ╟─a2b5fb96-9738-4a2e-8c18-fc830fef295e
+# ╠═863fad4d-d3cf-4d37-aa67-11ddcf3c5827
 # ╟─30b954f1-3ca3-433e-841f-4c7a1e8f3191
 # ╟─f7fbf4e5-31c8-4abb-a799-9f460e6187e2
 # ╟─b1ac781a-6f39-4da4-86de-cf2fb22d076b

@@ -359,7 +359,7 @@ md"""
 
 # ╔═╡ bddfa563-b0c1-40fb-a0bf-e2fc991f3112
 begin #switch later to url
-	db = DataFrame(CSV.File("/Users/janleppert/Documents/GitHub/GCxGC_TM/data/exp_pro/GCxGC_simulation/Messungen für RetentionParameterEstimator für GCxGC/Database_m1.csv")) 
+	db = DataFrame(urldownload("https://raw.githubusercontent.com/GasChromatographyToolbox/GasChromatographySystems.jl/refs/heads/main/data/Database_GCxGC-TM.csv"))
 	insertcols!(db, 1, :No => collect(1:length(db.Name)))
 	db
 end
@@ -475,7 +475,7 @@ md"""
 
 # ╔═╡ Cell order:
 # ╟─9d7383a1-d34f-4b0c-977a-fd53919ce93d
-# ╠═98217474-a16f-406a-83a7-17fee89c951a
+# ╟─98217474-a16f-406a-83a7-17fee89c951a
 # ╟─22091a27-80e1-4e98-abe7-4b9652cb832c
 # ╟─370950e7-7c8e-4503-a771-01227f56874d
 # ╟─43f92dc5-7911-40d9-978c-54f0873736a9
@@ -491,10 +491,10 @@ md"""
 # ╟─91c8369f-b5cb-4f06-bcb5-740859c63718
 # ╟─a2b5fb96-9738-4a2e-8c18-fc830fef295e
 # ╠═863fad4d-d3cf-4d37-aa67-11ddcf3c5827
-# ╟─30b954f1-3ca3-433e-841f-4c7a1e8f3191
+# ╠═30b954f1-3ca3-433e-841f-4c7a1e8f3191
 # ╟─f7fbf4e5-31c8-4abb-a799-9f460e6187e2
 # ╟─b1ac781a-6f39-4da4-86de-cf2fb22d076b
-# ╠═bddfa563-b0c1-40fb-a0bf-e2fc991f3112
+# ╟─bddfa563-b0c1-40fb-a0bf-e2fc991f3112
 # ╟─a720dc6c-0e35-4e35-b7d3-f9c231457eaa
 # ╟─0a1d4088-a5c4-4984-b6bb-23e9a018caa8
 # ╟─9397d018-8e3c-489b-9250-c3e74bc4681a
@@ -506,4 +506,4 @@ md"""
 # ╟─d8ec5371-c512-4bef-9778-ebf317159ab1
 # ╟─fc7baa4e-e6b8-40f0-94b6-d7d8df5c6052
 # ╟─d9b6ae38-2904-453c-bfbf-f537c2c2f390
-# ╠═40462520-dad4-4464-be60-07fddcb0b063
+# ╟─40462520-dad4-4464-be60-07fddcb0b063

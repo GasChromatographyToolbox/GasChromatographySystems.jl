@@ -23,7 +23,6 @@ begin
     Pkg.activate(mktempdir())
     Pkg.add([
         Pkg.PackageSpec(name="GasChromatographySystems", version="v0.2.6"),
-		Pkg.PackageSpec(name="GasChromatographySimulator", version="v0.5.4"),
 		Pkg.PackageSpec(name="HypertextLiteral", version="v0.9.5"),
 		Pkg.PackageSpec(name="OrdinaryDiffEq", version="v6.95.1"),
 		Pkg.PackageSpec(name="Plots", version="v1.40.11"),
@@ -32,7 +31,6 @@ begin
     ])
     using CSV, DataFrames
 	using GasChromatographySystems
-	using GasChromatographySimulator
 	using HypertextLiteral
 	using OrdinaryDiffEq
 	using Plots
@@ -321,13 +319,13 @@ function setup_GCxGC_TM(col_values, flow_mode, flow_values, n_ramp, TP_values, m
 	spM = sp2
 	# flow, pressure and temperature program
 	if flow_mode == "pressure"
-		time_steps, temp_steps = GasChromatographySimulator.conventional_program([TP_values...][Not([[3+i*4 for i=0:n_ramp]; length(TP_values)])])
+		time_steps, temp_steps = GasChromatographySystems.GasChromatographySimulator.conventional_program([TP_values...][Not([[3+i*4 for i=0:n_ramp]; length(TP_values)])])
 		TP = GasChromatographySystems.TemperatureProgram(time_steps, temp_steps) #length of TP depends on n_ramp
 		PP = GasChromatographySystems.PressureProgram(time_steps, [TP_values[reduce(vcat,[[3+i*4, 3+i*4] for i=0:n_ramp])].*1000.0.+101300.0...]) # also depends on n_ramp
 		pout = flow_values
 		F = NaN
 	elseif flow_mode == "flow"
-		time_steps, temp_steps = GasChromatographySimulator.conventional_program([TP_values[i] for i=1:(length(TP_values)-1)])
+		time_steps, temp_steps = GasChromatographySystems.GasChromatographySimulator.conventional_program([TP_values[i] for i=1:(length(TP_values)-1)])
 		TP = GasChromatographySystems.TemperatureProgram(time_steps, temp_steps.*TP_factor) #length of TP depends on n_ramp
 		PP = NaN
 		pout = flow_values[2]
@@ -474,7 +472,7 @@ md"""
 """
 
 # ╔═╡ Cell order:
-# ╟─9d7383a1-d34f-4b0c-977a-fd53919ce93d
+# ╠═9d7383a1-d34f-4b0c-977a-fd53919ce93d
 # ╟─98217474-a16f-406a-83a7-17fee89c951a
 # ╟─22091a27-80e1-4e98-abe7-4b9652cb832c
 # ╟─370950e7-7c8e-4503-a771-01227f56874d

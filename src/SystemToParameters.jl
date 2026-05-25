@@ -51,7 +51,7 @@ modulators, setting up temperature programs, pressure functions, and substance p
 
 # Arguments
 - `sys`: The GC system structure containing the network of modules
-- `p2fun`: Pressure functions for the system
+- `p2fun`: Pressure-squared solutions from `build_pressure_squared_functions(sys, solve_balance(sys))` (or an equivalent saved function)
 - `db_dataframe`: Database containing solute properties
 - `selected_solutes`: List of solutes to include in the simulation
 
@@ -64,6 +64,7 @@ modulators, setting up temperature programs, pressure functions, and substance p
 - Array of `GasChromatographySimulator.Parameters` objects, one for each module in the system
 
 # Notes
+- For each module edge, inlet/outlet pressure step vectors (`Fpin_steps`, `pout_steps`) are sampled from the resolved pressure functions at that module's `time_steps`, matching the `Fpin_itp` and `pout_itp` passed to `Program`.
 - Handles both constant and programmed temperature/pressure conditions
 - Sets up column parameters including length, diameter, and stationary phase
 - Configures temperature programs with interpolation functions
@@ -88,23 +89,16 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 
 		# program parameters
 		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
-		pin_steps = if typeof(sys.pressurepoints[srcE[i]].P) <: PressureProgram
-			sys.pressurepoints[srcE[i]].P.pressure_steps
-		else
-			fill(sys.pressurepoints[srcE[i]].P, length(time_steps))
-		end
-		pout_steps = if typeof(sys.pressurepoints[dstE[i]].P) <: PressureProgram
-			sys.pressurepoints[dstE[i]].P.pressure_steps
-		else
-			fill(sys.pressurepoints[dstE[i]].P, length(time_steps))
-		end
 		pin_itp = p_func[srcE[i]]
 		pout_itp = p_func[dstE[i]]	
+		pin_steps = Float64[pin_itp(t) for t in time_steps]
+		pout_steps = Float64[pout_itp(t) for t in time_steps]
 		
 		prog = GasChromatographySimulator.Program(time_steps, temp_steps, pin_steps, pout_steps, gf, a_gf, T_itp, pin_itp, pout_itp)
 
 		# substance parameters
-		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].sp, sys.options.gas, selected_solutes, NaN.*ones(length(selected_solutes)), NaN.*ones(length(selected_solutes)))
+		n_sub = length(selected_solutes)
+		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].sp, sys.options.gas, selected_solutes, zeros(n_sub), zeros(n_sub))
 
 		# option parameters
 		#opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM 

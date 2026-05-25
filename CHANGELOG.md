@@ -7,7 +7,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+- CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
+- README: fixed CI and Codecov badge links (`GasChromatographyToolbox` org name).
+
+### Removed
+- Unused duplicate GitHub Actions workflows under `data/.github/workflows/` (only `.github/workflows/` at the repo root is used).
+
 ## [0.2.7] - 2026-05-25
+
+### Added
+- Regression tests for finite `Program` pressure steps and zero injection times (`t₀`, `τ₀`) after `graph_to_parameters` on a series system with `NaN` junction pressures.
 
 ### Changed
 - Updated `GasChromatographySimulator` compatibility to the `0.6` line in `Project.toml`.

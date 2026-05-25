@@ -35,7 +35,7 @@ end
 Structure describing options for column modules. 
 
 # Arguments
-* `alg`: The algorithm used for the ODE solver. The algorithms `OwrenZen3()`, `OwrenZen4()` and `OwrenZen5()` are recommended.
+* `alg`: The algorithm used for the ODE solver. Available/recommended through `GasChromatographySimulator`: `OwrenZen5()` (default), `Tsit5()`, `Vern9()`, `BS5()`, `DP5()`. Legacy/alternative: `OwrenZen3()`, `OwrenZen4()`.
 * `abstol`: The absolute tolerance for the ODE solver. Recommended value 1e-6 to 1e-8.
 * `reltol`: The relative tolerance for the ODE solver. Recommended value 1e-3 to 1e-5. 
 * `ng`: Option to calculate the simulation without a gradient (`ng = true`, default) or with a gradient (`ng = false`).
@@ -54,7 +54,7 @@ function ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=tru
 end
 
 """
-    ModuleTMOptions(; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
+    ModuleTMOptions(; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 
 Structure describing options for thermal modulator modules. 
 
@@ -62,7 +62,7 @@ Structure describing options for thermal modulator modules.
 * `Tcold_abs`: Calculate the low temperature at the modulator as the absolute value of the defined parameter `Tcold` (`Tcold_abs = true`) or as relative temperature difference from the defined oven temperature (`Tcold_abs = false`).
 * `sflank`: Flank factor of the smoothed rectangle temperature function in space. A higher factor results in a steeper slope at the edges of the modulator point. Values between 12 and 100, or Inf if `ng = true`. Recommend `sflank = 40`. Only relevante, if option `ng = false`. 
 * `tflank`: Flank factor of the smoothed rectangle temperature function in time. A higher factor results in a steeper slope at the begining and end of the hot jet. Values between 12 and 100. Recommend `tflank = 20`.
-* `alg`: The algorithm used for the ODE solver. For the thermal modulator module the algorithm `Vern9()` is recommend.
+* `alg`: The algorithm used for the ODE solver. Available/recommended through `GasChromatographySimulator`: `OwrenZen5()` (default), `Tsit5()`, `Vern9()`, `BS5()`, `DP5()`. Legacy/alternative: `OwrenZen3()`, `OwrenZen4()`.
 * `abstol`: The absolute tolerance for the ODE solver. Recommended value 1e-6 to 1e-12.
 * `reltol`: The relative tolerance for the ODE solver. Recommended value 1e-3 to 1e-10.
 * `dtinit`: The initial step width for the ODE solver. A value of `L*1e-6`, with `L` the length of the modulator module, is recommend. 
@@ -81,7 +81,7 @@ struct ModuleTMOptions
 	Tcontrol::String    # temperature control at 'inlet' (top) or 'outlet' (bottom) of the column
 end
 
-function ModuleTMOptions(; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
+function ModuleTMOptions(; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 	ModuleTMOptions(Tcold_abs, sflank, tflank, alg, abstol, reltol, dtinit, ng, Tcontrol)
 end
 
@@ -91,7 +91,7 @@ end
 abstract type AbstractModule end
 
 """
-    ModuleColumn(; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
+    ModuleColumn(; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 
 Structure describing the module of a gas chromatographic column, the basic buliding block of a gas chromatographic system. These are edges of the graph representation of a GC system. 
 
@@ -180,8 +180,8 @@ Structure describing the module of a thermal modulator, a short section of a col
 Four methods to construct this structure exist:
 * `ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, opt::ModuleTMOptions)`: The flow is not defined, uniform `d` and `df`.
 * `ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, F, opt::ModuleTMOptions)`: The flow is defined by `F` and uniform `d` and `df`.
-* `ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=false, Tcontrol="inlet")`: The flow is not defined, uniform `d` and `df`. Options according to `ModuleTMOptions`.
-* `ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=false, Tcontrol="inlet")`: The flow is defined by `F` and uniform `d` and `df`. Options according to `ModuleTMOptions`.
+* `ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=false, Tcontrol="inlet")`: The flow is not defined, uniform `d` and `df`. Options according to `ModuleTMOptions`.
+* `ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=false, Tcontrol="inlet")`: The flow is defined by `F` and uniform `d` and `df`. Options according to `ModuleTMOptions`.
 """
 struct ModuleTM<:GasChromatographySystems.AbstractModule
 	# Module
@@ -213,13 +213,13 @@ function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, F, opt::
 	return TM
 end
 
-function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
+function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 	opt = ModuleTMOptions(; Tcold_abs=Tcold_abs, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit, ng=ng, Tcontrol=Tcontrol)
 	TM = ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, NaN, opt)
 	return TM
 end
 
-function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, sflank=40, tflank=20, alg=Vern9(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
+function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 	opt = ModuleTMOptions(; Tcold_abs=Tcold_abs, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit, ng=ng, Tcontrol=Tcontrol)
 	TM = ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F, opt)
 	return TM

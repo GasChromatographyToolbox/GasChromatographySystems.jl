@@ -227,6 +227,28 @@ end
 
 # add a flow modulator module
 
+# valve module (open/close)
+
+struct ValveProgram
+    time_steps::Vector{Float64}
+    state_steps::Vector{Bool}   # true = open, false = closed
+end
+
+struct ModuleValveOptions
+    ng::Bool  # always true
+end
+
+struct ModuleValve<:GasChromatographySystems.AbstractModule
+	name::String
+	L::Float64	# m, length of modulation line, e.g. 0.1 m
+	d_open::Float64	# m, diameter of open valve, 1.0e-3 m
+	d_closed::Float64	# m, diameter of closed valve, e.g. eps(Float64) m
+	T::Union{Number, TemperatureProgram}	# temperature of the valve module, e.g. 25.0 °C or a TemperatureProgram structure
+	state::ValveProgram	# state of the valve, e.g. "open" or "closed"
+	F::Float64	# flow through the valve module in mL/min, e.g. 1.0 mL/min or in most cases NaN
+	opt::ModuleValveOptions
+end
+
 # temperature program structure
 """
     TemperatureProgram(time_steps, temp_steps, gf, a_gf)

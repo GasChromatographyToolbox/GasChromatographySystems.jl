@@ -153,6 +153,7 @@ This function ensures that all modules and pressure points in the system use syn
     - Without gradient (`ng=true`): Uses default gradient parameters
 - The function maintains all other module properties (length, diameter, etc.)
 - The graph structure and system options remain unchanged
+- Throws `ArgumentError` if a module temperature is neither a constant (`Number`) nor a `TemperatureProgram`, or if a `TemperatureProgram` was not returned from `match_programs`
 """
 function update_system(sys)
 	new_timesteps, new_pressuresteps, new_temperaturesteps, new_a_gf, index_pp_pressprog, index_module_tempprog = match_programs(sys)
@@ -168,23 +169,34 @@ function update_system(sys)
 	end
 	new_modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
-		if typeof(sys.modules[i].T) <: Number
-			new_modules[i] = sys.modules[i]
-		elseif typeof(sys.modules[i].T) <: GasChromatographySystems.TemperatureProgram
-			ii = findfirst(index_module_tempprog.==i)
-			if sys.modules[i].opt.ng == false 
+		mod = sys.modules[i]
+		if mod.T isa Number
+			new_modules[i] = mod
+		elseif mod.T isa GasChromatographySystems.TemperatureProgram
+			ii = findfirst(index_module_tempprog .== i)
+			ii === nothing && throw(ArgumentError(
+				"module $i ($(mod.name)): TemperatureProgram was not synchronized by match_programs; " *
+				"ensure `T` is a `GasChromatographySystems.TemperatureProgram` (not a raw CP vector or other type)"))
+			if mod.opt.ng == false
 				# with gradient
-				gf(x) = GasChromatographySimulator.gradient(x, new_a_gf[ii]) 
+				gf(x) = GasChromatographySimulator.gradient(x, new_a_gf[ii])
 				new_tp = GasChromatographySystems.TemperatureProgram(new_timesteps, new_temperaturesteps[ii], gf, new_a_gf[ii])
-			else 
+			else
 				# without gradient
 				new_tp = GasChromatographySystems.TemperatureProgram(new_timesteps, new_temperaturesteps[ii])
 			end
-			if typeof(sys.modules[i]) == GasChromatographySystems.ModuleColumn
-				new_modules[i] = GasChromatographySystems.ModuleColumn(sys.modules[i].name, sys.modules[i].L, sys.modules[i].d, sys.modules[i].df, sys.modules[i].sp, new_tp, sys.modules[i].F, sys.modules[i].opt)
-			elseif typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM
-				new_modules[i] = GasChromatographySystems.ModuleTM(sys.modules[i].name, sys.modules[i].L, sys.modules[i].d, sys.modules[i].df, sys.modules[i].sp, new_tp, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].F, sys.modules[i].opt)
+			if mod isa GasChromatographySystems.ModuleColumn
+				new_modules[i] = GasChromatographySystems.ModuleColumn(mod.name, mod.L, mod.d, mod.df, mod.sp, new_tp, mod.F, mod.opt)
+			elseif mod isa GasChromatographySystems.ModuleTM
+				new_modules[i] = GasChromatographySystems.ModuleTM(mod.name, mod.L, mod.d, mod.df, mod.sp, new_tp, mod.shift, mod.PM, mod.ratio, mod.Thot, mod.Tcold, mod.F, mod.opt)
+			else
+				throw(ArgumentError(
+					"module $i ($(mod.name)): unsupported module type $(typeof(mod)) for TemperatureProgram update"))
 			end
+		else
+			throw(ArgumentError(
+				"module $i ($(mod.name)): temperature must be a Number (constant T) or " *
+				"GasChromatographySystems.TemperatureProgram, got $(typeof(mod.T))"))
 		end
 	end
 	new_sys = GasChromatographySystems.System(sys.name, sys.g, new_pp, new_modules, sys.options)

@@ -231,11 +231,14 @@ end
 """
 	ValveProgram(time_steps, state_steps)
 
-Structure describing the valve state program.
+Structure describing the valve state program (piecewise constant in time).
 
 # Arguments
-* `time_steps`: Time steps in s, after which the corresponding state in `state_steps` is reached.
-* `state_steps`: States in Bool, `true = open`, `false = closed`.
+* `time_steps`: Segment durations in s (same convention as GCSim program `time_steps`; physical segment
+  end times are `cumsum(time_steps)`).
+* `state_steps`: Valve state during each segment (`true = open`, `false = closed`).
+
+Evaluate with [`valve_state`](@ref); do not linearly interpolate boolean states.
 
 A default valve program is available:
 * `default_ValveProgram()`: `[0.0, 1800.0], [true, false]`.
@@ -256,22 +259,30 @@ default_ValveProgram() = ValveProgram([0.0, 1800.0], [true, false])
 """
 	ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
 
-Constructor for a periodic valve program.
+Build a periodic valve program from segment durations (GCSim-style `time_steps`).
+
+Each period `mp` consists of `t_closed` s closed then `(mp - t_closed)` s open (unless `inverted=true`).
+The program covers relative time `[0, t_end - t_start)`; `t_start` only sets the total span `t_end - t_start`.
 
 # Arguments
-* `mp`: Modulation period in s for periodic valve switching.
-* `t_closed`: Closed duration in s per period.
-* `t_end`: End time in s for generating the periodic program.
-* `inverted`: If `true`, invert the generated periodic states (`open ↔ closed`).
-* `t_start`: Start time in s for the periodic program.
+* `mp`: Modulation period in s.
+* `t_closed`: Closed duration in s per period (`0 ≤ t_closed ≤ mp`).
+* `t_end`: End of the program horizon in s.
+* `inverted`: If `true`, swap closed/open states within each period.
+* `t_start`: Start of the program horizon in s (default `0.0`).
 
 A default periodic valve program is available:
-* `default_periodic_ValveProgram()`: `10.0, 2.0, 1800.0`.
+* `default_periodic_ValveProgram()`: `10.0, 2.0, 1800.0` → 2 s closed + 8 s open per period for 1800 s.
 
 # Examples
 ```julia
-julia> ValveProgram(10.0, 2.0, 60.0)
-ValveProgram([0.0, 10.0, 12.0, 22.0, 24.0, 34.0, 36.0, 46.0, 48.0, 58.0, 60.0], [true, false, true, false, true, false, true, false, true, false, true])
+julia> vp = ValveProgram(10.0, 2.0, 30.0);
+
+julia> vp.time_steps
+6-element Vector{Float64}: 2.0, 8.0, 2.0, 8.0, 2.0, 8.0
+
+julia> valve_state(vp, 1.0), valve_state(vp, 2.0), valve_state(vp, 5.0)
+(false, true, true)
 ```
 """
 function ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
@@ -281,39 +292,77 @@ function ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
     t_end < t_start && error("`t_end` must be ≥ `t_start` (got t_end=$(t_end), t_start=$(t_start)).")
 
     period = Float64(mp)
-    closed = Float64(t_closed)
-    t0 = Float64(t_start)
-    tend = Float64(t_end)
+    closed_dur = Float64(t_closed)
+    open_dur = period - closed_dur
+    total = Float64(t_end) - Float64(t_start)
     tol = eps(Float64) * 100
 
-    start_state = inverted ? true : false  # true=open, false=closed
-    switch_state = !start_state
+    closed_state = inverted ? true : false
+    open_state = !closed_state
 
-    time_steps = Float64[t0]
-    state_steps = Bool[start_state]
+    time_steps = Float64[]
+    state_steps = Bool[]
 
-    t_period_start = t0
-    while t_period_start < tend - tol
-        t_switch = t_period_start + closed
-        if closed > tol && t_switch > time_steps[end] + tol && t_switch <= tend + tol
-            push!(time_steps, min(t_switch, tend))
-            push!(state_steps, switch_state)
-        end
-
-        t_next = t_period_start + period
-        if t_next > time_steps[end] + tol && t_next <= tend + tol
-            push!(time_steps, min(t_next, tend))
-            push!(state_steps, start_state)
-        end
-        t_period_start = t_next
+    if total <= tol
+        return ValveProgram([0.0], [closed_state])
     end
 
-    if time_steps[end] < tend - tol
-        push!(time_steps, tend)
-        push!(state_steps, state_steps[end])
+    n_full = floor(Int, total / period)
+    rem = total - n_full * period
+
+    for _ in 1:n_full
+        if closed_dur > tol
+            push!(time_steps, closed_dur)
+            push!(state_steps, closed_state)
+        end
+        if open_dur > tol
+            push!(time_steps, open_dur)
+            push!(state_steps, open_state)
+        end
+    end
+
+    if rem > tol
+        if rem <= closed_dur + tol
+            push!(time_steps, rem)
+            push!(state_steps, closed_state)
+        else
+            if closed_dur > tol
+                push!(time_steps, closed_dur)
+                push!(state_steps, closed_state)
+            end
+            push!(time_steps, rem - closed_dur)
+            push!(state_steps, open_state)
+        end
     end
 
     ValveProgram(time_steps, state_steps)
+end
+
+"""
+    valve_state(vp::ValveProgram, t)
+
+Piecewise-constant valve state at time `t` (s): `true` = open, `false` = closed.
+
+Segment `i` spans `[cumsum(time_steps)[i-1], cumsum(time_steps)[i])` with `cumsum(time_steps)[0] = 0`;
+the state switches to open at the end of a closed segment (e.g. closed on `[0, 2)`, open on `[2, 10)` for `[2, 8]`).
+"""
+function valve_state(vp::ValveProgram, t)
+    t = Float64(t)
+    τ_prev = 0.0
+    for i in eachindex(vp.time_steps)
+        τ_end = τ_prev + vp.time_steps[i]
+        if i < length(vp.time_steps)
+            if t < τ_end
+                return vp.state_steps[i]
+            end
+        else
+            if t <= τ_end
+                return vp.state_steps[i]
+            end
+        end
+        τ_prev = τ_end
+    end
+    return vp.state_steps[end]
 end
 
 default_periodic_ValveProgram() = ValveProgram(10.0, 2.0, 1800.0)

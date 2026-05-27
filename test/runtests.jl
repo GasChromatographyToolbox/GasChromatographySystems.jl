@@ -55,4 +55,18 @@ end
     @test series_grad.modules[2].T.gf(2.0)[end] == -ΔT[end]
 end
 
+@testset "ValveProgram periodic durations" begin
+    vp = GasChromatographySystems.ValveProgram(10.0, 2.0, 30.0)
+    @test vp.time_steps == [2.0, 8.0, 2.0, 8.0, 2.0, 8.0]
+    @test vp.state_steps == [false, true, false, true, false, true]
+    @test sum(vp.time_steps) ≈ 30.0
+    @test !GasChromatographySystems.valve_state(vp, 1.0)
+    @test GasChromatographySystems.valve_state(vp, 2.0)
+    @test GasChromatographySystems.valve_state(vp, 5.0)
+    @test !GasChromatographySystems.valve_state(vp, 10.0)
+    vp_inv = GasChromatographySystems.ValveProgram(10.0, 2.0, 10.0; inverted=true)
+    @test GasChromatographySystems.valve_state(vp_inv, 1.0)
+    @test !GasChromatographySystems.valve_state(vp_inv, 2.0)
+end
+
     println("Test run successful.")

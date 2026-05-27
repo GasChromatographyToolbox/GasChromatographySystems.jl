@@ -55,7 +55,7 @@ end
     @test series_grad.modules[2].T.gf(2.0)[end] == -ΔT[end]
 end
 
-@testset "Phase 5.0: ValveProgram, ModuleValveOptions, ModuleValve" begin
+@testset "ValveProgram, ModuleValveOptions, ModuleValve" begin
     GCS = GasChromatographySystems
 
     @testset "ValveProgram" begin

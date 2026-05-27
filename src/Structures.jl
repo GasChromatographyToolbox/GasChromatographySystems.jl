@@ -246,16 +246,20 @@ A default valve program is available:
 struct ValveProgram
     time_steps::Vector{Float64}
     state_steps::Vector{Bool}   # true = open, false = closed
-end
 
-function ValveProgram(time_steps::AbstractVector{<:Real}, state_steps::AbstractVector{Bool})
-    length(time_steps) != length(state_steps) &&
-        error("Mismatch between length(time_steps) = $(length(time_steps)) and length(state_steps) = $(length(state_steps))")
-    ValveProgram(Float64.(time_steps), Bool.(state_steps))
+    function ValveProgram(time_steps::AbstractVector{<:Real}, state_steps::AbstractVector{Bool})
+        if length(time_steps) != length(state_steps)
+            error("Mismatch between length(time_steps) = $(length(time_steps)) and length(state_steps) = $(length(state_steps))")
+        end
+        new(Float64.(time_steps), Bool.(state_steps))
+    end
 end
 
 default_ValveProgram() = ValveProgram([0.0, 1800.0], [true, false])
 
+# note: perhaps introduce a PeriodicValveProgram type which would not convert directly to time_steps
+# otherwise for many valve modulations in a long chromatographic run the time_steps vector can become very long
+# how is it handeled with thermal modulation? 
 """
 	ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
 

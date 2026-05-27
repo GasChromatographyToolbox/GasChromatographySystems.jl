@@ -228,25 +228,170 @@ end
 # add a flow modulator module
 
 # valve module (open/close)
+"""
+	ValveProgram(time_steps, state_steps)
 
+Structure describing the valve state program.
+
+# Arguments
+* `time_steps`: Time steps in s, after which the corresponding state in `state_steps` is reached.
+* `state_steps`: States in Bool, `true = open`, `false = closed`.
+
+A default valve program is available:
+* `default_ValveProgram()`: `[0.0, 1800.0], [true, false]`.
+"""
 struct ValveProgram
     time_steps::Vector{Float64}
     state_steps::Vector{Bool}   # true = open, false = closed
 end
 
-struct ModuleValveOptions
-    ng::Bool  # always true
+function ValveProgram(time_steps::AbstractVector{<:Real}, state_steps::AbstractVector{Bool})
+    length(time_steps) != length(state_steps) &&
+        error("Mismatch between length(time_steps) = $(length(time_steps)) and length(state_steps) = $(length(state_steps))")
+    ValveProgram(Float64.(time_steps), Bool.(state_steps))
 end
 
+default_ValveProgram() = ValveProgram([0.0, 1800.0], [true, false])
+
+"""
+	ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
+
+Constructor for a periodic valve program.
+
+# Arguments
+* `mp`: Modulation period in s for periodic valve switching.
+* `t_closed`: Closed duration in s per period.
+* `t_end`: End time in s for generating the periodic program.
+* `inverted`: If `true`, invert the generated periodic states (`open ↔ closed`).
+* `t_start`: Start time in s for the periodic program.
+
+A default periodic valve program is available:
+* `default_periodic_ValveProgram()`: `10.0, 2.0, 1800.0`.
+
+# Examples
+```julia
+julia> ValveProgram(10.0, 2.0, 60.0)
+ValveProgram([0.0, 10.0, 12.0, 22.0, 24.0, 34.0, 36.0, 46.0, 48.0, 58.0, 60.0], [true, false, true, false, true, false, true, false, true, false, true])
+```
+"""
+function ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
+    mp <= 0 && error("`mp` must be > 0, got $(mp).")
+    t_closed < 0 && error("`t_closed` must be ≥ 0, got $(t_closed).")
+    t_closed > mp && error("`t_closed` must be ≤ `mp` (got t_closed=$(t_closed), mp=$(mp)).")
+    t_end < t_start && error("`t_end` must be ≥ `t_start` (got t_end=$(t_end), t_start=$(t_start)).")
+
+    period = Float64(mp)
+    closed = Float64(t_closed)
+    t0 = Float64(t_start)
+    tend = Float64(t_end)
+    tol = eps(Float64) * 100
+
+    start_state = inverted ? true : false  # true=open, false=closed
+    switch_state = !start_state
+
+    time_steps = Float64[t0]
+    state_steps = Bool[start_state]
+
+    t_period_start = t0
+    while t_period_start < tend - tol
+        t_switch = t_period_start + closed
+        if closed > tol && t_switch > time_steps[end] + tol && t_switch <= tend + tol
+            push!(time_steps, min(t_switch, tend))
+            push!(state_steps, switch_state)
+        end
+
+        t_next = t_period_start + period
+        if t_next > time_steps[end] + tol && t_next <= tend + tol
+            push!(time_steps, min(t_next, tend))
+            push!(state_steps, start_state)
+        end
+        t_period_start = t_next
+    end
+
+    if time_steps[end] < tend - tol
+        push!(time_steps, tend)
+        push!(state_steps, state_steps[end])
+    end
+
+    ValveProgram(time_steps, state_steps)
+end
+
+default_periodic_ValveProgram() = ValveProgram(10.0, 2.0, 1800.0)
+
+"""
+	ModuleValveOptions(; ng=true)
+
+Structure describing the options for a valve module.
+
+# Arguments
+* `ng`: Option to calculate without a gradient (`ng = true`) or with a gradient (`ng = false`).
+
+For valve modules, `ng=true` is the typical setting.
+
+A default module options is available:
+* `ModuleValveOptions()`: `ng = true`.
+"""
+struct ModuleValveOptions
+    ng::Bool  
+end
+
+function ModuleValveOptions(; ng=true)
+    ModuleValveOptions(ng)
+end
+
+"""
+    ModuleValve(name, L, d_open, d_closed, T, state, F, opt::ModuleValveOptions)
+
+Structure describing a valve module with time-dependent open/closed state. The valve is used
+as a hydraulic element in the graph-based GC system model.
+
+# Arguments
+* `name`: Name of the valve module.
+* `L`: Length of the valve/modulation line in m.
+* `d_open`: Effective diameter in m when the valve is open.
+* `d_closed`: Effective diameter in m when the valve is closed (use a small positive value, e.g. `eps(Float64)`).
+* `T`: Temperature of the valve module in °C, either a number or a `TemperatureProgram`.
+* `state`: Valve state program as `ValveProgram` (`true = open`, `false = closed`).
+* `F`: Flow through the valve module in mL/min. In most workflows this is `NaN` and determined from pressure balance.
+* `opt`: Options for this module as `ModuleValveOptions`.
+
+Four outer constructors are available:
+* `ModuleValve(name, L, d_open, d_closed, T, state, F, opt::ModuleValveOptions)`: fully explicit constructor.
+* `ModuleValve(name, L, d_open, d_closed, T, state, opt::ModuleValveOptions)`: constructor with undefined flow `F = NaN`.
+* `ModuleValve(name, L, d_open, d_closed, T, state; ng=true)`: sets `F = NaN` and creates `ModuleValveOptions`.
+* `ModuleValve(name, T, state; ng=true)`: convenience constructor with defaults `L = 0.01`, `d_open = 0.001`, `d_closed = eps(Float64)`, and `F = NaN`.
+"""
 struct ModuleValve<:GasChromatographySystems.AbstractModule
 	name::String
 	L::Float64	# m, length of modulation line, e.g. 0.1 m
 	d_open::Float64	# m, diameter of open valve, 1.0e-3 m
 	d_closed::Float64	# m, diameter of closed valve, e.g. eps(Float64) m
-	T::Union{Number, TemperatureProgram}	# temperature of the valve module, e.g. 25.0 °C or a TemperatureProgram structure
+	T	# a number (constant temperature) or a TemperatureProgram structure
 	state::ValveProgram	# state of the valve, e.g. "open" or "closed"
 	F::Float64	# flow through the valve module in mL/min, e.g. 1.0 mL/min or in most cases NaN
 	opt::ModuleValveOptions
+end
+
+function ModuleValve(name, L, d_open, d_closed, T, state, F, opt::ModuleValveOptions)
+	valve = ModuleValve(name, L, d_open, d_closed, T, state, F, opt)
+	return valve
+end
+
+function ModuleValve(name, L, d_open, d_closed, T, state, opt::ModuleValveOptions)
+	valve = ModuleValve(name, L, d_open, d_closed, T, state, NaN, opt)
+	return valve
+end
+
+function ModuleValve(name, L, d_open, d_closed, T, state; ng=true)
+	opt = ModuleValveOptions(; ng=ng)
+	valve = ModuleValve(name, L, d_open, d_closed, T, state, NaN, opt)
+	return valve
+end
+
+function ModuleValve(name, T, state; ng=true)
+	opt = ModuleValveOptions(; ng=ng)
+	valve = ModuleValve(name, 0.01, 0.001, eps(Float64), T, state, NaN, opt)
+	return valve
 end
 
 # temperature program structure

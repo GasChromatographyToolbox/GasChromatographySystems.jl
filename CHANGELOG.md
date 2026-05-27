@@ -7,9 +7,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- Valve module core structures in `Structures.jl`: `ValveProgram`, `ModuleValveOptions`, and `ModuleValve` with docstrings and convenience constructors.
+- Periodic valve program builder `ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)` and `default_periodic_ValveProgram()`.
+- Piecewise-constant valve state helper `valve_state(vp, t)` for open/closed switching without linear interpolation of boolean states.
+- Phase 5.0 test coverage for `ValveProgram`, `ModuleValveOptions`, and `ModuleValve` constructors/defaults, including periodic/inverted schedules.
+
 ### Changed
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
 - README: fixed CI and Codecov badge links (`GasChromatographyToolbox` org name).
+- `ValveProgram` documentation now states the intended stepwise semantics (segment durations in `time_steps`) and references `valve_state` for evaluation.
+
+### Fixed
+- `ValveProgram(time_steps, state_steps)` now validates matching vector lengths in the inner constructor (prevents inconsistent instances from the default typed constructor path).
 
 ### Removed
 - Unused duplicate GitHub Actions workflows under `data/.github/workflows/` (only `.github/workflows/` at the repo root is used).

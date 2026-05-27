@@ -55,18 +55,82 @@ end
     @test series_grad.modules[2].T.gf(2.0)[end] == -ΔT[end]
 end
 
-@testset "ValveProgram periodic durations" begin
-    vp = GasChromatographySystems.ValveProgram(10.0, 2.0, 30.0)
-    @test vp.time_steps == [2.0, 8.0, 2.0, 8.0, 2.0, 8.0]
-    @test vp.state_steps == [false, true, false, true, false, true]
-    @test sum(vp.time_steps) ≈ 30.0
-    @test !GasChromatographySystems.valve_state(vp, 1.0)
-    @test GasChromatographySystems.valve_state(vp, 2.0)
-    @test GasChromatographySystems.valve_state(vp, 5.0)
-    @test !GasChromatographySystems.valve_state(vp, 10.0)
-    vp_inv = GasChromatographySystems.ValveProgram(10.0, 2.0, 10.0; inverted=true)
-    @test GasChromatographySystems.valve_state(vp_inv, 1.0)
-    @test !GasChromatographySystems.valve_state(vp_inv, 2.0)
+@testset "Phase 5.0: ValveProgram, ModuleValveOptions, ModuleValve" begin
+    GCS = GasChromatographySystems
+
+    @testset "ValveProgram" begin
+        vp_manual = GCS.ValveProgram([5.0, 10.0], [true, false])
+        @test vp_manual.time_steps == [5.0, 10.0]
+        @test vp_manual.state_steps == [true, false]
+        @test GCS.valve_state(vp_manual, 0.0)
+        @test !GCS.valve_state(vp_manual, 5.0)
+        @test !GCS.valve_state(vp_manual, 15.0)
+
+        vp_def = GCS.default_ValveProgram()
+        @test vp_def.time_steps == [0.0, 1800.0]
+        @test vp_def.state_steps == [true, false]
+
+        vp_per = GCS.ValveProgram(10.0, 2.0, 30.0)
+        @test vp_per.time_steps == [2.0, 8.0, 2.0, 8.0, 2.0, 8.0]
+        @test vp_per.state_steps == [false, true, false, true, false, true]
+        @test sum(vp_per.time_steps) ≈ 30.0
+        @test !GCS.valve_state(vp_per, 1.0)
+        @test GCS.valve_state(vp_per, 2.0)
+        @test GCS.valve_state(vp_per, 5.0)
+        @test !GCS.valve_state(vp_per, 10.0)
+
+        vp_inv = GCS.ValveProgram(10.0, 2.0, 10.0; inverted=true)
+        @test GCS.valve_state(vp_inv, 1.0)
+        @test !GCS.valve_state(vp_inv, 2.0)
+
+        vp_long = GCS.default_periodic_ValveProgram()
+        @test sum(vp_long.time_steps) ≈ 1800.0
+        @test length(vp_long.time_steps) == 360
+        @test vp_long.time_steps[1:2] == [2.0, 8.0]
+        @test vp_long.state_steps[1:2] == [false, true]
+
+        @test_throws ErrorException GCS.ValveProgram([1.0, 2.0], [true])
+        @test_throws ErrorException GCS.ValveProgram(0.0, 2.0, 10.0)
+        @test_throws ErrorException GCS.ValveProgram(10.0, 12.0, 10.0)
+    end
+
+    @testset "ModuleValveOptions" begin
+        opt_def = GCS.ModuleValveOptions()
+        @test opt_def.ng == true
+        opt_ng = GCS.ModuleValveOptions(; ng=false)
+        @test opt_ng.ng == false
+    end
+
+    @testset "ModuleValve" begin
+        vp = GCS.ValveProgram([2.0, 8.0], [false, true])
+        opt = GCS.ModuleValveOptions(; ng=true)
+        T = 25.0
+
+        v_full = GCS.ModuleValve("v1", 0.05, 1e-3, eps(), T, vp, 1.5, opt)
+        @test v_full isa GCS.AbstractModule
+        @test v_full.name == "v1"
+        @test v_full.L == 0.05
+        @test v_full.d_open == 1e-3
+        @test v_full.d_closed == eps()
+        @test v_full.T == T
+        @test v_full.state === vp
+        @test v_full.F == 1.5
+        @test v_full.opt === opt
+
+        v_nan = GCS.ModuleValve("v2", 0.05, 1e-3, eps(), T, vp, opt)
+        @test isnan(v_nan.F)
+
+        v_kw = GCS.ModuleValve("v3", 0.05, 1e-3, eps(), T, vp; ng=false)
+        @test isnan(v_kw.F)
+        @test v_kw.opt.ng == false
+
+        v_short = GCS.ModuleValve("v4", T, vp; ng=true)
+        @test v_short.L == 0.01
+        @test v_short.d_open == 0.001
+        @test v_short.d_closed == eps(Float64)
+        @test isnan(v_short.F)
+        @test v_short.opt.ng == true
+    end
 end
 
-    println("Test run successful.")
+println("Test run successful.")

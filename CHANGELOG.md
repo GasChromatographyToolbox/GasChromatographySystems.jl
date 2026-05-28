@@ -17,9 +17,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
 - README: fixed CI and Codecov badge links (`GasChromatographyToolbox` org name).
 - `ValveProgram` documentation now states the intended stepwise semantics (segment durations in `time_steps`) and references `valve_state` for evaluation.
+- `module_temperature` now accepts `ModuleValve` using the same constant/program temperature handling used for `ModuleColumn`.
+- Flow balance helpers now use `edge_restriction(...)` dispatch for `ModuleColumn`, `ModuleTM`, and `ModuleValve` instead of direct `.d` access.
 
 ### Fixed
 - `ValveProgram(time_steps, state_steps)` now validates matching vector lengths in the inner constructor (prevents inconsistent instances from the default typed constructor path).
+- Implemented valve hydraulics in permeability/restriction evaluation using `σ(t) = valve_state(...)` with open/closed restrictions (`d_open`/`d_closed`), enabling `ModuleValve` edges in flow solves.
 
 ### Removed
 - Unused duplicate GitHub Actions workflows under `data/.github/workflows/` (only `.github/workflows/` at the repo root is used).

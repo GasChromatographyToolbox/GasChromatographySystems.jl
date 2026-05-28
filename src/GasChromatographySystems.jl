@@ -278,16 +278,16 @@ function inner_vertices(g)
 end
 
 """
-    module_temperature(module_::ModuleColumn, sys)
+    module_temperature(module_::Union{ModuleColumn, ModuleValve}, sys)
 
-Calculate temperature parameters for a column module in a gas chromatography system.
+Calculate temperature parameters for a column or valve module in a gas chromatography system.
 
 This function handles temperature calculations for a standard column module, supporting both
 constant temperature and temperature programs. It returns the necessary parameters for
 temperature interpolation along the column.
 
 # Arguments
-- `module_`: A ModuleColumn instance containing column parameters
+- `module_`: A `ModuleColumn` or `ModuleValve` instance containing module parameters
 - `sys`: The GC system structure containing the network of modules
 
 # Returns
@@ -299,10 +299,10 @@ temperature interpolation along the column.
 
 # Notes
 - For constant temperature, uses system's common timesteps or default [0.0, 36000.0]
-- Handles NaN column length by defaulting to 1.0
+- Handles NaN module length by defaulting to 1.0
 - Supports both constant temperature and temperature program modes
 """
-function module_temperature(module_::ModuleColumn, sys)
+function module_temperature(module_::Union{ModuleColumn, ModuleValve}, sys)
 	L = if isnan(module_.L)
 		1.0
 	else
@@ -388,6 +388,34 @@ function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 end
 
 """
+	edge_restriction(module_::AbstractModule, T_itp, opt::Options)
+
+Calculate the flow restriction κ of an edge (capillary) of a gas chromatography system.
+
+# Arguments
+- `module_`: A `ModuleColumn`, `ModuleTM` or `ModuleValve` instance containing module parameters
+- `T_itp`: Interpolated temperature `T(x,t)`
+- `opt`: Options for the system
+
+# Returns
+- `κ`: Flow restriction function `κ(t)`
+
+# Notes
+- For `ModuleColumn` and `ModuleTM`, uses `GasChromatographySimulator.flow_restriction`
+- For `ModuleValve`, uses `valve_state` to determine the open/closed state and calculates the flow restriction accordingly
+"""
+function edge_restriction(module_::AbstractModule, T_itp, opt::Options, t)
+	if typeof(module_) <: ModuleColumn || typeof(module_) <: ModuleTM
+		return GasChromatographySimulator.flow_restriction(module_.L, t, T_itp, module_.d, opt.gas; ng=module_.opt.ng, vis=opt.vis)
+	elseif typeof(module_) <: ModuleValve
+		κ_open(t) = GasChromatographySimulator.flow_restriction(module_.L, t, T_itp, module_.d_open, module_.d_closed, opt.gas; ng=module_.opt.ng, vis=opt.vis)
+		κ_closed(t) = GasChromatographySimulator.flow_restriction(module_.L, t, T_itp, module_.d_closed, module_.d_closed, opt.gas; ng=module_.opt.ng, vis=opt.vis)
+		σ(t) = valve_state(mod.state, t) ? 1.0 : 0.0
+		return σ(t)*κ_open(t) + (1.0-σ(t))*κ_closed(t)
+	end
+end
+
+"""
     flow_restrictions(sys)
 
 Calculates the flow restrictions κ of all edges (capliaries) of a system of capillaries.
@@ -399,7 +427,7 @@ function flow_restrictions(sys)
 	kappas = Array{Function}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
 		T_itp = module_temperature(sys.modules[i], sys)[5]
-		κ(t) = GasChromatographySimulator.flow_restriction(sys.modules[i].L, t, T_itp, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis)
+		κ(t) = edge_restriction(sys.modules[i], T_itp, sys.options, t)
 		kappas[i] = κ
 	end
 	return kappas
@@ -417,7 +445,7 @@ function flow_permeabilities(sys)
 	lambdas = Array{Function}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
 		T_itp = module_temperature(sys.modules[i], sys)[5]
-		λ(t) = 1/GasChromatographySimulator.flow_restriction(sys.modules[i].L, t, T_itp, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis)
+		λ(t) = 1/edge_restriction(sys.modules[i], T_itp, sys.options, t)
 		lambdas[i] = λ
 	end
 	return lambdas

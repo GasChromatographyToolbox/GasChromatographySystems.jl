@@ -130,6 +130,14 @@ end
         @test v_short.d_closed == eps(Float64)
         @test isnan(v_short.F)
         @test v_short.opt.ng == true
+
+        sys_empty = GCS.System("", Graphs.SimpleDiGraph(0), GCS.PressurePoint[], GCS.AbstractModule[], GCS.Options())
+        _, temp_steps_const, _, _, _ = GCS.module_temperature(v_short, sys_empty)
+        @test all(==(T), temp_steps_const)
+
+        v_prog = GCS.ModuleValve("v5", GCS.default_TP(), vp; ng=true)
+        _, temp_steps_prog, _, _, _ = GCS.module_temperature(v_prog, sys_empty)
+        @test temp_steps_prog == v_prog.T.temp_steps
     end
 end
 

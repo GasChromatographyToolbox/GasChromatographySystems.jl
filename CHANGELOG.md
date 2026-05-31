@@ -12,6 +12,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Periodic valve program builder `ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)` and `default_periodic_ValveProgram()`.
 - Piecewise-constant valve state helper `valve_state(vp, t)` for open/closed switching without linear interpolation of boolean states.
 - Test coverage for `ValveProgram`, `ModuleValveOptions`, and `ModuleValve` constructors/defaults, including periodic/inverted schedules.
+- Regression tests for `common_timesteps`, `match_programs`, and `update_system` with mismatched column, valve, and pressure program grids (tee fixture; includes post-balance `flow_functions` on valve edge).
 - `index_modules_with_valve_program(sys)` for edges carrying a `ModuleValve` with `ValveProgram` state.
 - Program synchronization for valves: `common_timesteps` merges `ValveProgram.time_steps`; `match_programs` resamples open/closed `state_steps` onto the common segment grid; `update_system` rebuilds `ModuleValve` modules (constant or programmed `T`, synchronized `state`).
 

@@ -22,11 +22,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - `module_temperature` now accepts `ModuleValve` using the same constant/program temperature handling used for `ModuleColumn`.
 - Flow balance helpers now use `edge_restriction(...)` dispatch for `ModuleColumn`, `ModuleTM`, and `ModuleValve` instead of direct `.d` access.
 - `common_timesteps`, `match_programs`, and `update_system` docstrings now describe valve programs alongside pressure and temperature programs.
+- `flow_functions(sys, p2fun)` and `holdup_time_functions(sys, p2fun)` dispatch on `ModuleValve` using `valve_state` and instantaneous `d_open`/`d_closed` with GCSim `flow` / `holdup_time` (same pattern on both edges).
+- Docstrings for `edge_restriction`, `flow_restrictions`, `flow_permeabilities`, `flow_functions`, and `holdup_time_functions`.
 
 ### Fixed
 - `ValveProgram(time_steps, state_steps)` now validates matching vector lengths in the inner constructor (prevents inconsistent instances from the default typed constructor path).
 - Implemented valve hydraulics in permeability/restriction evaluation using `σ(t) = valve_state(...)` with open/closed restrictions (`d_open`/`d_closed`), enabling `ModuleValve` edges in flow solves.
 - `update_system` no longer mis-handles `ModuleValve` inside the column/TM temperature branch (constant-`T` valves now receive a synchronized `ValveProgram`; valves with `TemperatureProgram` `T` update both programs).
+- `edge_restriction` for `ModuleValve`: correct `flow_restriction` arguments (`d_open` / `d_closed`), `module_.state` instead of `mod`, and scalar κ blend at `t`.
 
 ### Removed
 - Unused duplicate GitHub Actions workflows under `data/.github/workflows/` (only `.github/workflows/` at the repo root is used).

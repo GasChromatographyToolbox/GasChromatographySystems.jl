@@ -46,8 +46,8 @@ permeability depend on `T(t)` while junction pressures follow `P(t)`.
 
 This function merges every program breakpoint into one sorted set of segment durations by
 repeatedly calling `GasChromatographySimulator.common_time_steps` (union of cumulative end times,
-then converted back to durations). `match_programs` and `update_system` resample each program onto
-that grid with `new_value_steps` before solving or simulation.
+then converted back to durations). `match_programs` and `update_system` resample pressure and
+temperature with `new_value_steps` and valve state with piecewise-constant `valve_state` evaluation.
 
 # Arguments
 - `sys`: `System` with pressure points and module edges.
@@ -58,9 +58,10 @@ that grid with `new_value_steps` before solving or simulation.
 - `com_timesteps`: Vector of segment durations in s, common to all synchronized programs.
 
 # Notes
-- Only `PressureProgram` (vertices) and `TemperatureProgram` (column/TM modules) are included.
-- Constant pressures (`Number`) and constant temperatures are unchanged; they only borrow this
-  timeline when a program interpolation is needed (e.g. in `module_temperature`).
+- Included programs: `PressureProgram` (vertices), `TemperatureProgram` (column/TM/valve `T`),
+  and `ValveProgram` on `ModuleValve` edges (`state.time_steps`).
+- Constant pressures (`Number`), constant temperatures, and constant valve states are unchanged;
+  they only borrow this timeline when resampling is required (e.g. `module_temperature`, `update_system`).
 """
 function common_timesteps(sys; default=[0.0, 36000.0])
 	com_timesteps = []
@@ -82,6 +83,11 @@ function common_timesteps(sys; default=[0.0, 36000.0])
 	return com_timesteps
 end
 
+"""
+    index_modules_with_temperature_program(sys)
+
+Return edge indices `i` where `sys.modules[i].T` is a `TemperatureProgram`.
+"""
 function index_modules_with_temperature_program(sys)
 	i_tempprog = Int[]
 	for i=1:ne(sys.g)
@@ -92,6 +98,11 @@ function index_modules_with_temperature_program(sys)
 	return i_tempprog
 end
 
+"""
+    index_modules_with_valve_program(sys)
+
+Return edge indices `i` where `sys.modules[i]` is a `ModuleValve` with `ValveProgram` `state`.
+"""
 function index_modules_with_valve_program(sys)
 	i_valveprog = Int[]
 	for i=1:ne(sys.g)
@@ -104,6 +115,11 @@ function index_modules_with_valve_program(sys)
 	return i_valveprog
 end
 
+"""
+    index_pressurepoints_with_pressure_program(sys)
+
+Return vertex indices `i` where `sys.pressurepoints[i].P` is a `PressureProgram`.
+"""
 function index_pressurepoints_with_pressure_program(sys)
 	i_pressprog = Int[]
 	for i=1:nv(sys.g)
@@ -117,27 +133,30 @@ end
 """
     match_programs(sys)
 
-Synchronize and match temperature and pressure programs across all modules in a gas chromatography system.
+Resample pressure, temperature, and valve programs onto one common segment-duration grid.
 
-This function ensures that all temperature and pressure programs in the system use the same time steps
-by interpolating values to common time points. It handles both pressure programs at pressure points
-and temperature programs in modules, including thermal gradients.
+Uses `common_timesteps(sys)` as `com_times` (segment durations in s). Pressure and temperature
+values are interpolated with `GasChromatographySimulator.new_value_steps`. Valve open/closed states
+are resampled piecewise-constantly via `valve_state` at cumulative segment end times (booleans are
+not linearly interpolated).
 
 # Arguments
-- `sys`: A `System` structure containing the gas chromatography system configuration
+- `sys`: A `System` structure containing the gas chromatography system configuration with pressure points and module edges.
 
 # Returns
-- `com_times`: Array of common time steps for all programs
-- `new_press_steps`: Array of interpolated pressure values for each pressure point with a pressure program
-- `new_temp_steps`: Array of interpolated temperature values for each module with a temperature program
-- `new_a_gf`: Array of interpolated gradient parameters for each module with a temperature program
-- `i_pressprog`: Indices of pressure points that have pressure programs
-- `i_tempprog`: Indices of modules that have temperature programs
+- `com_times`: Common segment durations for all synchronized programs.
+- `new_press_steps`: Pressure step values per programmed pressure point (order matches `i_pressprog`).
+- `new_temp_steps`: Temperature step values per module with `TemperatureProgram` (order matches `i_tempprog`).
+- `new_a_gf`: Gradient parameter matrices per module with `TemperatureProgram` and thermal gradient.
+- `new_valve_steps`: Synchronized `ValveProgram`s per `ModuleValve` (order matches `i_valveprog`).
+- `i_pressprog`: Vertex indices with `PressureProgram` pressure.
+- `i_tempprog`: Edge indices with `TemperatureProgram` temperature.
+- `i_valveprog`: Edge indices with `ModuleValve` and `ValveProgram` state.
 
 # Notes
-- For modules with thermal gradients (`ng=false`), the function interpolates all gradient parameters (ΔT, x0, L0, α)
-- For modules without thermal gradients (`ng=true`), the gradient parameters are set to default values
-- All programs are synchronized to common time steps to ensure consistent simulation
+- Modules with thermal gradients (`ng=false`): interpolates ΔT, x0, L0, α onto `com_times`.
+- Modules without gradients (`ng=true`): default gradient parameter rows on `com_times`.
+- Valve modules listed in `i_valveprog` may also appear in `i_tempprog` when `T` is a `TemperatureProgram`.
 """
 function match_programs(sys)
 	com_times = GasChromatographySystems.common_timesteps(sys)
@@ -175,7 +194,7 @@ end
 """
     update_system(sys)
 
-Update and synchronize all temperature and pressure programs in a gas chromatography system to use common time steps.
+Build a new `System` whose stepwise programs share one timeline from `match_programs`.
 
 This function ensures that all modules and pressure points in the system use synchronized time steps by:
 1. Finding common time steps across all programs
@@ -184,24 +203,19 @@ This function ensures that all modules and pressure points in the system use syn
 4. Preserving constant temperature/pressure values where applicable
 
 # Arguments
-- `sys`: A `System` structure containing the gas chromatography system configuration
+- `sys`: `System` to synchronize.
 
 # Returns
-- A new `System` structure with synchronized programs
+- New `System` with the same graph and `Options`; pressure points and programmed modules updated.
 
 # Notes
-- For pressure points:
-  - Constant pressure values are preserved unchanged
-  - Pressure programs are interpolated to common time steps
-- For modules:
-  - Constant temperature values are preserved unchanged
-  - Temperature programs are interpolated to common time steps
-  - Thermal gradients are handled differently based on the `ng` option:
-    - With gradient (`ng=false`): All gradient parameters are interpolated
-    - Without gradient (`ng=true`): Uses default gradient parameters
-- The function maintains all other module properties (length, diameter, etc.)
-- The graph structure and system options remain unchanged
-- Throws `ArgumentError` if a module temperature is neither a constant (`Number`) nor a `TemperatureProgram`, or if a `TemperatureProgram` was not returned from `match_programs`
+- **Pressure points:** constant `Number` pressures unchanged; `PressureProgram` resampled to common durations.
+- **`ModuleColumn` / `ModuleTM`:** constant `T` unchanged; `TemperatureProgram` resampled; gradient handling
+  follows `opt.ng` (`ng=false` interpolates ΔT, x0, L0, α; `ng=true` uses default gradient rows).
+- **`ModuleValve`:** always receives a synchronized `ValveProgram` in `state`; `T` unchanged if constant,
+  or resampled like column modules when `T` is a `TemperatureProgram`.
+- Graph topology and non-program fields (`L`, `d`, `sp`, etc.) are preserved.
+- Throws `ArgumentError` for unsupported temperature types or when `match_programs` omitted a module.
 """
 function update_system(sys)
 	function synchronized_temperature_program(timesteps, temp_steps, a_gf, ng)

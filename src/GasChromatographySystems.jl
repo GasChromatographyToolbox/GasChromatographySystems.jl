@@ -33,7 +33,35 @@ include("./ThermalModulator.jl")
 # functions
 
 # begin - misc, for update_system
-# common programs
+"""
+    common_timesteps(sys; default=[0.0, 36000.0])
+
+Build a single segment-duration timeline shared by all stepwise programs in a GC system.
+
+Each `PressureProgram` and `TemperatureProgram` stores its own `time_steps` (segment durations in s;
+physical breakpoints are `cumsum(time_steps)`). Different vertices and edges can therefore use
+different schedules. Flow balance, holdup-time evaluation, and chromatography all need pressure,
+temperature, and (when present) valve state at the **same** instants, because viscosity and
+permeability depend on `T(t)` while junction pressures follow `P(t)`.
+
+This function merges every program breakpoint into one sorted set of segment durations by
+repeatedly calling `GasChromatographySimulator.common_time_steps` (union of cumulative end times,
+then converted back to durations). `match_programs` and `update_system` resample each program onto
+that grid with `new_value_steps` before solving or simulation.
+
+# Arguments
+- `sys`: `System` with pressure points and module edges.
+- `default`: Segment durations used when no `PressureProgram` or `TemperatureProgram` is present
+  (typical 10 h horizon for constant-`T` / constant-`P` setups).
+
+# Returns
+- `com_timesteps`: Vector of segment durations in s, common to all synchronized programs.
+
+# Notes
+- Only `PressureProgram` (vertices) and `TemperatureProgram` (column/TM modules) are included.
+- Constant pressures (`Number`) and constant temperatures are unchanged; they only borrow this
+  timeline when a program interpolation is needed (e.g. in `module_temperature`).
+"""
 function common_timesteps(sys; default=[0.0, 36000.0])
 	com_timesteps = []
 	for i=1:nv(sys.g)
@@ -42,7 +70,9 @@ function common_timesteps(sys; default=[0.0, 36000.0])
 		end
 	end
 	for i=1:ne(sys.g)
-		if typeof(sys.modules[i].T) <: TemperatureProgram
+		if typeof(sys.modules[i]) <: ModuleValve
+			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.modules[i].state.time_steps)
+		elseif typeof(sys.modules[i].T) <: TemperatureProgram
 			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.modules[i].T.time_steps)
 		end
 	end
@@ -60,6 +90,18 @@ function index_modules_with_temperature_program(sys)
 		end
 	end
 	return i_tempprog
+end
+
+function index_modules_with_valve_program(sys)
+	i_valveprog = Int[]
+	for i=1:ne(sys.g)
+		if typeof(sys.modules[i]) <: ModuleValve
+			if typeof(sys.modules[i].state) <: ValveProgram
+				push!(i_valveprog, i)
+			end
+		end
+	end
+	return i_valveprog
 end
 
 function index_pressurepoints_with_pressure_program(sys)
@@ -121,7 +163,13 @@ function match_programs(sys)
 			new_a_gf[i] = [zeros(length(com_times)) zeros(length(com_times)) ones(length(com_times)) zeros(length(com_times))]
 		end
 	end
-	return com_times, new_press_steps, new_temp_steps, new_a_gf, i_pressprog, i_tempprog
+	i_valveprog = GasChromatographySystems.index_modules_with_valve_program(sys)
+	new_valve_steps = Array{GasChromatographySystems.ValveProgram}(undef, length(i_valveprog))
+	for i=1:length(i_valveprog)
+		new_state_steps = [GasChromatographySystems.valve_state(sys.modules[i_valveprog[i]].state, time) for time in cumsum(com_times)]
+		new_valve_steps[i] = GasChromatographySystems.ValveProgram(com_times, new_state_steps)
+	end
+	return com_times, new_press_steps, new_temp_steps, new_a_gf, new_valve_steps, i_pressprog, i_tempprog, i_valveprog
 end
 
 """
@@ -156,7 +204,15 @@ This function ensures that all modules and pressure points in the system use syn
 - Throws `ArgumentError` if a module temperature is neither a constant (`Number`) nor a `TemperatureProgram`, or if a `TemperatureProgram` was not returned from `match_programs`
 """
 function update_system(sys)
-	new_timesteps, new_pressuresteps, new_temperaturesteps, new_a_gf, index_pp_pressprog, index_module_tempprog = match_programs(sys)
+	function synchronized_temperature_program(timesteps, temp_steps, a_gf, ng)
+		if ng == false
+			gf(x) = GasChromatographySimulator.gradient(x, a_gf)
+			return GasChromatographySystems.TemperatureProgram(timesteps, temp_steps, gf, a_gf)
+		else
+			return GasChromatographySystems.TemperatureProgram(timesteps, temp_steps)
+		end
+	end
+	new_timesteps, new_pressuresteps, new_temperaturesteps, new_a_gf, new_valve_steps, index_pp_pressprog, index_module_tempprog, index_module_valveprog = match_programs(sys)
 	new_pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
 		if typeof(sys.pressurepoints[i].P) <: Number
@@ -170,33 +226,50 @@ function update_system(sys)
 	new_modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
 		mod = sys.modules[i]
-		if mod.T isa Number
+		if mod isa GasChromatographySystems.ModuleValve
+			iv = findfirst(index_module_valveprog .== i)
+			iv === nothing && throw(ArgumentError(
+				"module $i ($(mod.name)): ValveProgram was not synchronized by match_programs"))
+			new_state = new_valve_steps[iv]
+			if mod.T isa Number
+				new_modules[i] = GasChromatographySystems.ModuleValve(
+					mod.name, mod.L, mod.d_open, mod.d_closed, mod.T, new_state, mod.F, mod.opt)
+			elseif mod.T isa GasChromatographySystems.TemperatureProgram
+				it = findfirst(index_module_tempprog .== i)
+				it === nothing && throw(ArgumentError(
+					"module $i ($(mod.name)): TemperatureProgram was not synchronized by match_programs; " *
+					"ensure `T` is a `GasChromatographySystems.TemperatureProgram` (not a raw CP vector or other type)"))
+				new_tp = synchronized_temperature_program(
+					new_timesteps, new_temperaturesteps[it], new_a_gf[it], mod.opt.ng)
+				new_modules[i] = GasChromatographySystems.ModuleValve(
+					mod.name, mod.L, mod.d_open, mod.d_closed, new_tp, new_state, mod.F, mod.opt)
+			else
+				throw(ArgumentError(
+					"module $i ($(mod.name)): unsupported temperature type $(typeof(mod.T)) for update"))
+			end
+		elseif mod.T isa Number
 			new_modules[i] = mod
 		elseif mod.T isa GasChromatographySystems.TemperatureProgram
 			ii = findfirst(index_module_tempprog .== i)
 			ii === nothing && throw(ArgumentError(
 				"module $i ($(mod.name)): TemperatureProgram was not synchronized by match_programs; " *
 				"ensure `T` is a `GasChromatographySystems.TemperatureProgram` (not a raw CP vector or other type)"))
-			if mod.opt.ng == false
-				# with gradient
-				gf(x) = GasChromatographySimulator.gradient(x, new_a_gf[ii])
-				new_tp = GasChromatographySystems.TemperatureProgram(new_timesteps, new_temperaturesteps[ii], gf, new_a_gf[ii])
-			else
-				# without gradient
-				new_tp = GasChromatographySystems.TemperatureProgram(new_timesteps, new_temperaturesteps[ii])
-			end
+			new_tp = synchronized_temperature_program(
+				new_timesteps, new_temperaturesteps[ii], new_a_gf[ii], mod.opt.ng)
 			if mod isa GasChromatographySystems.ModuleColumn
-				new_modules[i] = GasChromatographySystems.ModuleColumn(mod.name, mod.L, mod.d, mod.df, mod.sp, new_tp, mod.F, mod.opt)
+				new_modules[i] = GasChromatographySystems.ModuleColumn(
+					mod.name, mod.L, mod.d, mod.df, mod.sp, new_tp, mod.F, mod.opt)
 			elseif mod isa GasChromatographySystems.ModuleTM
-				new_modules[i] = GasChromatographySystems.ModuleTM(mod.name, mod.L, mod.d, mod.df, mod.sp, new_tp, mod.shift, mod.PM, mod.ratio, mod.Thot, mod.Tcold, mod.F, mod.opt)
+				new_modules[i] = GasChromatographySystems.ModuleTM(
+					mod.name, mod.L, mod.d, mod.df, mod.sp, new_tp, mod.shift, mod.PM, mod.ratio,
+					mod.Thot, mod.Tcold, mod.F, mod.opt)
 			else
 				throw(ArgumentError(
 					"module $i ($(mod.name)): unsupported module type $(typeof(mod)) for TemperatureProgram update"))
 			end
 		else
 			throw(ArgumentError(
-				"module $i ($(mod.name)): temperature must be a Number (constant T) or " *
-				"GasChromatographySystems.TemperatureProgram, got $(typeof(mod.T))"))
+				"module $i ($(mod.name)): unsupported temperature type $(typeof(mod.T)) for update"))
 		end
 	end
 	new_sys = GasChromatographySystems.System(sys.name, sys.g, new_pp, new_modules, sys.options)

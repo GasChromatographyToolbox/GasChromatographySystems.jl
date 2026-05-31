@@ -771,11 +771,15 @@ end
 """
 	flow_functions(sys, p2fun; mode="λ")
 
-Edge flow rates `F_i(t)` (m³/s) from solved pressures and [`GasChromatographySimulator.flow`](@ref).
+Collects the flow functions as functions of time t for all edges of the system of capillaries `sys`.
 
-Columns and thermal modulators use each module's `d`. `ModuleValve` edges use the same
-`flow` call with instantaneous `d_open` or `d_closed` from `valve_state` (equivalent to
-the κ-based form used in the flow balance when the valve is fully open or closed).
+The flow over edge `i => j` is calculated as
+
+```math
+F_{i,j} = \\frac{A}{κ_{i,j}} \\left(p_i^2-p_j^2\\right)
+```
+
+with flow restriction ``κ_{i,j} = \\int_0^{L_{i,j}} η(T_{i,j})T_{i,j}/d_{i,j}^4 dx``, pressures ``p_i`` resp. ``p_j`` at the vertices ``i`` resp. ``j``, temperature ``T_{i,j}``, capillary length ``L_{i,j}`` and diameter ``d_{i,j}`` of the edge `i => j`.
 
 # Arguments
 - `sys`: Capillary system.
@@ -868,8 +872,7 @@ with flow restriction, pressures ``p_i`` resp. ``p_j`` at the vertices ``i`` res
 - Vector of `t_M(t)` closures, length `ne(sys.g)`.
 
 # Notes
-- `ModuleValve` edges use `holdup_time` with instantaneous `d_open` or `d_closed` from `valve_state`
-  (same pattern as `flow_functions`).
+- `ModuleValve` edges use `holdup_time` with instantaneous `d_open` or `d_closed` from `valve_state`.
 """
 function holdup_time_functions(sys, p2fun; mode="λ")
 	p_func = pressure_functions(sys, p2fun; mode=mode)

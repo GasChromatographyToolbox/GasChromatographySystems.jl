@@ -771,20 +771,23 @@ end
 """
 	flow_functions(sys, p2fun; mode="λ")
 
-Collects the flow functions as functions of time t for all edges of the system of capillaries `sys`.
+Edge flow rates `F_i(t)` (m³/s) from solved pressures and [`GasChromatographySimulator.flow`](@ref).
 
-The flow over edge `i => j` is calculated as
-
-```math
-F_{i,j} = \\frac{A}{κ_{i,j}} \\left(p_i^2-p_j^2\\right)
-```
-
-with flow restriction ``κ_{i,j} = \\int_0^{L_{i,j}} η(T_{i,j})T_{i,j}/d_{i,j}^4 dx``, pressures ``p_i`` resp. ``p_j`` at the vertices ``i`` resp. ``j``, temperature ``T_{i,j}``, capillary length ``L_{i,j}`` and diameter ``d_{i,j}`` of the edge `i => j`.
+Columns and thermal modulators use each module's `d`. `ModuleValve` edges use the same
+`flow` call with instantaneous `d_open` or `d_closed` from `valve_state` (equivalent to
+the κ-based form used in the flow balance when the valve is fully open or closed).
 
 # Arguments
-* `sys`: System structure of the capillary system for which the flow balance is set up.
-* `p2fun`: Julia function of the solutions of the flow balance equations from `build_pressure_squared_functions(sys; mode="λ")`
-* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
+- `sys`: Capillary system.
+- `p2fun`: Squared-pressure solution functions from `build_pressure_squared_functions`.
+- `mode`: `"λ"` or `"κ"` (passed to `pressure_functions`).
+
+# Returns
+- Vector of `F(t)` closures, length `ne(sys.g)`.
+
+# Notes
+- Flow balance / `flow_restrictions` still use `edge_restriction` (κ blend on `d_open`/`d_closed`).
+- Post-solve `flow_functions` and `holdup_time_functions` share the same valve pattern (`d_inst` + GCSim).
 """
 function flow_functions(sys, p2fun; mode="λ")
 	p_func = pressure_functions(sys, p2fun, mode=mode)
@@ -795,8 +798,14 @@ function flow_functions(sys, p2fun; mode="λ")
 	for i=1:ne(sys.g)
 		pin(t) = p_func[srcE[i]](t)
 		pout(t) = p_func[dstE[i]](t)
-		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
-		f(t) = GasChromatographySimulator.flow(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
+		module_ = sys.modules[i]
+		T_itp = GasChromatographySystems.module_temperature(module_, sys)[5]
+		f(t) = if module_ isa ModuleColumn || module_ isa ModuleTM
+			GasChromatographySimulator.flow(t, T_itp, pin, pout, module_.L, module_.d, sys.options.gas; ng=module_.opt.ng, vis=sys.options.vis, control=sys.options.control)
+		elseif module_ isa ModuleValve
+			d_inst = GasChromatographySystems.valve_state(module_.state, t) ? module_.d_open : module_.d_closed
+			GasChromatographySimulator.flow(t, T_itp, pin, pout, module_.L, d_inst, sys.options.gas; ng=module_.opt.ng, vis=sys.options.vis, control=sys.options.control)
+		end
 		F_func[i] = f
 	end
 	return F_func
@@ -851,13 +860,19 @@ t_{M_{i,j}} = \\frac{128}{3} η(T_{i,j}) \\frac{L_{i,j}^2}{d_{i,j}^2} \\frac{p_i
 with flow restriction, pressures ``p_i`` resp. ``p_j`` at the vertices ``i`` resp. ``j``, temperature ``T_{i,j}``, capillary length ``L_{i,j}`` and diameter ``d_{i,j}`` of the edge `i => j`.
 	
 # Arguments
-* `sys`: System structure of the capillary system for which the flow balance is set up.
-* `p2fun`: Julia function of the solutions of the flow balance equations from `build_pressure_squared_functions(sys; mode="λ")`
-* `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
+- `sys`: Capillary system.
+- `p2fun`: Squared-pressure solution functions from `build_pressure_squared_functions`.
+- `mode`: `"λ"` or `"κ"` (passed to `pressure_functions`).
+
+# Returns
+- Vector of `t_M(t)` closures, length `ne(sys.g)`.
+
+# Notes
+- `ModuleValve` edges use `holdup_time` with instantaneous `d_open` or `d_closed` from `valve_state`
+  (same pattern as `flow_functions`).
 """
 function holdup_time_functions(sys, p2fun; mode="λ")
-	# collecting the hold-up time functions of every edge as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
-	p_func = pressure_functions(sys, p2fun; mode=mode) #!!! mode "λ" "κ" !!!
+	p_func = pressure_functions(sys, p2fun; mode=mode)
 	tM_func = Array{Function}(undef, GasChromatographySystems.ne(sys.g))
 	E = collect(GasChromatographySystems.edges(sys.g))
 	srcE = GasChromatographySystems.src.(E)
@@ -865,8 +880,14 @@ function holdup_time_functions(sys, p2fun; mode="λ")
 	for i=1:GasChromatographySystems.ne(sys.g)
 		pin(t) = p_func[srcE[i]](t)
 		pout(t) = p_func[dstE[i]](t)
-		T_itp = GasChromatographySystems.module_temperature(sys.modules[i], sys)[5]
-		f(t) = GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, sys.modules[i].L, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control)
+		mod = sys.modules[i]
+		T_itp = GasChromatographySystems.module_temperature(mod, sys)[5]
+		f(t) = if mod isa ModuleColumn || mod isa ModuleTM
+			GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, mod.L, mod.d, sys.options.gas; ng=mod.opt.ng, vis=sys.options.vis, control=sys.options.control)
+		elseif mod isa ModuleValve
+			d_inst = GasChromatographySystems.valve_state(mod.state, t) ? mod.d_open : mod.d_closed
+			GasChromatographySimulator.holdup_time(t, T_itp, pin, pout, mod.L, d_inst, sys.options.gas; ng=mod.opt.ng, vis=sys.options.vis, control=sys.options.control)
+		end
 		tM_func[i] = f
 	end
 	return tM_func

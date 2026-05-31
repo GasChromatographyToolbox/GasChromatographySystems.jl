@@ -365,4 +365,92 @@ function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = defau
 	sys = GCxGC_TM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, LTL, dTL, dfTL, spTL, TPTL, LM::Array{Float64,1}, dM, dfM, spM, shift, PM, ratioM, HotM, ColdM, TPM, F, pin, pout; name=name, opt=opt, optTM=optTM, optCol=optCol)
 	return sys
 end
+
+"""
+	GCxGC_DPM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, pin, pout, L_valve, d_open, d_closed, TP_valve, VP, pmod; name="GCxGC_DPM", opt=GasChromatographySystems.Options(), kwargs...)
+
+Create a GC×GC system with dynamic pressure modulation (DPM) valve.
+
+This function constructs a GC×GC system consisting of:
+- First dimension GC column
+- Second dimension GC column  
+- Dynamic pressure modulation valve placed between the two columns
+
+# Arguments
+
+## Column Parameters
+- `L1`: Length of first dimension column (m)
+- `d1`: Diameter of first dimension column (mm)
+- `df1`: Film thickness of first dimension column (μm)
+- `sp1`: Stationary phase of first dimension column
+- `TP1`: Temperature program for first dimension column
+- `L2`: Length of second dimension column (m)
+- `d2`: Diameter of second dimension column (mm)
+- `df2`: Film thickness of second dimension column (μm)
+- `sp2`: Stationary phase of second dimension column
+- `TP2`: Temperature program for second dimension column
+
+## Modulator Parameters
+- `L_valve`: Length of pressure modulation valve (m)
+- `d_open`: Diameter of open pressure modulation valve (mm)
+- `d_closed`: Diameter of closed pressure modulation valve (mm)
+- `TP_valve`: Temperature program for pressure modulation valve
+- `VP`: Valve program for pressure modulation valve
+- `pmod`: Pressure modulation point (Pa)
+
+## Flow and Pressure Parameters
+- `pin`: Inlet pressure of the first dimension column (Pa)
+- `pout`: Outlet pressure of the second dimension column (Pa)
+
+## Optional Parameters
+- `name`: System name (default: "GCxGC_DPM")
+- `opt`: System options
+
+# Returns
+- `System`: Configured GC×GC system with dynamic pressure modulation valve
+
+# Example
+```julia
+sys = GCxGC_DPM(
+    L1 = 3.0, d1 = 0.1, df1 = 0.1, sp1 = "ZB1ms", TP1 = default_TP(), 
+    L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), 
+    pin = 300000.0, pout = 101300.0, 
+    L_valve = 0.01, d_open = 0.001, d_closed = eps(Float64), TP_valve = default_TP(), 
+    VP = default_ValveProgram(), pmod = 300000.0
+)
+```
+"""
+function GCxGC_DPM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, pin, pout, L_valve, d_open, d_closed, TP_valve, VP, pmod; name="GCxGC_DPM", opt=GasChromatographySystems.Options(), kwargs...)
+	g = SimpleDiGraph(4)
+	add_edge!(g, 1, 2) # Inj -> 1st GC column -> Mod point
+	add_edge!(g, 2, 3) # Mod point -> 2nd GC column -> Det 
+	add_edge!(g, 4, 2) # Pressure Valve line
+
+	# pressure points
+	pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(g))
+	#pins = pin*1000.0.*ones(length(com_timesteps))
+	#nans = NaN.*ones(length(com_timesteps))
+	if pout == 0.0
+		pouts = eps(Float64)
+	else 
+		pouts = pout
+	end
+	pp[1] = GasChromatographySystems.PressurePoint("p₁", pin) # inlet 
+	pp[2] = GasChromatographySystems.PressurePoint("p₂", NaN) # 
+	pp[3] = GasChromatographySystems.PressurePoint("p₃", pouts) # outlet 1 
+	pp[4] = GasChromatographySystems.PressurePoint("p₄", pmod) # pressure modulation
+	
+	# modules
+	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
+	modules[1] = GasChromatographySystems.ModuleColumn("1 -> 2", L1, d1*1e-3, df1*1e-6, sp1, TP1, NaN; alg=Tsit5(), ng=true, kwargs...)
+	modules[2] = GasChromatographySystems.ModuleColumn("2 -> 3", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN; alg=Tsit5(), ng=true, kwargs...)
+	modules[3] = GasChromatographySystems.ModuleValve("4 -> 2", L_valve, d_open*1e-3, d_closed*1e-3, TP_valve, VP; ng=true, kwargs...)
+	# system
+	sys_ = GasChromatographySystems.System(name, g, pp, modules, opt)
+	sys = GasChromatographySystems.update_system(sys_)
+
+	# add test for the defined pressures and flows
+	return sys
+end
+
 # end - specific systems

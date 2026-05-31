@@ -1,4 +1,4 @@
-using Test, CSV, DataFrames, GasChromatographySystems
+using Test, CSV, DataFrames, Graphs, GasChromatographySystems
 
 @testset "example systems" begin
     # define some example systems
@@ -139,6 +139,101 @@ end
         _, temp_steps_prog, _, _, _ = GCS.module_temperature(v_prog, sys_empty)
         @test temp_steps_prog == v_prog.T.temp_steps
     end
+end
+
+@testset "Program synchronization (match_programs, update_system)" begin
+    GCS = GasChromatographySystems
+
+    """Tee with mismatched `TemperatureProgram`, `ValveProgram`, and `PressureProgram` grids."""
+    function tee_mismatched_programs()
+        g = SimpleDiGraph(4)
+        add_edge!(g, 1, 2)
+        add_edge!(g, 2, 3)
+        add_edge!(g, 4, 2)
+        TP_col = GCS.TemperatureProgram([10.0, 20.0, 5.0], [40.0, 120.0, 200.0])
+        VP = GCS.ValveProgram(10.0, 2.0, 30.0)
+        TP_valve = GCS.TemperatureProgram([100.0, 50.0], [80.0, 160.0])
+        pp = [
+            GCS.PressurePoint("p1", 3.0e5),
+            GCS.PressurePoint("p2", NaN),
+            GCS.PressurePoint("p3", 1.013e5),
+            GCS.PressurePoint("p4", GCS.PressureProgram([5.0, 25.0], [3.1e5, 3.2e5])),
+        ]
+        modules = GCS.AbstractModule[
+            GCS.ModuleColumn("c12", 1.0, 0.25e-3, 0.25e-6, "Test", TP_col),
+            GCS.ModuleColumn("c23", 0.5, 0.1e-3, 0.1e-6, "Test", GCS.default_TP()),
+            GCS.ModuleValve("v42", 0.01, 1e-3, eps(), TP_valve, VP),
+        ]
+        GCS.System("tee_sync", g, pp, modules, GCS.Options())
+    end
+
+    valve_states_at_segment_ends(vp::GCS.ValveProgram, com_times) =
+        [GCS.valve_state(vp, t) for t in cumsum(com_times)]
+
+    sys = tee_mismatched_programs()
+    vp_orig = sys.modules[3].state
+
+    @test sys.modules[1].T.time_steps != vp_orig.time_steps
+    @test sys.modules[2].T.time_steps != vp_orig.time_steps
+
+    com = GCS.common_timesteps(sys)
+    @test !isempty(com)
+    @test length(com) > length(vp_orig.time_steps)
+    @test length(com) > length(sys.modules[1].T.time_steps)
+
+    com_mp, _, _, _, new_valve_steps, _, i_tempprog, i_valveprog =
+        GCS.match_programs(sys)
+    @test com_mp == com
+    @test 3 in i_valveprog
+    @test 3 in i_tempprog
+
+    ref_states = valve_states_at_segment_ends(vp_orig, com)
+    @test length(new_valve_steps[1].time_steps) == length(com)
+    @test new_valve_steps[1].state_steps == ref_states
+
+    sys2 = GCS.update_system(sys)
+    com2 = GCS.common_timesteps(sys2)
+    @test com2 == com
+    @test sys2.modules[3].state.time_steps == com2
+    @test sys2.modules[3].state.state_steps == ref_states
+    @test sys2.modules[1].T.time_steps == com2
+    @test sys2.modules[2].T.time_steps == com2
+    @test sys2.modules[3].T.time_steps == com2
+    @test length(sys2.modules[1].T.temp_steps) == length(com2)
+    @test sys2.pressurepoints[1].P == sys.pressurepoints[1].P
+    @test sys2.pressurepoints[4].P.time_steps == com2
+
+    # constant valve temperature (only state program is synchronized)
+    g2 = SimpleDiGraph(3)
+    add_edge!(g2, 1, 2)
+    add_edge!(g2, 2, 3)
+    VP2 = GCS.ValveProgram([3.0, 7.0], [false, true])
+    TP2 = GCS.TemperatureProgram([50.0, 10.0], [30.0, 250.0])
+    sys_c = GCS.System(
+        "line",
+        g2,
+        [
+            GCS.PressurePoint("in", 2.0e5),
+            GCS.PressurePoint("mid", NaN),
+            GCS.PressurePoint("out", 1.0e5),
+        ],
+        GCS.AbstractModule[
+            GCS.ModuleColumn("col", 2.0, 0.25e-3, 0.25e-6, "Test", TP2),
+            GCS.ModuleValve("valve", 0.02, 1e-3, eps(), 42.0, VP2),
+        ],
+        GCS.Options(),
+    )
+    sys_c2 = GCS.update_system(sys_c)
+    com_c = GCS.common_timesteps(sys_c2)
+    @test sys_c2.modules[2].T == 42.0
+    @test sys_c2.modules[2].state.time_steps == com_c
+    @test sys_c2.modules[1].T.time_steps == com_c
+
+    sol = GCS.solve_balance(sys2)
+    @test length(sol) == 1
+    p2fun = GCS.build_pressure_squared_functions(sys2, sol)
+    FF = GCS.flow_functions(sys2, p2fun)
+    @test isfinite(FF[3](5.0))
 end
 
 println("Test run successful.")

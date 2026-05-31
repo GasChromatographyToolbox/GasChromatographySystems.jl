@@ -475,30 +475,36 @@ function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
 end
 
 """
-	edge_restriction(module_::AbstractModule, T_itp, opt::Options)
+    edge_restriction(module_, T_itp, opt::Options, t)
 
-Calculate the flow restriction κ of an edge (capillary) of a gas chromatography system.
+Flow restriction κ at time `t` for one graph edge module.
 
 # Arguments
-- `module_`: A `ModuleColumn`, `ModuleTM` or `ModuleValve` instance containing module parameters
-- `T_itp`: Interpolated temperature `T(x,t)`
-- `opt`: Options for the system
+- `module_`: `ModuleColumn`, `ModuleTM`, or `ModuleValve`
+- `T_itp`: Temperature interpolation `T(x, t)` from `module_temperature`
+- `opt`: System `Options` (gas, viscosity model)
+- `t`: Time in s
 
 # Returns
-- `κ`: Flow restriction function `κ(t)`
+- Scalar κ(t) (Pa·s·m⁻³ in the GCSim convention used by `flow_restriction`)
 
 # Notes
-- For `ModuleColumn` and `ModuleTM`, uses `GasChromatographySimulator.flow_restriction`
-- For `ModuleValve`, uses `valve_state` to determine the open/closed state and calculates the flow restriction accordingly
+- **Columns / TM:** delegates to [`GasChromatographySimulator.flow_restriction`](@ref).
+- **`ModuleValve`:** blends open and closed restrictions with piecewise-constant
+  `σ(t) = valve_state(state, t)`:
+  `κ(t) = σ(t) κ_open(t) + (1-σ(t)) κ_closed(t)` with `κ` at `d_open` / `d_closed`.
+- Use with `flow_permeabilities`, `flow_restrictions`, and `flow_functions` (κ-based flow).
+  Valve hold-up in `holdup_time_functions` uses `holdup_time` with `d_open` or `d_closed`
+  from `valve_state` at each `t` (not κ).
 """
 function edge_restriction(module_::AbstractModule, T_itp, opt::Options, t)
 	if typeof(module_) <: ModuleColumn || typeof(module_) <: ModuleTM
 		return GasChromatographySimulator.flow_restriction(module_.L, t, T_itp, module_.d, opt.gas; ng=module_.opt.ng, vis=opt.vis)
 	elseif typeof(module_) <: ModuleValve
-		κ_open(t) = GasChromatographySimulator.flow_restriction(module_.L, t, T_itp, module_.d_open, module_.d_closed, opt.gas; ng=module_.opt.ng, vis=opt.vis)
-		κ_closed(t) = GasChromatographySimulator.flow_restriction(module_.L, t, T_itp, module_.d_closed, module_.d_closed, opt.gas; ng=module_.opt.ng, vis=opt.vis)
-		σ(t) = valve_state(mod.state, t) ? 1.0 : 0.0
-		return σ(t)*κ_open(t) + (1.0-σ(t))*κ_closed(t)
+		κ_open = GasChromatographySimulator.flow_restriction(module_.L, t, T_itp, module_.d_open, opt.gas; ng=module_.opt.ng, vis=opt.vis)
+		κ_closed = GasChromatographySimulator.flow_restriction(module_.L, t, T_itp, module_.d_closed, opt.gas; ng=module_.opt.ng, vis=opt.vis)
+		σ = valve_state(module_.state, t) ? 1.0 : 0.0
+		return σ * κ_open + (1.0 - σ) * κ_closed
 	end
 end
 
@@ -508,7 +514,10 @@ end
 Calculates the flow restrictions κ of all edges (capliaries) of a system of capillaries.
 
 # Arguments
-* `sys`: System structure of the capillary system for which the flow balance is set up.
+- `sys`: Capillary system graph.
+
+# Returns
+- Vector of `κ(t)` closures, length `ne(sys.g)`.
 """
 function flow_restrictions(sys)
 	kappas = Array{Function}(undef, ne(sys.g))
@@ -523,10 +532,13 @@ end
 """
     flow_permeabilities(sys)
 
-Calculates the flow permeabilities λ of all edges (capliaries) of a system of capillaries.
+Permeability functions `λ_i(t) = 1/κ_i(t)` for every edge, with `κ_i` from `flow_restrictions`.
 
 # Arguments
-* `sys`: System structure of the capillary system for which the flow balance is set up.
+- `sys`: Capillary system graph.
+
+# Returns
+- Vector of `λ(t)` closures, length `ne(sys.g)`.
 """
 function flow_permeabilities(sys)
 	lambdas = Array{Function}(undef, ne(sys.g))

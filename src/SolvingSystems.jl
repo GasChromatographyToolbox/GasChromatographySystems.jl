@@ -313,67 +313,133 @@ segments when possible.
 
 # Notes
 - Reuses simulation results from previous paths when possible to improve efficiency
-- Handles both ModuleColumn and ModuleTM (thermal modulator) types
+- Handles `ModuleColumn`, `ModuleTM`, and valve junction slicing at tee vertices (see `apply_valve_junctions_at_vertex`)
 - Checks for negative flows to determine if paths are possible
-- First segment after injection is assumed to be a ModuleColumn
+- First segment after injection is assumed to be a `ModuleColumn`
 """
 function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_sys[1].sub)), τ₀=zeros(length(par_sys[1].sub)), nτ=6, refocus=falses(ne(sys.g)), τ₀_focus=zeros(length(par_sys[1].sub)), mode="λ", kwargsTM...)
-	
-	E = collect(edges(sys.g))
-	peaklists = Array{Array{DataFrame,1}}(undef, length(paths))
-	solutions = Array{Array{Any,1}}(undef, length(paths))
-	path_pos = Array{String}(undef, length(paths))
-	new_par_sys = Array{GasChromatographySimulator.Parameters}(undef, length(par_sys))
+	# -------------------------------------------------------------------------
+	# Output buffers (one slot per path / per graph edge)
+	# -------------------------------------------------------------------------
+	E = collect(edges(sys.g))  # fixed edge numbering: index i ↔ sys.modules[i], par_sys[i]
+	peaklists = Array{Array{DataFrame, 1}}(undef, length(paths))   # peaklists[i][j] = DataFrame after segment j on path i
+	solutions = Array{Array{Any, 1}}(undef, length(paths))         # ODE / modulator solutions, same nesting
+	path_pos = Array{String}(undef, length(paths))                 # human-readable status per path
+	new_par_sys = Array{GasChromatographySimulator.Parameters}(undef, length(par_sys))  # updated Parameters per edge index
+
+	# visited_E[e] = true once edge e has been simulated on some *feasible* path (enables reuse below)
 	visited_E = falses(length(E))
 
-	# i -> path number
-	# j -> segment/module number
-	for i=1:length(paths)
+	# -------------------------------------------------------------------------
+	# Outer loop: each candidate outlet path (sequence of graph edges)
+	# -------------------------------------------------------------------------
+	for i in 1:length(paths)
+		# i_par: global edge indices on this path (order follows collect(edges(g)), not necessarily
+		#        the order solute travels). Used to index par_sys, sys.modules, and reuse logic.
 		i_par = GasChromatographySystems.index_parameter(sys.g, paths[i])
+
+		# path_edge_idx: same edges as i_par but in **path order** (injection → detector).
+		# Needed to locate junction vertices between consecutive column segments (DPM tee, etc.).
+		path_edge_idx = GasChromatographySystems.edges_along_path_in_order(sys.g, paths[i])
+
+		# ---------------------------------------------------------------------
+		# Feasibility: forward flow on every edge of the path over the program horizon
+		# ---------------------------------------------------------------------
 		if GasChromatographySystems.path_possible(sys, p2fun, paths[i]; mode=mode) == true
 			path_pos[i] = "path is possible"
+
+			# Per-path working arrays; j indexes position along this path's module chain
 			peaklists_ = Array{DataFrame}(undef, length(i_par))
 			solutions_ = Array{Any}(undef, length(i_par))
-			#As_ = Array{DataFrame}(undef, length(i_par))
-			for j=1:length(i_par)
-				if (i>1) && (all(visited_E[1:i_par[j]].==true))
-					# was the segment already simulated in a previous simulated path?
-					# look in all previous paths for the correct result -> the simulation correlated to the same edge and where this edge is connected to only previouse visited edges
-					i_path = 0
-					i_edge = 0
-					for k=1:i-1 # previous paths
+
+			# -----------------------------------------------------------------
+			# Inner loop: simulate or reuse each segment along the path
+			# -----------------------------------------------------------------
+			for j in 1:length(i_par)
+				# -------------------------------------------------------------
+				# Branch A — Reuse: segment already computed on an earlier path
+				# -------------------------------------------------------------
+				# Conditions:
+				#   (1) We are not on the first path (i > 1).
+				#   (2) Every graph edge up to and including the current one was already
+				#       visited on a previous *successful* path (prefix of the network
+				#       is fully covered).
+				# Then search paths 1:(i-1) for one whose first j segments share the
+				# same edge indices; copy its peak list and solution for segment j.
+				if (i > 1) && (all(visited_E[1:i_par[j]].==true))
+					i_path = 0   # index of donor path in `paths`
+					i_edge = 0   # segment index j on that donor path
+					for k in 1:(i - 1)
 						i_par_previous = GasChromatographySystems.index_parameter(sys.g, paths[k])
-						if length(i_par_previous) < j
-							j0 = length(i_par_previous)
-						else
-							j0 = j
-						end
-						if all(x->x in i_par_previous[1:j0], i_par[1:j]) == true # all edges up to j are the same between the two paths
+						# Compare only the overlapping prefix if the donor path is shorter
+						j0 = min(length(i_par_previous), j)
+						if all(x -> x in i_par_previous[1:j0], i_par[1:j])
 							i_path = k
-							i_edge = findfirst(i_par[j].==i_par_previous)
+							i_edge = findfirst(==(i_par[j]), i_par_previous)
 						end
 					end
-					# re-use the results
 					peaklists_[j] = peaklists[i_path][i_edge]
 					solutions_[j] = solutions[i_path][i_edge]
-				else # new simulated segments
-					if j == 1 # first segment, directly after injection, it is assumed to be a segment of type `ModuleColumn`
-						new_par_sys[j], peaklists_[j], solutions_[j] = simulate_ModuleColumn(par_sys[i_par[j]], t₀, τ₀)
-					elseif typeof(sys.modules[i_par[j]]) == GasChromatographySystems.ModuleTM
-						new_par_sys[j], peaklists_[j], solutions_[j] = simulate_ModuleTM(par_sys[i_par[j]], sys.modules[i_par[j]], peaklists_[j-1]; nτ=nτ, τ₀_focus=τ₀_focus, refocus=refocus, kwargsTM...)
-					else # ModuleColumn
-						new_par_sys[j], peaklists_[j], solutions_[j] = simulate_ModuleColumn(par_sys[i_par[j]], peaklists_[j-1])
+
+				# -------------------------------------------------------------
+				# Branch B — Fresh simulation for this edge / segment
+				# -------------------------------------------------------------
+				else
+					if j == 1
+						# First module after injection: initial band conditions (t₀, τ₀).
+						# Convention: first edge on a chromatographic path is a ModuleColumn.
+						new_par_sys[i_par[j]], peaklists_[j], solutions_[j] =
+							simulate_ModuleColumn(par_sys[i_par[j]], t₀, τ₀)
+					else
+						# Carry the peak list produced by the previous segment on this path.
+						pl_in = peaklists_[j - 1]
+
+						# Valve junction (e.g. FastGC×GC DPM tee): path is column-only, but a
+						# ModuleValve may be attached at the vertex between two columns. If the
+						# valve state varies in time, split peaks by period before the downstream
+						# segment (analogous to TM slicing, see ValveJunction.jl).
+						p_pos = findfirst(==(i_par[j]), path_edge_idx)
+						if p_pos !== nothing && p_pos > 1
+							# Junction vertex = destination of upstream path edge
+							v_junc = dst(paths[i][p_pos - 1])
+							_, pl_in, _ = GasChromatographySystems.apply_valve_junctions_at_vertex(
+								sys, v_junc, par_sys[i_par[j]], pl_in; nτ=nτ,
+							)
+						end
+
+						mod_j = sys.modules[i_par[j]]
+						if mod_j isa GasChromatographySystems.ModuleTM
+							# Thermal modulator on the path: slice by PM, then modulate (simplifiedTM / ODE).
+							new_par_sys[i_par[j]], peaklists_[j], solutions_[j] =
+								simulate_ModuleTM(
+									par_sys[i_par[j]], mod_j, pl_in;
+									nτ=nτ, τ₀_focus=τ₀_focus, refocus=refocus, kwargsTM...,
+								)
+						else
+							# Ordinary column: continue with (possibly valve-sliced) peak list.
+							new_par_sys[i_par[j]], peaklists_[j], solutions_[j] =
+								simulate_ModuleColumn(par_sys[i_par[j]], pl_in)
+						end
 					end
 				end
 			end
+
+			# Mark all edges on this path as available for reuse by later paths
 			visited_E[i_par] .= true
 			peaklists[i] = peaklists_
 			solutions[i] = solutions_
-		else # path not possible
-			neg_flow_modules = sys.modules[findall(paths[i][findall(positive_flow(sys, p2fun; mode=mode)[i_par].==false)].==edges(sys.g))]
+
+		# ---------------------------------------------------------------------
+		# Path infeasible: backflush or zero flow on at least one path edge
+		# ---------------------------------------------------------------------
+		else
+			# Build a diagnostic message listing modules where F(t) ≤ 0 was detected
+			neg_flow_modules = sys.modules[findall(
+				paths[i][findall(positive_flow(sys, p2fun; mode=mode)[i_par].==false)].==edges(sys.g),
+			)]
 			str_neg_flow = "path not possible: "
-			for j=1:length(neg_flow_modules)
-				str_neg_flow = str_neg_flow*"Flow in module >$(neg_flow_modules[j].name)< becomes negative during the program. "
+			for j in 1:length(neg_flow_modules)
+				str_neg_flow *= "Flow in module >$(neg_flow_modules[j].name)< becomes negative during the program. "
 			end
 			path_pos[i] = str_neg_flow
 		end

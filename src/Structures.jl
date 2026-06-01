@@ -228,6 +228,16 @@ end
 # add a flow modulator module
 
 # valve module (open/close)
+
+"""
+    AbstractValveProgram
+
+Supertype for valve open/closed schedules evaluated with [`valve_state`](@ref).
+
+Subtypes: [`ValveProgram`](@ref) (explicit segment list) and [`PeriodicValveProgram`](@ref) (compact periodic modulation).
+"""
+abstract type AbstractValveProgram end
+
 """
 	ValveProgram(time_steps, state_steps)
 
@@ -243,7 +253,7 @@ Evaluate with [`valve_state`](@ref); do not linearly interpolate boolean states.
 A default valve program is available:
 * `default_ValveProgram()`: `[0.0, 1800.0], [true, false]`.
 """
-struct ValveProgram
+struct ValveProgram <: AbstractValveProgram
     time_steps::Vector{Float64}
     state_steps::Vector{Bool}   # true = open, false = closed
 
@@ -257,13 +267,80 @@ end
 
 default_ValveProgram() = ValveProgram([0.0, 1800.0], [true, false])
 
-# note: perhaps introduce a PeriodicValveProgram type which would not convert directly to time_steps
-# otherwise for many valve modulations in a long chromatographic run the time_steps vector can become very long
-# how is it handeled with thermal modulation? 
+"""
+    PeriodicValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
+
+Compact periodic valve schedule: each period `mp` has `t_closed` s closed then `(mp - t_closed)` s open
+(unless `inverted=true`). The pattern applies on relative time `[t_start, t_end)`; evaluate with
+[`valve_state`](@ref) in O(1) without expanding segment vectors.
+
+# Arguments
+* `mp`: Modulation period in s.
+* `t_closed`: Closed duration in s per period (`0 ≤ t_closed ≤ mp`).
+* `t_end`: End of the program horizon in s.
+* `inverted`: If `true`, swap closed/open states within each period.
+* `t_start`: Start of the program horizon in s (default `0.0`).
+
+Use [`expand_valve_program`](@ref) to build an explicit [`ValveProgram`](@ref) when a step list is needed.
+
+A default periodic valve program is available:
+* `default_periodic_ValveProgram()`: `10.0, 2.0, 1800.0`.
+"""
+struct PeriodicValveProgram <: AbstractValveProgram
+    mp::Float64
+    t_closed::Float64
+    t_start::Float64
+    t_end::Float64
+    inverted::Bool
+end
+
+function PeriodicValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
+    mp <= 0 && error("`mp` must be > 0, got $(mp).")
+    t_closed < 0 && error("`t_closed` must be ≥ 0, got $(t_closed).")
+    t_closed > mp && error("`t_closed` must be ≤ `mp` (got t_closed=$(t_closed), mp=$(mp)).")
+    t_end < t_start && error("`t_end` must be ≥ `t_start` (got t_end=$(t_end), t_start=$(t_start)).")
+    PeriodicValveProgram(Float64(mp), Float64(t_closed), Float64(t_start), Float64(t_end), inverted)
+end
+
+default_periodic_ValveProgram() = PeriodicValveProgram(10.0, 2.0, 1800.0)
+
+function _periodic_closed_open_states(inverted::Bool)
+    closed_state = inverted ? true : false
+    open_state = !closed_state
+    return closed_state, open_state
+end
+
+"""Phase `∈ [0, mp)` within one period; closed on `[0, t_closed)`, open on `[t_closed, mp)`."""
+function _valve_state_in_period(phase::Float64, mp::Float64, t_closed::Float64, closed_state::Bool, open_state::Bool)
+    tol = eps(Float64) * 100
+    if t_closed <= tol
+        return open_state
+    end
+    if open_dur(mp, t_closed) <= tol
+        return closed_state
+    end
+    if phase < t_closed
+        return closed_state
+    end
+    return open_state
+end
+
+@inline open_dur(mp, t_closed) = mp - t_closed
+
+"""Position within the finite periodic pattern of total duration `total` (s)."""
+function _finite_periodic_phase(elapsed::Float64, total::Float64, mp::Float64)
+    n_full_total = floor(total / mp)
+    tail_start = n_full_total * mp
+    if elapsed >= tail_start
+        return elapsed - tail_start
+    end
+    return mod(elapsed, mp)
+end
+
 """
 	ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
 
-Build a periodic valve program from segment durations (GCSim-style `time_steps`).
+Expand a periodic schedule into explicit segment durations (GCSim-style `time_steps`).
 
 Each period `mp` consists of `t_closed` s closed then `(mp - t_closed)` s open (unless `inverted=true`).
 The program covers relative time `[0, t_end - t_start)`; `t_start` only sets the total span `t_end - t_start`.
@@ -275,12 +352,11 @@ The program covers relative time `[0, t_end - t_start)`; `t_start` only sets the
 * `inverted`: If `true`, swap closed/open states within each period.
 * `t_start`: Start of the program horizon in s (default `0.0`).
 
-A default periodic valve program is available:
-* `default_periodic_ValveProgram()`: `10.0, 2.0, 1800.0` → 2 s closed + 8 s open per period for 1800 s.
+Prefer [`PeriodicValveProgram`](@ref) when you do not need the expanded segment list.
 
 # Examples
 ```julia
-julia> vp = ValveProgram(10.0, 2.0, 30.0);
+julia> vp = expand_valve_program(PeriodicValveProgram(10.0, 2.0, 30.0));
 
 julia> vp.time_steps
 6-element Vector{Float64}: 2.0, 8.0, 2.0, 8.0, 2.0, 8.0
@@ -289,7 +365,16 @@ julia> valve_state(vp, 1.0), valve_state(vp, 2.0), valve_state(vp, 5.0)
 (false, true, true)
 ```
 """
+function expand_valve_program(pvp::PeriodicValveProgram)
+    return _expand_periodic_valve_program(
+        pvp.mp, pvp.t_closed, pvp.t_end; inverted=pvp.inverted, t_start=pvp.t_start)
+end
+
 function ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
+    _expand_periodic_valve_program(mp, t_closed, t_end; inverted=inverted, t_start=t_start)
+end
+
+function _expand_periodic_valve_program(mp, t_closed, t_end; inverted=false, t_start=0.0)
     mp <= 0 && error("`mp` must be > 0, got $(mp).")
     t_closed < 0 && error("`t_closed` must be ≥ 0, got $(t_closed).")
     t_closed > mp && error("`t_closed` must be ≤ `mp` (got t_closed=$(t_closed), mp=$(mp)).")
@@ -343,13 +428,31 @@ function ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)
 end
 
 """
-    valve_state(vp::ValveProgram, t)
+    valve_state(vp::AbstractValveProgram, t)
 
 Piecewise-constant valve state at time `t` (s): `true` = open, `false` = closed.
-
-Segment `i` spans `[cumsum(time_steps)[i-1], cumsum(time_steps)[i])` with `cumsum(time_steps)[0] = 0`;
-the state switches to open at the end of a closed segment (e.g. closed on `[0, 2)`, open on `[2, 10)` for `[2, 8]`).
 """
+function valve_state(vp::PeriodicValveProgram, t)
+    t = Float64(t)
+    tol = eps(Float64) * 100
+    closed_state, open_state = _periodic_closed_open_states(vp.inverted)
+    mp, t_closed = vp.mp, vp.t_closed
+    total = vp.t_end - vp.t_start
+    if total <= tol
+        return closed_state
+    end
+    if t < vp.t_start
+        return _valve_state_in_period(0.0, mp, t_closed, closed_state, open_state)
+    end
+    elapsed = t - vp.t_start
+    if elapsed >= total - tol
+        # Match `ValveProgram` inclusive end of the last segment (`t <= τ_end`).
+        elapsed = total > tol ? min(elapsed, prevfloat(total)) : 0.0
+    end
+    phase = _finite_periodic_phase(elapsed, total, mp)
+    return _valve_state_in_period(phase, mp, t_closed, closed_state, open_state)
+end
+
 function valve_state(vp::ValveProgram, t)
     t = Float64(t)
     τ_prev = 0.0
@@ -368,8 +471,6 @@ function valve_state(vp::ValveProgram, t)
     end
     return vp.state_steps[end]
 end
-
-default_periodic_ValveProgram() = ValveProgram(10.0, 2.0, 1800.0)
 
 """
 	ModuleValveOptions(; ng=true)
@@ -404,7 +505,7 @@ as a hydraulic element in the graph-based GC system model.
 * `d_open`: Effective diameter in m when the valve is open.
 * `d_closed`: Effective diameter in m when the valve is closed (use a small positive value, e.g. `eps(Float64)`).
 * `T`: Temperature of the valve module in °C, either a number or a `TemperatureProgram`.
-* `state`: Valve state program as `ValveProgram` (`true = open`, `false = closed`).
+* `state`: Valve state program as [`AbstractValveProgram`](@ref) (`true = open`, `false = closed`).
 * `F`: Flow through the valve module in mL/min. In most workflows this is `NaN` and determined from pressure balance.
 * `opt`: Options for this module as `ModuleValveOptions`.
 
@@ -420,7 +521,7 @@ struct ModuleValve<:GasChromatographySystems.AbstractModule
 	d_open::Float64	# m, diameter of open valve, 1.0e-3 m
 	d_closed::Float64	# m, diameter of closed valve, e.g. eps(Float64) m
 	T	# a number (constant temperature) or a TemperatureProgram structure
-	state::ValveProgram	# state of the valve, e.g. "open" or "closed"
+	state::AbstractValveProgram	# open/closed schedule (ValveProgram or PeriodicValveProgram)
 	F::Float64	# flow through the valve module in mL/min, e.g. 1.0 mL/min or in most cases NaN
 	opt::ModuleValveOptions
 end

@@ -193,6 +193,40 @@ GasChromatographySystems.positive_flow(sys, p2fun; mode="λ")
 # ╔═╡ 4dff2122-a41f-4e5e-a6cc-09b506f4ba49
 GasChromatographySystems.path_possible(sys, p2fun, edge_paths[1]; mode="λ")
 
+# ╔═╡ c0f2de8d-9dc7-4103-8702-9ba263dbb4bf
+md"""
+## Simulation along path
+**Check the results**
+Functions to model the Spliting at the junction, where the valve is attached, where created by Cursor AI using the spliting at ModuleTM as template.
+"""
+
+# ╔═╡ 4384ed86-ef55-46ad-95fe-6e62a72c6765
+sim = GasChromatographySystems.simulate_along_paths(sys, p2fun, edge_paths, par)
+
+# ╔═╡ 17b76093-19df-477f-bde7-66575277c228
+GasChromatographySimulator.plot_chromatogram(sim[2][1][end], (0.0, 200.0))[1]
+
+# ╔═╡ 9798b7ee-dd8c-4d15-b147-c86318e86879
+GasChromatographySystems.chrom(sim[2][1][end]; nτ=6)[1]
+
+# ╔═╡ 2628f824-b6b9-4800-895f-7fb1a43d0274
+pl_GCxGC = GasChromatographySystems.peaklist_GCxGC(sim[2][1][end], 1.0/3; digits=6)
+
+# ╔═╡ 26e6200d-b513-4110-ae81-d5786dd7745a
+chrom2d = GasChromatographySystems.chrom2d(sim[2][1][end], sys, 1.0/3)
+
+# ╔═╡ 1626182a-192c-4fe7-831f-8ddb6f27828e
+contour(chrom2d[2][1:end-1], chrom2d[3][1], chrom2d[1]'); xlims!(0.0, 180.0)
+
+# ╔═╡ f82f3b25-853a-499a-83e7-18e481820aac
+length(chrom2d[2])
+
+# ╔═╡ 1ffc40a9-4cd7-41ed-a440-e828ea4659b3
+length(chrom2d[3][1])
+
+# ╔═╡ 409e6bb0-afc9-43c4-910e-d0c002fb3de6
+size(chrom2d[1])
+
 # ╔═╡ Cell order:
 # ╠═c423e03a-5d84-11f1-b415-c5b3781ea849
 # ╠═2036a9e1-0c8e-42fb-9cc8-4910e58b779a
@@ -231,3 +265,13 @@ GasChromatographySystems.path_possible(sys, p2fun, edge_paths[1]; mode="λ")
 # ╠═1d135b53-d7f6-46e6-a8f9-6c415e079eb6
 # ╠═f48d6432-0eb7-47c1-b61a-16c3197b8666
 # ╠═4dff2122-a41f-4e5e-a6cc-09b506f4ba49
+# ╠═c0f2de8d-9dc7-4103-8702-9ba263dbb4bf
+# ╠═4384ed86-ef55-46ad-95fe-6e62a72c6765
+# ╠═17b76093-19df-477f-bde7-66575277c228
+# ╠═9798b7ee-dd8c-4d15-b147-c86318e86879
+# ╠═2628f824-b6b9-4800-895f-7fb1a43d0274
+# ╠═26e6200d-b513-4110-ae81-d5786dd7745a
+# ╠═1626182a-192c-4fe7-831f-8ddb6f27828e
+# ╠═f82f3b25-853a-499a-83e7-18e481820aac
+# ╠═1ffc40a9-4cd7-41ed-a440-e828ea4659b3
+# ╠═409e6bb0-afc9-43c4-910e-d0c002fb3de6

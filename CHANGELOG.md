@@ -12,9 +12,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - `AbstractValveProgram` supertype; `PeriodicValveProgram` for compact periodic modulation (O(1) `valve_state`); `expand_valve_program` and `ValveProgram(mp, t_closed, t_end; ...)` expand to explicit segments when needed.
 - `default_periodic_ValveProgram()` returns `PeriodicValveProgram(10.0, 2.0, 1800.0)`.
 - Piecewise-constant valve state helper `valve_state(vp, t)` for open/closed switching without linear interpolation of boolean states.
-- Test coverage for `ValveProgram`, `ModuleValveOptions`, and `ModuleValve` constructors/defaults, including periodic/inverted schedules.
+- Test coverage for `ValveProgram`, `PeriodicValveProgram`, `ModuleValveOptions`, and `ModuleValve` constructors/defaults, including periodic/inverted schedules and agreement with expanded programs.
 - Regression tests for `common_timesteps`, `match_programs`, and `update_system` with mismatched column, valve, and pressure program grids (tee fixture; includes post-balance `flow_functions` on valve edge).
 - `index_modules_with_valve_program(sys)` — edge indices for `ModuleValve` with `AbstractValveProgram` `state` (not used by `match_programs`; helper for future tooling).
+- Phase 5.3 (partial): `is_simulation_segment`, `path_is_chromatographic`, chromatographic `all_paths(g, modules)` / `all_paths(sys)` (exclude paths through `ModuleValve`); tests in `Chromatographic paths (exclude ModuleValve)`.
+- `graph_to_parameters` placeholder `Parameters` on valve edges (`sp = ""`, `d_open`, default solver options); `all_stationary_phases` skips modules without `sp`.
+- Docstrings and typed signatures for `index_parameter`, `common_edges`, `positive_flow`, and `path_possible` in `SolvingSystems.jl`.
 
 ### Changed
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
@@ -25,6 +28,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - `common_timesteps`, `match_programs`, and `update_system` synchronize pressure and temperature only; `ModuleValve` `state` stays compact (`valve_state` at runtime).
 - `flow_functions(sys, p2fun)` and `holdup_time_functions(sys, p2fun)` dispatch on `ModuleValve` using `valve_state` and instantaneous `d_open`/`d_closed` with GCSim `flow` / `holdup_time` (same pattern on both edges).
 - Docstrings for `edge_restriction`, `flow_restrictions`, `flow_permeabilities`, `flow_functions`, and `holdup_time_functions`.
+- `all_paths` requires `modules` (or `sys`) so valve edges can be filtered; `holdup_time_path` uses `all_paths(sys, num_paths)`.
+- Removed valve program synchronization: `ValveProgram` / `PeriodicValveProgram` are no longer merged or resampled in `common_timesteps` / `update_system` (fixes large grids and slow `pressure_functions` on periodic DPM systems).
+
 ### Fixed
 - `ValveProgram(time_steps, state_steps)` now validates matching vector lengths in the inner constructor (prevents inconsistent instances from the default typed constructor path).
 - Implemented valve hydraulics in permeability/restriction evaluation using `σ(t) = valve_state(...)` with open/closed restrictions (`d_open`/`d_closed`), enabling `ModuleValve` edges in flow solves.

@@ -18,8 +18,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Phase 5.3 (partial): `is_simulation_segment`, `path_is_chromatographic`, chromatographic `all_paths(g, modules)` / `all_paths(sys)` (exclude paths through `ModuleValve`); tests in `Chromatographic paths (exclude ModuleValve)`.
 - `graph_to_parameters` placeholder `Parameters` on valve edges (`sp = ""`, `d_open`, default solver options); `all_stationary_phases` skips modules without `sp`.
 - Docstrings and typed signatures for `index_parameter`, `common_edges`, `positive_flow`, and `path_possible` in `SolvingSystems.jl`.
+- Valve junction transport (`ValveJunction.jl`): `incident_valve_modules`, `slice_peaks_by_valve`, `simulate_valve_junction`, `apply_valve_junctions_at_vertex`; `simulate_along_paths` splits peaks at path vertices with time-varying incident valves (before downstream column/TM).
+- `slicing` optional `ann_prefix` keyword (default `"s"`; valve slices use `"v"`).
 
 ### Changed
+- Valve junction API: `valve_slicing_schedule` returns `(mp, t_closed, phase_shift)` instead of TM-style `(PM, ratio, shift)`; `slice_peaks_by_valve` / `simplified_valve_junction` use valve phase names; added `t_start_next_open_window`.
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
 - README: fixed CI and Codecov badge links (`GasChromatographyToolbox` org name).
 - `ValveProgram` documentation now states the intended stepwise semantics (segment durations in `time_steps`) and references `valve_state` for evaluation.

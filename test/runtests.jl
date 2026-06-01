@@ -269,4 +269,28 @@ end
     @test length(GCS.expand_valve_program(VP_dense).time_steps) > 100
 end
 
+@testset "Chromatographic paths (exclude ModuleValve)" begin
+    GCS = GasChromatographySystems
+    g = SimpleDiGraph(4)
+    add_edge!(g, 1, 2)
+    add_edge!(g, 2, 3)
+    add_edge!(g, 4, 2)
+    modules = GCS.AbstractModule[
+        GCS.ModuleColumn("c12", 1.0, 0.25e-3, 0.25e-6, "Test", GCS.default_TP()),
+        GCS.ModuleColumn("c23", 0.5, 0.1e-3, 0.1e-6, "Test", GCS.default_TP()),
+        GCS.ModuleValve("v42", 0.01, 1e-3, eps(), 25.0, GCS.default_ValveProgram()),
+    ]
+    Eg = collect(edges(g))
+    path_cols = [Eg[1], Eg[2]]
+    path_with_valve = [Eg[3], Eg[2]]
+    @test GCS.path_is_chromatographic(g, modules, path_cols)
+    @test !GCS.path_is_chromatographic(g, modules, path_with_valve)
+    _, Ep = GCS.all_paths(g, modules)
+    @test !isempty(Ep)
+    for ep in Ep
+        @test GCS.path_is_chromatographic(g, modules, ep)
+        @test all(e -> e != Eg[3], ep)
+    end
+end
+
 println("Test run successful.")

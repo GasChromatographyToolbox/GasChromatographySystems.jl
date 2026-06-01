@@ -1,15 +1,46 @@
 # begin - system to parameters
 # transform system to GasChromatographySimulator.Parameters
+function is_simulation_segment(module_::AbstractModule)
+	if module_ isa ModuleColumn || module_ isa ModuleTM
+		return true
+	else
+		return false
+	end
+end
+
+"""
+	all_stationary_phases(sys)
+
+Returns the stationary phases of all segments which have a stationary phase (entry 'sp') in the system 'sys'.
+# Arguments
+- `sys`: The GC system structure containing the network of modules
+
+# Returns
+- Array of stationary phases
+"""
 function all_stationary_phases(sys)
-	stat_phases = Array{String}(undef, ne(sys.g))
+	stat_phases = String[]
 	for i=1:ne(sys.g)
-		stat_phases[i] = sys.modules[i].sp
+		if :sp in fieldnames(typeof(sys.modules[i]))
+			push!(stat_phases, sys.modules[i].sp)
+		end
 	end
 	return stat_phases
 end
 
+"""
+	common_solutes(db, sys)
+
+Returns the solutes with common stationary phases between the database 'db' and the GC-System 'sys'.
+# Arguments
+- `db`: The database structure containing the solute properties
+- `sys`: The GC system structure containing the network of modules
+
+# Returns
+- DataFrame of solutes with common stationary phases
+"""
 function common_solutes(db, sys)
-	# gives the soultes with common stationary phases between the database 'db' and the
+	# gives the solutes with common stationary phases between the database 'db' and the
 	# GC-System 'GCsys'
 	usp = setdiff(unique(GasChromatographySystems.all_stationary_phases(sys)), [""])
 	if length(usp)==0 # no stationary phase
@@ -46,8 +77,9 @@ end
 Convert a gas chromatography system graph into simulation parameters for each module.
 
 This function processes a GC system graph and generates the necessary parameters for simulating
-solute transport through each module in the system. It handles both column modules and thermal
-modulators, setting up temperature programs, pressure functions, and substance parameters.
+solute transport through each module in the system. It handles column modules (ModuleColumn) and thermal
+modulators (ModuleTM), setting up temperature programs, pressure functions, and substance parameters.
+ For valve modules (ModuleValve) placeholder parameters are used, as ModuleValve is not used for simulation.
 
 # Arguments
 - `sys`: The GC system structure containing the network of modules
@@ -71,9 +103,9 @@ modulators, setting up temperature programs, pressure functions, and substance p
 - Loads solute properties from the database for the specified stationary phase
 - Applies module-specific options including numerical solver settings
 - Supports both ModuleColumn and ModuleTM (thermal modulator) types
+- ModuleValve is not used for simulation (only placeholder), use 'd_open' as diameter and 0.0 as film thickness and "" as stationary phase. Simulation specific options are set to default values.
 """
 function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=true, dt=1, mode="λ")
-	# ng should be taken from the separat module options 
 	E = collect(edges(sys.g))
 	srcE = src.(E) # source indices
 	dstE = dst.(E) # destination indices
@@ -85,7 +117,12 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
 		# column parameters
-		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
+		if is_simulation_segment(sys.modules[i])
+			col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
+		else
+			# ModuleValve is not used for simulation (only placeholder), use 'd_open' as diameter and 0.0 as film thickness and "" as stationary phase
+			col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d_open, [sys.modules[i].d_open], 0.0, [0.0], "", sys.options.gas)
+		end
 
 		# program parameters
 		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
@@ -98,15 +135,15 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 
 		# substance parameters
 		n_sub = length(selected_solutes)
-		sub = GasChromatographySimulator.load_solute_database(db_dataframe, sys.modules[i].sp, sys.options.gas, selected_solutes, zeros(n_sub), zeros(n_sub))
+		sub = GasChromatographySimulator.load_solute_database(db_dataframe, col.sp, sys.options.gas, selected_solutes, zeros(n_sub), zeros(n_sub))
 
 		# option parameters
-		#opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM 
-		opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		#else
-			# put options for ModuleColumn in separat options structure?
-		#	GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
-		#end
+		if is_simulation_segment(sys.modules[i])
+			opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+		else
+			# ModuleValveOptions has only 'ng' entry, use default values for other options, as ModuleValve is not used for simulation (only placeholder)
+			opt = GasChromatographySimulator.Options(odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+		end
 
 		parameters[i] = GasChromatographySimulator.Parameters(col, prog, sub, opt)
 	end

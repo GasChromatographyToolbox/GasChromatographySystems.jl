@@ -47,7 +47,7 @@ systems.
 - Appoximation: integration over the whole period, in reality the segment of the peak during the hot-jet is not included. Assuming a second focussing the not focussed segment should be focussed there.
 - Maintains substance properties while creating new slice annotations
 """
-function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(pl.τR)), abstol=1e-8, reltol=1e-8, alg=OwrenZen5())
+function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameters; nτ=6, τ₀=zeros(length(pl.τR)), abstol=1e-8, reltol=1e-8, alg=OwrenZen5(), ann_prefix::AbstractString="s")
 	tR = pl.tR
 	τR = pl.τR
 	AR = pl.A
@@ -92,7 +92,7 @@ function slicing(pl, PM, ratio, shift, par::GasChromatographySimulator.Parameter
             #println("A_focussed[ii] = $(A_focussed[ii])")
 			CAS_par = [par.sub[i].CAS for i in 1:length(par.sub)]
 			i_sub = findfirst(pl.CAS[i] .== CAS_par)
-			sub_TM_focussed[ii] = GasChromatographySimulator.Substance(par.sub[i_sub].name, par.sub[i_sub].CAS, par.sub[i_sub].Tchar, par.sub[i_sub].θchar, par.sub[i_sub].ΔCp, par.sub[i_sub].φ₀, "s$(j)_"*pl.Annotations[i], par.sub[i_sub].Cag, t₀, τ₀[i])
+			sub_TM_focussed[ii] = GasChromatographySimulator.Substance(par.sub[i_sub].name, par.sub[i_sub].CAS, par.sub[i_sub].Tchar, par.sub[i_sub].θchar, par.sub[i_sub].ΔCp, par.sub[i_sub].φ₀, "$(ann_prefix)$(j)_"*pl.Annotations[i], par.sub[i_sub].Cag, t₀, τ₀[i])
 			# Areas in the same order as sub_TM_focussed
 			Name[ii] = sub_TM_focussed[ii].name
 			CAS[ii] = sub_TM_focussed[ii].CAS

@@ -42,7 +42,7 @@ begin
     d_open = 1.0 # mm
     d_closed = eps(Float64)
     TP_valve = 250.0
-    VP = GasChromatographySystems.ValveProgram(1.0/3, 0.1, 1800.0)
+    VP = GasChromatographySystems.PeriodicValveProgram(1.0/3, 0.1, 1800.0)
     pmod = 400000.0
 end
 

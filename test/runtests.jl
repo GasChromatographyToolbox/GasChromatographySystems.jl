@@ -167,9 +167,6 @@ end
         GCS.System("tee_sync", g, pp, modules, GCS.Options())
     end
 
-    valve_states_at_segment_ends(vp::GCS.ValveProgram, com_times) =
-        [GCS.valve_state(vp, t) for t in cumsum(com_times)]
-
     sys = tee_mismatched_programs()
     vp_orig = sys.modules[3].state
 
@@ -178,24 +175,17 @@ end
 
     com = GCS.common_timesteps(sys)
     @test !isempty(com)
-    @test length(com) > length(vp_orig.time_steps)
     @test length(com) > length(sys.modules[1].T.time_steps)
 
-    com_mp, _, _, _, new_valve_steps, _, i_tempprog, i_valveprog =
-        GCS.match_programs(sys)
+    com_mp, _, _, _, _, i_tempprog = GCS.match_programs(sys)
     @test com_mp == com
-    @test 3 in i_valveprog
     @test 3 in i_tempprog
-
-    ref_states = valve_states_at_segment_ends(vp_orig, com)
-    @test length(new_valve_steps[1].time_steps) == length(com)
-    @test new_valve_steps[1].state_steps == ref_states
+    @test GCS.index_modules_with_valve_program(sys) == [3]
 
     sys2 = GCS.update_system(sys)
     com2 = GCS.common_timesteps(sys2)
     @test com2 == com
-    @test sys2.modules[3].state.time_steps == com2
-    @test sys2.modules[3].state.state_steps == ref_states
+    @test sys2.modules[3].state == vp_orig
     @test sys2.modules[1].T.time_steps == com2
     @test sys2.modules[2].T.time_steps == com2
     @test sys2.modules[3].T.time_steps == com2
@@ -203,7 +193,7 @@ end
     @test sys2.pressurepoints[1].P == sys.pressurepoints[1].P
     @test sys2.pressurepoints[4].P.time_steps == com2
 
-    # constant valve temperature (only state program is synchronized)
+    # constant valve temperature: state program unchanged; column T synchronized
     g2 = SimpleDiGraph(3)
     add_edge!(g2, 1, 2)
     add_edge!(g2, 2, 3)
@@ -226,7 +216,7 @@ end
     sys_c2 = GCS.update_system(sys_c)
     com_c = GCS.common_timesteps(sys_c2)
     @test sys_c2.modules[2].T == 42.0
-    @test sys_c2.modules[2].state.time_steps == com_c
+    @test sys_c2.modules[2].state == VP2
     @test sys_c2.modules[1].T.time_steps == com_c
 
     sol = GCS.solve_balance(sys2)
@@ -234,6 +224,34 @@ end
     p2fun = GCS.build_pressure_squared_functions(sys2, sol)
     FF = GCS.flow_functions(sys2, p2fun)
     @test isfinite(FF[3](5.0))
+
+    VP_dense = GCS.ValveProgram(1.0 / 3, 0.1, 1800.0)
+    @test length(VP_dense.time_steps) > 100
+    g3 = SimpleDiGraph(4)
+    add_edge!(g3, 1, 2)
+    add_edge!(g3, 2, 3)
+    add_edge!(g3, 4, 2)
+    sys_dense = GCS.System(
+        "dense_vp",
+        g3,
+        [
+            GCS.PressurePoint("p1", 3.0e5),
+            GCS.PressurePoint("p2", NaN),
+            GCS.PressurePoint("p3", 1.013e5),
+            GCS.PressurePoint("p4", GCS.default_PP()),
+        ],
+        GCS.AbstractModule[
+            GCS.ModuleColumn("c12", 1.0, 0.25e-3, 0.25e-6, "Test", GCS.default_TP()),
+            GCS.ModuleColumn("c23", 0.5, 0.1e-3, 0.1e-6, "Test", GCS.default_TP()),
+            GCS.ModuleValve("v42", 0.01, 1e-3, eps(), 25.0, VP_dense),
+        ],
+        GCS.Options(),
+    )
+    n_vp = length(VP_dense.time_steps)
+    @test length(GCS.common_timesteps(sys_dense)) < n_vp
+    sys_dense2 = GCS.update_system(sys_dense)
+    @test sys_dense2.modules[3].state === VP_dense
+    @test length(sys_dense2.modules[3].state.time_steps) == n_vp
 end
 
 println("Test run successful.")

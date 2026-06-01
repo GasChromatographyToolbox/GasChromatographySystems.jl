@@ -40,14 +40,14 @@ Build a single segment-duration timeline shared by all stepwise programs in a GC
 
 Each `PressureProgram` and `TemperatureProgram` stores its own `time_steps` (segment durations in s;
 physical breakpoints are `cumsum(time_steps)`). Different vertices and edges can therefore use
-different schedules. Flow balance, holdup-time evaluation, and chromatography all need pressure,
-temperature, and (when present) valve state at the **same** instants, because viscosity and
-permeability depend on `T(t)` while junction pressures follow `P(t)`.
+different schedules. Flow balance and chromatography need pressure and temperature on a shared
+timeline where programs are coupled; valve open/closed state is **not** merged here (see `valve_state`
+at evaluation time, analogous to periodic `ModuleTM` modulation).
 
 This function merges every program breakpoint into one sorted set of segment durations by
 repeatedly calling `GasChromatographySimulator.common_time_steps` (union of cumulative end times,
 then converted back to durations). `match_programs` and `update_system` resample pressure and
-temperature with `new_value_steps` and valve state with piecewise-constant `valve_state` evaluation.
+temperature with `new_value_steps`.
 
 # Arguments
 - `sys`: `System` with pressure points and module edges.
@@ -58,10 +58,9 @@ temperature with `new_value_steps` and valve state with piecewise-constant `valv
 - `com_timesteps`: Vector of segment durations in s, common to all synchronized programs.
 
 # Notes
-- Included programs: `PressureProgram` (vertices), `TemperatureProgram` (column/TM/valve `T`),
-  and `ValveProgram` on `ModuleValve` edges (`state.time_steps`).
-- Constant pressures (`Number`), constant temperatures, and constant valve states are unchanged;
-  they only borrow this timeline when resampling is required (e.g. `module_temperature`, `update_system`).
+- Included: `PressureProgram` (vertices) and `TemperatureProgram` on any module (including `ModuleValve` `T`).
+- Not included: `ValveProgram` on `ModuleValve` (`state`); use `valve_state(vp, t)` in flow/hold-up.
+- Constant pressures (`Number`) and constant temperatures are unchanged.
 """
 function common_timesteps(sys; default=[0.0, 36000.0])
 	com_timesteps = []
@@ -71,9 +70,7 @@ function common_timesteps(sys; default=[0.0, 36000.0])
 		end
 	end
 	for i=1:ne(sys.g)
-		if typeof(sys.modules[i]) <: ModuleValve
-			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.modules[i].state.time_steps)
-		elseif typeof(sys.modules[i].T) <: TemperatureProgram
+		if typeof(sys.modules[i].T) <: TemperatureProgram
 			com_timesteps = GasChromatographySimulator.common_time_steps(com_timesteps, sys.modules[i].T.time_steps)
 		end
 	end
@@ -133,30 +130,27 @@ end
 """
     match_programs(sys)
 
-Resample pressure, temperature, and valve programs onto one common segment-duration grid.
+Resample pressure and temperature programs onto one common segment-duration grid.
 
-Uses `common_timesteps(sys)` as `com_times` (segment durations in s). Pressure and temperature
-values are interpolated with `GasChromatographySimulator.new_value_steps`. Valve open/closed states
-are resampled piecewise-constantly via `valve_state` at cumulative segment end times (booleans are
-not linearly interpolated).
+Uses `common_timesteps(sys)` as `com_times` (segment durations in s). Values are interpolated with
+`GasChromatographySimulator.new_value_steps`. `ModuleValve` `state` programs are left unchanged
+(hydraulics use `valve_state` at runtime).
 
 # Arguments
-- `sys`: A `System` structure containing the gas chromatography system configuration with pressure points and module edges.
+- `sys`: `System` with pressure points and module edges.
 
 # Returns
 - `com_times`: Common segment durations for all synchronized programs.
 - `new_press_steps`: Pressure step values per programmed pressure point (order matches `i_pressprog`).
 - `new_temp_steps`: Temperature step values per module with `TemperatureProgram` (order matches `i_tempprog`).
 - `new_a_gf`: Gradient parameter matrices per module with `TemperatureProgram` and thermal gradient.
-- `new_valve_steps`: Synchronized `ValveProgram`s per `ModuleValve` (order matches `i_valveprog`).
 - `i_pressprog`: Vertex indices with `PressureProgram` pressure.
 - `i_tempprog`: Edge indices with `TemperatureProgram` temperature.
-- `i_valveprog`: Edge indices with `ModuleValve` and `ValveProgram` state.
 
 # Notes
 - Modules with thermal gradients (`ng=false`): interpolates ΔT, x0, L0, α onto `com_times`.
 - Modules without gradients (`ng=true`): default gradient parameter rows on `com_times`.
-- Valve modules listed in `i_valveprog` may also appear in `i_tempprog` when `T` is a `TemperatureProgram`.
+- `ModuleValve` may appear in `i_tempprog` when `T` is a `TemperatureProgram`; `state` is not resampled.
 """
 function match_programs(sys)
 	com_times = GasChromatographySystems.common_timesteps(sys)
@@ -182,13 +176,7 @@ function match_programs(sys)
 			new_a_gf[i] = [zeros(length(com_times)) zeros(length(com_times)) ones(length(com_times)) zeros(length(com_times))]
 		end
 	end
-	i_valveprog = GasChromatographySystems.index_modules_with_valve_program(sys)
-	new_valve_steps = Array{GasChromatographySystems.ValveProgram}(undef, length(i_valveprog))
-	for i=1:length(i_valveprog)
-		new_state_steps = [GasChromatographySystems.valve_state(sys.modules[i_valveprog[i]].state, time) for time in cumsum(com_times)]
-		new_valve_steps[i] = GasChromatographySystems.ValveProgram(com_times, new_state_steps)
-	end
-	return com_times, new_press_steps, new_temp_steps, new_a_gf, new_valve_steps, i_pressprog, i_tempprog, i_valveprog
+	return com_times, new_press_steps, new_temp_steps, new_a_gf, i_pressprog, i_tempprog
 end
 
 """
@@ -212,8 +200,8 @@ This function ensures that all modules and pressure points in the system use syn
 - **Pressure points:** constant `Number` pressures unchanged; `PressureProgram` resampled to common durations.
 - **`ModuleColumn` / `ModuleTM`:** constant `T` unchanged; `TemperatureProgram` resampled; gradient handling
   follows `opt.ng` (`ng=false` interpolates ΔT, x0, L0, α; `ng=true` uses default gradient rows).
-- **`ModuleValve`:** always receives a synchronized `ValveProgram` in `state`; `T` unchanged if constant,
-  or resampled like column modules when `T` is a `TemperatureProgram`.
+- **`ModuleValve`:** `state` (`ValveProgram`) unchanged; `T` unchanged if constant, or resampled when
+  `T` is a `TemperatureProgram`. Open/closed hydraulics use `valve_state(state, t)` (like `ModuleTM` modulation).
 - Graph topology and non-program fields (`L`, `d`, `sp`, etc.) are preserved.
 - Throws `ArgumentError` for unsupported temperature types or when `match_programs` omitted a module.
 """
@@ -226,7 +214,7 @@ function update_system(sys)
 			return GasChromatographySystems.TemperatureProgram(timesteps, temp_steps)
 		end
 	end
-	new_timesteps, new_pressuresteps, new_temperaturesteps, new_a_gf, new_valve_steps, index_pp_pressprog, index_module_tempprog, index_module_valveprog = match_programs(sys)
+	new_timesteps, new_pressuresteps, new_temperaturesteps, new_a_gf, index_pp_pressprog, index_module_tempprog = match_programs(sys)
 	new_pp = Array{GasChromatographySystems.PressurePoint}(undef, nv(sys.g))
 	for i=1:nv(sys.g)
 		if typeof(sys.pressurepoints[i].P) <: Number
@@ -241,13 +229,8 @@ function update_system(sys)
 	for i=1:ne(sys.g)
 		mod = sys.modules[i]
 		if mod isa GasChromatographySystems.ModuleValve
-			iv = findfirst(index_module_valveprog .== i)
-			iv === nothing && throw(ArgumentError(
-				"module $i ($(mod.name)): ValveProgram was not synchronized by match_programs"))
-			new_state = new_valve_steps[iv]
 			if mod.T isa Number
-				new_modules[i] = GasChromatographySystems.ModuleValve(
-					mod.name, mod.L, mod.d_open, mod.d_closed, mod.T, new_state, mod.F, mod.opt)
+				new_modules[i] = mod
 			elseif mod.T isa GasChromatographySystems.TemperatureProgram
 				it = findfirst(index_module_tempprog .== i)
 				it === nothing && throw(ArgumentError(
@@ -256,7 +239,7 @@ function update_system(sys)
 				new_tp = synchronized_temperature_program(
 					new_timesteps, new_temperaturesteps[it], new_a_gf[it], mod.opt.ng)
 				new_modules[i] = GasChromatographySystems.ModuleValve(
-					mod.name, mod.L, mod.d_open, mod.d_closed, new_tp, new_state, mod.F, mod.opt)
+					mod.name, mod.L, mod.d_open, mod.d_closed, new_tp, mod.state, mod.F, mod.opt)
 			else
 				throw(ArgumentError(
 					"module $i ($(mod.name)): unsupported temperature type $(typeof(mod.T)) for update"))

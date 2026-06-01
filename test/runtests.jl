@@ -269,6 +269,43 @@ end
     @test length(GCS.expand_valve_program(VP_dense).time_steps) > 100
 end
 
+@testset "Valve junction slicing" begin
+    GCS = GasChromatographySystems
+    VP = GCS.PeriodicValveProgram(10.0, 2.0, 100.0)
+    @test GCS.valve_slicing_schedule(VP) == (mp=10.0, t_closed=2.0, phase_shift=0.0)
+    @test GCS.t_start_next_open_window(1.0, 10.0, 2.0, 0.0) ≈ 0.0
+    @test GCS.t_start_next_open_window(12.5, 10.0, 2.0, 0.0) ≈ 10.0
+    @test !GCS.valve_state_varies(VP, 0.0, 1.0)
+    @test GCS.valve_state_varies(VP, 0.0, 15.0)
+    const_vp = GCS.ValveProgram([100.0], [true])
+    @test GCS.valve_slicing_schedule(const_vp) === nothing
+    pl = DataFrame(
+        Name=["A"],
+        CAS=["64-17-5"],
+        tR=[12.5],
+        τR=[0.5],
+        Annotations=[""],
+        A=[1.0],
+    )
+    g = SimpleDiGraph(4)
+    add_edge!(g, 1, 2)
+    add_edge!(g, 2, 3)
+    add_edge!(g, 4, 2)
+    sys = GCS.System(
+        "tee",
+        g,
+        fill(GCS.PressurePoint("p", 1.0e5), 4),
+        GCS.AbstractModule[
+            GCS.ModuleColumn("c12", 1.0, 0.25e-3, 0.25e-6, "Test", GCS.default_TP()),
+            GCS.ModuleColumn("c23", 0.5, 0.1e-3, 0.1e-6, "Test", GCS.default_TP()),
+            GCS.ModuleValve("v42", 0.01, 1e-3, eps(), 25.0, VP),
+        ],
+        GCS.Options(),
+    )
+    @test length(GCS.incident_valve_modules(sys, 2)) == 1
+    @test GCS.edges_along_path_in_order(sys.g, collect(edges(g))[1:2]) == [1, 2]
+end
+
 @testset "Chromatographic paths (exclude ModuleValve)" begin
     GCS = GasChromatographySystems
     g = SimpleDiGraph(4)

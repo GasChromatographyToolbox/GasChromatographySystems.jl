@@ -98,13 +98,13 @@ end
 """
     index_modules_with_valve_program(sys)
 
-Return edge indices `i` where `sys.modules[i]` is a `ModuleValve` with `ValveProgram` `state`.
+Return edge indices `i` where `sys.modules[i]` is a `ModuleValve` with an [`AbstractValveProgram`](@ref) `state`.
 """
 function index_modules_with_valve_program(sys)
 	i_valveprog = Int[]
 	for i=1:ne(sys.g)
 		if typeof(sys.modules[i]) <: ModuleValve
-			if typeof(sys.modules[i].state) <: ValveProgram
+			if typeof(sys.modules[i].state) <: AbstractValveProgram
 				push!(i_valveprog, i)
 			end
 		end

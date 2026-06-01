@@ -13,8 +13,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Piecewise-constant valve state helper `valve_state(vp, t)` for open/closed switching without linear interpolation of boolean states.
 - Test coverage for `ValveProgram`, `ModuleValveOptions`, and `ModuleValve` constructors/defaults, including periodic/inverted schedules.
 - Regression tests for `common_timesteps`, `match_programs`, and `update_system` with mismatched column, valve, and pressure program grids (tee fixture; includes post-balance `flow_functions` on valve edge).
-- `index_modules_with_valve_program(sys)` for edges carrying a `ModuleValve` with `ValveProgram` state.
-- Program synchronization for valves: `common_timesteps` merges `ValveProgram.time_steps`; `match_programs` resamples open/closed `state_steps` onto the common segment grid; `update_system` rebuilds `ModuleValve` modules (constant or programmed `T`, synchronized `state`).
+- `index_modules_with_valve_program(sys)` — edge indices for `ModuleValve` with `ValveProgram` `state` (not used by `match_programs`; helper for future tooling).
 
 ### Changed
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
@@ -22,14 +21,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - `ValveProgram` documentation now states the intended stepwise semantics (segment durations in `time_steps`) and references `valve_state` for evaluation.
 - `module_temperature` now accepts `ModuleValve` using the same constant/program temperature handling used for `ModuleColumn`.
 - Flow balance helpers now use `edge_restriction(...)` dispatch for `ModuleColumn`, `ModuleTM`, and `ModuleValve` instead of direct `.d` access.
-- `common_timesteps`, `match_programs`, and `update_system` docstrings now describe valve programs alongside pressure and temperature programs.
+- `common_timesteps`, `match_programs`, and `update_system` synchronize pressure and temperature only; `ModuleValve` `state` stays compact (`valve_state` at runtime).
 - `flow_functions(sys, p2fun)` and `holdup_time_functions(sys, p2fun)` dispatch on `ModuleValve` using `valve_state` and instantaneous `d_open`/`d_closed` with GCSim `flow` / `holdup_time` (same pattern on both edges).
 - Docstrings for `edge_restriction`, `flow_restrictions`, `flow_permeabilities`, `flow_functions`, and `holdup_time_functions`.
-
 ### Fixed
 - `ValveProgram(time_steps, state_steps)` now validates matching vector lengths in the inner constructor (prevents inconsistent instances from the default typed constructor path).
 - Implemented valve hydraulics in permeability/restriction evaluation using `σ(t) = valve_state(...)` with open/closed restrictions (`d_open`/`d_closed`), enabling `ModuleValve` edges in flow solves.
-- `update_system` no longer mis-handles `ModuleValve` inside the column/TM temperature branch (constant-`T` valves now receive a synchronized `ValveProgram`; valves with `TemperatureProgram` `T` update both programs).
+- `update_system` no longer mis-handles `ModuleValve` inside the column/TM temperature branch (constant-`T` valves unchanged; valves with `TemperatureProgram` `T` resample `T` only).
 - `edge_restriction` for `ModuleValve`: correct `flow_restriction` arguments (`d_open` / `d_closed`), `module_.state` instead of `mod`, and scalar κ blend at `t`.
 
 ### Removed

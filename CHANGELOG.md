@@ -9,11 +9,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 - Valve module core structures in `Structures.jl`: `ValveProgram`, `ModuleValveOptions`, and `ModuleValve` with docstrings and convenience constructors.
-- Periodic valve program builder `ValveProgram(mp, t_closed, t_end; inverted=false, t_start=0.0)` and `default_periodic_ValveProgram()`.
+- `AbstractValveProgram` supertype; `PeriodicValveProgram` for compact periodic modulation (O(1) `valve_state`); `expand_valve_program` and `ValveProgram(mp, t_closed, t_end; ...)` expand to explicit segments when needed.
+- `default_periodic_ValveProgram()` returns `PeriodicValveProgram(10.0, 2.0, 1800.0)`.
 - Piecewise-constant valve state helper `valve_state(vp, t)` for open/closed switching without linear interpolation of boolean states.
 - Test coverage for `ValveProgram`, `ModuleValveOptions`, and `ModuleValve` constructors/defaults, including periodic/inverted schedules.
 - Regression tests for `common_timesteps`, `match_programs`, and `update_system` with mismatched column, valve, and pressure program grids (tee fixture; includes post-balance `flow_functions` on valve edge).
-- `index_modules_with_valve_program(sys)` — edge indices for `ModuleValve` with `ValveProgram` `state` (not used by `match_programs`; helper for future tooling).
+- `index_modules_with_valve_program(sys)` — edge indices for `ModuleValve` with `AbstractValveProgram` `state` (not used by `match_programs`; helper for future tooling).
 
 ### Changed
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).

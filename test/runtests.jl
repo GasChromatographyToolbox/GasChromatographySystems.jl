@@ -84,14 +84,28 @@ end
         @test !GCS.valve_state(vp_inv, 2.0)
 
         vp_long = GCS.default_periodic_ValveProgram()
-        @test sum(vp_long.time_steps) ≈ 1800.0
-        @test length(vp_long.time_steps) == 360
-        @test vp_long.time_steps[1:2] == [2.0, 8.0]
-        @test vp_long.state_steps[1:2] == [false, true]
+        @test vp_long isa GCS.PeriodicValveProgram
+        @test vp_long.mp == 10.0 && vp_long.t_closed == 2.0 && vp_long.t_end == 1800.0
+        vp_long_exp = GCS.expand_valve_program(vp_long)
+        @test sum(vp_long_exp.time_steps) ≈ 1800.0
+        @test length(vp_long_exp.time_steps) == 360
 
         @test_throws ErrorException GCS.ValveProgram([1.0, 2.0], [true])
         @test_throws ErrorException GCS.ValveProgram(0.0, 2.0, 10.0)
         @test_throws ErrorException GCS.ValveProgram(10.0, 12.0, 10.0)
+    end
+
+    @testset "PeriodicValveProgram" begin
+        pvp = GCS.PeriodicValveProgram(10.0, 2.0, 30.0)
+        vp_exp = GCS.expand_valve_program(pvp)
+        @test vp_exp.time_steps == [2.0, 8.0, 2.0, 8.0, 2.0, 8.0]
+        for t in (0.0, 1.0, 2.0, 5.0, 10.0, 22.0, 29.0, 30.0, 35.0)
+            @test GCS.valve_state(pvp, t) == GCS.valve_state(vp_exp, t)
+        end
+        pvp_inv = GCS.PeriodicValveProgram(10.0, 2.0, 10.0; inverted=true)
+        @test GCS.valve_state(pvp_inv, 1.0)
+        @test !GCS.valve_state(pvp_inv, 2.0)
+        @test_throws ErrorException GCS.PeriodicValveProgram(0.0, 2.0, 10.0)
     end
 
     @testset "ModuleValveOptions" begin
@@ -225,8 +239,8 @@ end
     FF = GCS.flow_functions(sys2, p2fun)
     @test isfinite(FF[3](5.0))
 
-    VP_dense = GCS.ValveProgram(1.0 / 3, 0.1, 1800.0)
-    @test length(VP_dense.time_steps) > 100
+    VP_dense = GCS.PeriodicValveProgram(1.0 / 3, 0.1, 1800.0)
+    @test VP_dense.mp ≈ 1.0 / 3
     g3 = SimpleDiGraph(4)
     add_edge!(g3, 1, 2)
     add_edge!(g3, 2, 3)
@@ -247,11 +261,12 @@ end
         ],
         GCS.Options(),
     )
-    n_vp = length(VP_dense.time_steps)
+    n_vp = length(GCS.expand_valve_program(VP_dense).time_steps)
     @test length(GCS.common_timesteps(sys_dense)) < n_vp
     sys_dense2 = GCS.update_system(sys_dense)
     @test sys_dense2.modules[3].state === VP_dense
-    @test length(sys_dense2.modules[3].state.time_steps) == n_vp
+    @test sys_dense2.modules[3].state isa GCS.PeriodicValveProgram
+    @test length(GCS.expand_valve_program(VP_dense).time_steps) > 100
 end
 
 println("Test run successful.")

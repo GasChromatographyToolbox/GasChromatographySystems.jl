@@ -16,7 +16,12 @@ begin
 	using GasChromatographySystems
 	using GasChromatographySimulator
 	using Plots
+	using UrlDownload
+	using PlutoUI
 end
+
+# ╔═╡ 2036a9e1-0c8e-42fb-9cc8-4910e58b779a
+TableOfContents(depth=4)
 
 # ╔═╡ ea3b2dd6-9a9f-4be7-9221-80a7467f3885
 md"""
@@ -24,17 +29,22 @@ md"""
 using a ModuleValve and a periodic valve program
 """
 
+# ╔═╡ 3e0a9e10-0614-4723-9373-d4a572fb46f9
+md"""
+## Setup
+"""
+
 # ╔═╡ 0312d777-ee32-4aaa-9143-1bd7a85e7925
 begin
 	L1 = 3.0
     d1 = 0.1
     df1 = 0.1
-    sp1 = "Rxi5ms"
+    sp1 = "ZB1ms"
     TP1 = GasChromatographySystems.TemperatureProgram([30.0, 1.0, 20.0, 300.0, 1.0])
     L2 = 1.0
     d2 = 0.1
     df2 = 0.1
-    sp2 = "Rxi17SimMS"
+    sp2 = "Stabilwax"
     TP2 = GasChromatographySystems.TemperatureProgram([30.0, 1.0, 20.0, 300.0, 1.0])
     pin = 400000.0
     pout = 101300.0
@@ -69,6 +79,11 @@ solution = GasChromatographySystems.solve_balance(sys; mode="λ")
 
 # ╔═╡ e4911037-5ae4-4404-9079-91fa3e016a82
 p2fun = GasChromatographySystems.build_pressure_squared_functions(sys, solution; mode="λ")
+
+# ╔═╡ bd2d5859-ed71-4821-9227-0c0fcb7714f6
+md"""
+## Flows and Pressures
+"""
 
 # ╔═╡ 4b0a943f-958d-4b90-8314-8415527d4454
 flow_func = GasChromatographySystems.flow_functions(sys, p2fun; mode="λ")
@@ -131,9 +146,58 @@ begin
 	plot!(xlims=(0.0, 10.0))
 end
 
+# ╔═╡ 574697c2-525a-4eeb-a6b8-fb4fcf61c7b4
+md"""
+## Graph to Parameters
+"""
+
+# ╔═╡ 57a1fabc-335c-4e79-968d-8013cc5fa1ef
+begin
+	db = DataFrame(urldownload("https://raw.githubusercontent.com/GasChromatographyToolbox/GasChromatographySystems.jl/refs/heads/main/data/Database_GCxGC-TM.csv"))
+	insertcols!(db, 1, :No => collect(1:length(db.Name)))
+	db
+end
+
+# ╔═╡ a7e22b5d-efda-4711-80a8-7c395b14f710
+unique(db.Phase)
+
+# ╔═╡ f0540c92-bbfc-446c-b20d-759ad57a05ad
+GasChromatographySystems.all_stationary_phases(sys)
+
+# ╔═╡ 66435871-c559-4953-a473-3e8b5af3a0ad
+selected_solutes = GasChromatographySystems.common_solutes(db, sys).Name[1:3]
+
+# ╔═╡ 194e1d70-e178-4701-a681-91be450ef0c4
+par = GasChromatographySystems.graph_to_parameters(sys, p2fun, db, selected_solutes; interp=true, dt=1, mode="λ")
+
+# ╔═╡ 857bf5b1-3fb9-48d4-af44-d39a89e871a1
+md"""
+## Paths
+"""
+
+# ╔═╡ 270df276-ea42-430b-a851-30ac38420aee
+vertex_paths, edge_paths = GasChromatographySystems.all_paths(sys.g, sys.modules)
+
+# ╔═╡ ef5ea6c2-50d9-4d9f-981b-739333a874cd
+GasChromatographySystems._collect_random_vertex_paths(sys.g, 2)
+
+# ╔═╡ 22330f52-df23-4a7c-b517-31838916fd8f
+GasChromatographySystems.index_parameter(sys.g, edge_paths[1])
+
+# ╔═╡ 1d135b53-d7f6-46e6-a8f9-6c415e079eb6
+GasChromatographySystems.common_edges(edge_paths[1], edge_paths[1])
+
+# ╔═╡ f48d6432-0eb7-47c1-b61a-16c3197b8666
+GasChromatographySystems.positive_flow(sys, p2fun; mode="λ")
+
+# ╔═╡ 4dff2122-a41f-4e5e-a6cc-09b506f4ba49
+GasChromatographySystems.path_possible(sys, p2fun, edge_paths[1]; mode="λ")
+
 # ╔═╡ Cell order:
 # ╠═c423e03a-5d84-11f1-b415-c5b3781ea849
+# ╠═2036a9e1-0c8e-42fb-9cc8-4910e58b779a
 # ╠═ea3b2dd6-9a9f-4be7-9221-80a7467f3885
+# ╠═3e0a9e10-0614-4723-9373-d4a572fb46f9
 # ╠═0312d777-ee32-4aaa-9143-1bd7a85e7925
 # ╠═e6dc8d08-8e7a-4cb5-b693-42d0bcbcfe3b
 # ╠═27a5bb62-d10f-465c-8a3c-fd4a62e5d3d9
@@ -141,6 +205,7 @@ end
 # ╠═3c457b28-5c5a-4e09-91f7-2c0e3beaec5e
 # ╠═7bc21000-16cb-4e00-9ef7-62e0ec6ce15b
 # ╠═e4911037-5ae4-4404-9079-91fa3e016a82
+# ╠═bd2d5859-ed71-4821-9227-0c0fcb7714f6
 # ╠═4b0a943f-958d-4b90-8314-8415527d4454
 # ╠═2c2a09dc-6f6e-4c00-be77-0d092498587d
 # ╠═8273b7a6-02c8-4320-8608-307906d6f96a
@@ -153,3 +218,16 @@ end
 # ╠═6e6fc931-de55-4529-a510-3f68adff4a39
 # ╠═ae429231-81eb-4387-9db9-8e745029a407
 # ╠═faf84638-a764-4048-9df0-b6c50210d7c5
+# ╠═574697c2-525a-4eeb-a6b8-fb4fcf61c7b4
+# ╠═57a1fabc-335c-4e79-968d-8013cc5fa1ef
+# ╠═a7e22b5d-efda-4711-80a8-7c395b14f710
+# ╠═f0540c92-bbfc-446c-b20d-759ad57a05ad
+# ╠═66435871-c559-4953-a473-3e8b5af3a0ad
+# ╠═194e1d70-e178-4701-a681-91be450ef0c4
+# ╠═857bf5b1-3fb9-48d4-af44-d39a89e871a1
+# ╠═270df276-ea42-430b-a851-30ac38420aee
+# ╠═ef5ea6c2-50d9-4d9f-981b-739333a874cd
+# ╠═22330f52-df23-4a7c-b517-31838916fd8f
+# ╠═1d135b53-d7f6-46e6-a8f9-6c415e079eb6
+# ╠═f48d6432-0eb7-47c1-b61a-16c3197b8666
+# ╠═4dff2122-a41f-4e5e-a6cc-09b506f4ba49

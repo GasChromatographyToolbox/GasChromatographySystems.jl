@@ -911,7 +911,7 @@ The hold-up time over edge `i => j` is calculated as
 """
 function holdup_time_path(sys, num_paths; mode="λ")
 	tM = holdup_time_functions(sys; mode=mode)
-	paths = all_paths(sys.g, num_paths)[2]
+	paths = all_paths(sys, num_paths)[2]
 	
 	tMp = Array{Function}(undef, num_paths)
 	for i=1:num_paths
@@ -939,7 +939,7 @@ The hold-up time over edge `i => j` is calculated as
 function holdup_time_path(sys, p2fun, num_paths; mode="λ")
 	# collecting the hold-up time functions of every path as function of time t for system `sys` and the squared pressure solution functions `p2fun`. This function should be used, if parameters of the system are to be changes, e.g. column length or diameter, but the structure of the system is the same (same grape, same unknown pressures/flows)
 	tM = holdup_time_functions(sys, p2fun; mode=mode)
-	paths = all_paths(sys.g, num_paths)[2]
+	paths = all_paths(sys, num_paths)[2]
 	
 	tMp = Array{Function}(undef, num_paths)
 	for i=1:num_paths

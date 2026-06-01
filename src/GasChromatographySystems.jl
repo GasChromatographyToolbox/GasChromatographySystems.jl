@@ -29,6 +29,7 @@ include("./Systems.jl")
 include("./SystemToParameters.jl")
 include("./SolvingSystems.jl")
 include("./ThermalModulator.jl")
+include("./ValveJunction.jl")
 
 # functions
 

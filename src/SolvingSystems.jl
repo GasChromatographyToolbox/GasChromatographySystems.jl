@@ -1,75 +1,200 @@
 # estimate possible paths in the graphs
-function all_paths(g) # brute force method using multiple random walk and only using unique results
-	num_paths = number_of_paths(g)
-	rand_paths = Any[]
-	while length(unique(rand_paths))<num_paths && length(rand_paths)<nv(g)*10
-		push!(rand_paths, non_backtracking_randomwalk(g, 1, nv(g)))
+
+"""Map a vertex walk `vp` to the corresponding edge list (edge index order matches `collect(edges(g))`)."""
+function _vertex_path_to_edges(g, vp)
+	Eg = collect(edges(g))
+	Ep_ = Array{Graphs.SimpleGraphs.SimpleEdge{Int64}, 1}(undef, length(vp) - 1)
+	for i in 1:(length(vp) - 1)
+		index = findfirst(vp[i] .== src.(Eg) .&& vp[i + 1] .== dst.(Eg))
+		index === nothing && throw(ArgumentError("no edge from vertex $(vp[i]) to $(vp[i + 1])"))
+		Ep_[i] = Eg[index]
 	end
-	Vp = sort(unique(rand_paths))
-	Ep = Array{Array{Graphs.SimpleGraphs.SimpleEdge{Int64}, 1}}(undef, length(Vp))
-	for j=1:length(Vp)
-		Ep_ = Array{Graphs.SimpleGraphs.SimpleEdge{Int64}, 1}(undef, length(Vp[j])-1)
-		for i=1:(length(Vp[j])-1)
-			index = findfirst(Vp[j][i].==src.(edges(g)) .&& Vp[j][i+1].==dst.(edges(g)))
-			Ep_[i] = collect(edges(g))[index]
-		end
-		Ep[j] = Ep_
-	end
-	return Vp, Ep
+	return Ep_
 end
 
-function all_paths(g, num_paths)
+"""
+    path_is_chromatographic(g, modules, edge_path)
+
+Return `true` if every edge in `edge_path` is a simulation segment (`ModuleColumn` or `ModuleTM`).
+Paths containing a `ModuleValve` edge return `false`.
+"""
+function path_is_chromatographic(g, modules, edge_path)
+	Eg = collect(edges(g))
+	for e in edge_path
+		idx = findfirst(==(e), Eg)
+		idx === nothing && return false
+		is_simulation_segment(modules[idx]) || return false
+	end
+	return true
+end
+
+function _filter_chromatographic_paths(g, modules, Vp, Ep)
+	keep = [path_is_chromatographic(g, modules, Ep[j]) for j in eachindex(Ep)]
+	return Vp[keep], Ep[keep]
+end
+
+"""
+    all_paths(g, modules)
+
+Enumerate vertex paths and edge paths by random walk (brute force, unique results).
+
+Paths that include a `ModuleValve` edge are excluded (hydraulic-only edges; use
+`path_is_chromatographic` to test a single path).
+
+# Returns
+- `Vp`: Vector of vertex sequences
+- `Ep`: Vector of edge sequences (same length as `Vp`)
+"""
+function all_paths(g, modules::AbstractVector{<:GasChromatographySystems.AbstractModule})
+	return all_paths(g, modules, nv(g) * 10)
+end
+
+function _collect_random_vertex_paths(g, num_paths::Integer)
 	rand_paths = Any[]
-	while length(unique(rand_paths))<num_paths && length(rand_paths)<nv(g)*10
+	while length(unique(rand_paths)) < num_paths && length(rand_paths) < nv(g) * 10
 		push!(rand_paths, non_backtracking_randomwalk(g, 1, nv(g)))
 	end
-	Vp = sort(unique(rand_paths))
-	Ep = Array{Array{Graphs.SimpleGraphs.SimpleEdge{Int64}, 1}}(undef, length(Vp))
-	for j=1:length(Vp)
-		Ep_ = Array{Graphs.SimpleGraphs.SimpleEdge{Int64}, 1}(undef, length(Vp[j])-1)
-		for i=1:(length(Vp[j])-1)
-			index = findfirst(Vp[j][i].==src.(edges(g)) .&& Vp[j][i+1].==dst.(edges(g)))
-			Ep_[i] = collect(edges(g))[index]
-		end
-		Ep[j] = Ep_
-	end
-	return Vp, Ep
+	return sort(unique(rand_paths))
+end
+
+"""
+    all_paths(g, modules, num_paths)
+
+Like [`all_paths`](@ref)(`g`, `modules`), but stop once `num_paths` unique random walks are collected
+(before excluding non-chromatographic paths).
+"""
+function all_paths(g, modules::AbstractVector{<:GasChromatographySystems.AbstractModule}, num_paths::Integer)
+	Vp = _collect_random_vertex_paths(g, num_paths)
+	Ep = [_vertex_path_to_edges(g, Vp[j]) for j in eachindex(Vp)]
+	return _filter_chromatographic_paths(g, modules, Vp, Ep)
+end
+
+"""
+    all_paths(sys, num_paths)
+
+Convenience wrapper: [`all_paths`](@ref)(`sys.g`, `sys.modules`, `num_paths`).
+"""
+function all_paths(sys::GasChromatographySystems.System, num_paths::Integer)
+	return all_paths(sys.g, sys.modules, num_paths)
+end
+
+"""
+    all_paths(sys)
+
+Convenience wrapper: [`all_paths`](@ref)(`sys.g`, `sys.modules`, `nv(sys.g) * 10`).
+"""
+function all_paths(sys::GasChromatographySystems.System)
+	return all_paths(sys.g, sys.modules, nv(sys.g) * 10)
 end
 
 # simulate along the paths
-function index_parameter(g, path)
-	return findall(x->x in path, collect(edges(g)))
+
+"""
+    index_parameter(g, path)
+
+Map a path (sequence of graph edges) to module / parameter indices.
+
+Each edge in `collect(edges(g))` corresponds to one entry in `sys.modules` and in the
+`graph_to_parameters` output. Returns the indices of all edges that appear in `path`, in
+graph edge order (not path order).
+
+# Arguments
+- `g`: Graph whose `edges(g)` define the module numbering.
+- `path`: Vector of edges along a path (e.g. from [`all_paths`](@ref)).
+
+# Returns
+- `Vector{Int}`: Edge indices `i` with `collect(edges(g))[i] ∈ path`.
+"""
+function index_parameter(
+	g::Graphs.AbstractGraph,
+	path::AbstractVector{<:Graphs.AbstractEdge},
+)::Vector{Int}
+	E = collect(edges(g))
+	return findall(e -> e in path, E)
 end
 
-function common_edges(path1, path2)
-	return path2[findall(x->x in path2, path1)]
+"""
+    common_edges(path1, path2)
+
+Select edges from `path2` at positions where the corresponding edge in `path1` also occurs in `path2`.
+
+For each index `i` in `path1`, if `path1[i]` is contained in `path2`, include `path2[i]` in the result.
+(Used when comparing path prefixes; paths are usually aligned so `i` is meaningful for both.)
+
+# Arguments
+- `path1`: Reference edge sequence (typically a prefix).
+- `path2`: Edge sequence to subselect.
+
+# Returns
+- Vector of edges from `path2` (same element type as `path2`).
+"""
+function common_edges(
+	path1::AbstractVector{<:Graphs.AbstractEdge},
+	path2::AbstractVector{<:Graphs.AbstractEdge},
+)
+	indices = findall(x -> x in path2, path1)
+	return path2[indices]
 end
 
-function positive_flow(sys, p2fun; mode="λ")
+"""
+    positive_flow(sys, p2fun; mode="λ")
+
+Test whether each edge has strictly positive volumetric flow over the program horizon.
+
+Uses [`flow_functions`](@ref) and samples times `t = 0:Δt:t_end` with `Δt = t_end/2` and
+`t_end = sum(common_timesteps(sys))`. An edge is marked `true` when `F(t) > 0` at all sample
+points (no non-positive values). This is a coarse check, not interval arithmetic over `[0, t_end]`.
+
+# Arguments
+- `sys`: Capillary system after flow balance.
+- `p2fun`: Squared-pressure solution functions from `build_pressure_squared_functions`.
+- `mode`: `"λ"` or `"κ"` (passed to `flow_functions`).
+
+# Returns
+- `Vector{Bool}` of length `ne(sys.g)`; `true` if flow on that edge stays positive at the sample times.
+"""
+function positive_flow(
+	sys::GasChromatographySystems.System,
+	p2fun,
+; mode::AbstractString = "λ",
+)::Vector{Bool}
 	F_func = flow_functions(sys, p2fun; mode=mode)
 	tend = sum(common_timesteps(sys))
-	t = 0:tend/2:tend # !!!perhaps use interval arithmatic to test, if the flow is positive over the interval 0:tend!!!???
-	#ipar = index_parameter(sys.g, path)
-	pos_Flow = Array{Bool}(undef, length(F_func))
-	for i=1:length(F_func)
-		if isempty(findall(F_func[i].(t).<=0))
-			pos_Flow[i] = true
-		else
-			pos_Flow[i] = false
-		end
+	t = 0:tend / 2:tend # !!!perhaps use interval arithmatic to test, if the flow is positive over the interval 0:tend!!!???
+	pos_Flow = Vector{Bool}(undef, length(F_func))
+	for i in eachindex(F_func)
+		pos_Flow[i] = isempty(findall(F_func[i].(t) .<= 0))
 	end
 	return pos_Flow
 end
 
-function path_possible(sys, p2fun, paths; mode="λ")
-	#F_func = flow_functions(sys)
-	i_E = index_parameter(sys.g, paths)
-	if length(i_E) == length(findall(positive_flow(sys, p2fun; mode=mode)[i_E]))
-		possible = true
-	else
-		possible = false
-	end
-	return possible
+"""
+    path_possible(sys, p2fun, path; mode="λ")
+
+Return whether solute transport along `path` is feasible (forward flow on every edge of the path).
+
+Maps `path` to edge indices with [`index_parameter`](@ref) and requires
+[`positive_flow`](@ref) to be `true` on each of those edges. Used by [`simulate_along_paths`](@ref)
+to skip paths with backflush or zero-flow segments.
+
+# Arguments
+- `sys`: Capillary system.
+- `p2fun`: Squared-pressure solution functions from `build_pressure_squared_functions`.
+- `path`: Sequence of edges (one outlet path from [`all_paths`](@ref)).
+- `mode`: `"λ"` or `"κ"` (passed to `positive_flow`).
+
+# Returns
+- `true` if every edge on `path` has positive flow at the sample times; `false` otherwise.
+"""
+function path_possible(
+	sys::GasChromatographySystems.System,
+	p2fun,
+	path::AbstractVector{<:Graphs.AbstractEdge},
+; mode::AbstractString = "λ",
+)::Bool
+	i_E = index_parameter(sys.g, path)
+	pos = positive_flow(sys, p2fun; mode=mode)
+	return length(i_E) == count(pos[i_E])
 end
 
 function change_initial(par::GasChromatographySimulator.Parameters, init_t, init_τ)

@@ -97,6 +97,9 @@ modulators (ModuleTM), setting up temperature programs, pressure functions, and 
 
 # Notes
 - For each module edge, inlet/outlet pressure step vectors (`Fpin_steps`, `pout_steps`) are sampled from the resolved pressure functions at that module's `time_steps`, matching the `Fpin_itp` and `pout_itp` passed to `Program`.
+- When this function is used after network pressure-balance (`solve_balance` / `build_pressure_squared_functions`),
+  simulation options are forced to `control="Pressure"` because inlet/outlet pressures are already defined by the
+  solved pressure field. Using `control="Flow"` here would re-impose flow control on top of pressure-defined programs.
 - Handles both constant and programmed temperature/pressure conditions
 - Sets up column parameters including length, diameter, and stationary phase
 - Configures temperature programs with interpolation functions
@@ -109,6 +112,10 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 	E = collect(edges(sys.g))
 	srcE = src.(E) # source indices
 	dstE = dst.(E) # destination indices
+	control_mode = "Pressure"
+	if sys.options.control != "Pressure"
+		@warn "graph_to_parameters: overriding sys.options.control='$(sys.options.control)' to 'Pressure' (pressure-balanced network uses solved pin/pout programs)."
+	end
 	if interp == true # linear interpolation of pressure functions with step width dt
 		p_func = interpolate_pressure_functions(sys, p2fun; dt=dt, mode=mode)
 	else
@@ -139,10 +146,10 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 
 		# option parameters
 		if is_simulation_segment(sys.modules[i])
-			opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+			opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=control_mode, k_th=sys.options.k_th)
 		else
 			# ModuleValveOptions has only 'ng' entry, use default values for other options, as ModuleValve is not used for simulation (only placeholder)
-			opt = GasChromatographySimulator.Options(odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+			opt = GasChromatographySimulator.Options(odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=control_mode, k_th=sys.options.k_th)
 		end
 
 		parameters[i] = GasChromatographySimulator.Parameters(col, prog, sub, opt)

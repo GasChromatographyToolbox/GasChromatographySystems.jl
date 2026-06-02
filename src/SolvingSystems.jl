@@ -208,14 +208,34 @@ function change_initial(par::GasChromatographySimulator.Parameters, init_t, init
 end
 
 function change_initial(par::GasChromatographySimulator.Parameters, prev_pl)
-	new_sub = Array{GasChromatographySimulator.Substance}(undef, length(prev_pl.CAS))
-	for i=1:length(prev_pl.CAS)
-		# filter for correct CAS and annotation (slice number)
-		CAS_par = [par.sub[i].CAS for i in 1:length(par.sub)]
-		i_sub = findfirst(prev_pl.CAS[i] .== CAS_par)
-		#ii_ = common_index(prev_pl, prev_par.sub[i].CAS, join(split(prev_par.sub[i].ann, ", ")[1:end-1], ", "))
-		new_sub[i] = GasChromatographySimulator.Substance(par.sub[i_sub].name, par.sub[i_sub].CAS, par.sub[i_sub].Tchar, par.sub[i_sub].θchar, par.sub[i_sub].ΔCp, par.sub[i_sub].φ₀, prev_pl.Annotations[i], par.sub[i_sub].Cag, prev_pl.tR[i], prev_pl.τR[i])
+	# Drop non-finite carry-over peaks (failed upstream rows) so Substance construction
+	# does not throw on t₀/τ₀ = NaN/Inf. This keeps simulate_along_paths running and
+	# surfaces a clearer warning instead of an InexactError/ArgumentError deep in GCSim.
+	finite_rows = findall(isfinite.(prev_pl.tR) .&& isfinite.(prev_pl.τR))
+	if length(finite_rows) < nrow(prev_pl)
+		@warn "change_initial: dropping $(nrow(prev_pl) - length(finite_rows)) non-finite peak rows before downstream simulation."
 	end
+	isempty(finite_rows) && throw(ArgumentError("change_initial: no finite peaks to pass downstream (all tR/τR are non-finite). Check upstream module simulation and flow/pressure settings."))
+	CAS_par = [par.sub[i].CAS for i in eachindex(par.sub)]
+	new_sub = GasChromatographySimulator.Substance[]
+	for i in finite_rows
+		# filter for correct CAS and annotation (slice number)
+		i_sub = findfirst(prev_pl.CAS[i] .== CAS_par)
+		i_sub === nothing && continue
+		push!(new_sub, GasChromatographySimulator.Substance(
+			par.sub[i_sub].name,
+			par.sub[i_sub].CAS,
+			par.sub[i_sub].Tchar,
+			par.sub[i_sub].θchar,
+			par.sub[i_sub].ΔCp,
+			par.sub[i_sub].φ₀,
+			prev_pl.Annotations[i],
+			par.sub[i_sub].Cag,
+			prev_pl.tR[i],
+			prev_pl.τR[i],
+		))
+	end
+	isempty(new_sub) && throw(ArgumentError("change_initial: no matching CAS entries found between previous peak list and downstream parameters."))
 	# here changes of options could be applied
 	new_par = GasChromatographySimulator.Parameters(par.col, par.prog, new_sub, par.opt)
 	return new_par
@@ -330,6 +350,19 @@ function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_
 	# visited_E[e] = true once edge e has been simulated on some *feasible* path (enables reuse below)
 	visited_E = falses(length(E))
 
+	# Diagnostic helper: report where non-finite tR/τR first appears.
+	function _log_nonfinite_peaklist(pl, i_path, j_seg, edge_idx, stage::AbstractString)
+		if !(:tR in names(pl)) || !(:τR in names(pl))
+			return
+		end
+		finite_mask = isfinite.(pl.tR) .&& isfinite.(pl.τR)
+		n_bad = count(.!finite_mask)
+		if n_bad > 0
+			mod_name = sys.modules[edge_idx].name
+			@warn "Non-finite peaks detected" path_index=i_path segment_index=j_seg edge_index=edge_idx module_name=mod_name stage=stage dropped_or_invalid=n_bad total_rows=nrow(pl)
+		end
+	end
+
 	# -------------------------------------------------------------------------
 	# Outer loop: each candidate outlet path (sequence of graph edges)
 	# -------------------------------------------------------------------------
@@ -393,6 +426,7 @@ function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_
 					else
 						# Carry the peak list produced by the previous segment on this path.
 						pl_in = peaklists_[j - 1]
+						_log_nonfinite_peaklist(pl_in, i, j - 1, i_par[j - 1], "input from previous segment")
 
 						# Valve junction (e.g. FastGC×GC DPM tee): path is column-only, but a
 						# ModuleValve may be attached at the vertex between two columns. If the
@@ -415,10 +449,22 @@ function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_
 									par_sys[i_par[j]], mod_j, pl_in;
 									nτ=nτ, τ₀_focus=τ₀_focus, refocus=refocus, kwargsTM...,
 								)
+							_log_nonfinite_peaklist(peaklists_[j], i, j, i_par[j], "output of simulate_ModuleTM")
 						else
 							# Ordinary column: continue with (possibly valve-sliced) peak list.
-							new_par_sys[i_par[j]], peaklists_[j], solutions_[j] =
-								simulate_ModuleColumn(par_sys[i_par[j]], pl_in)
+							try
+								new_par_sys[i_par[j]], peaklists_[j], solutions_[j] =
+									simulate_ModuleColumn(par_sys[i_par[j]], pl_in)
+							catch err
+								if err isa ArgumentError && occursin("no finite peaks to pass downstream", sprint(showerror, err))
+									mod_name = sys.modules[i_par[j]].name
+									@error "All peaks non-finite before downstream column simulation" path_index=i segment_index=j edge_index=i_par[j] module_name=mod_name
+									@error "Upstream segment context" upstream_segment_index=j-1 upstream_edge_index=i_par[j-1] upstream_module_name=sys.modules[i_par[j-1]].name
+									_log_nonfinite_peaklist(pl_in, i, j - 1, i_par[j - 1], "failing input to simulate_ModuleColumn")
+								end
+								rethrow(err)
+							end
+							_log_nonfinite_peaklist(peaklists_[j], i, j, i_par[j], "output of simulate_ModuleColumn")
 						end
 					end
 				end

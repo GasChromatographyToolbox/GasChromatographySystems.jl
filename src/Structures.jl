@@ -479,24 +479,52 @@ function valve_state(vp::ValveProgram, t)
 end
 
 """
-	ModuleValveOptions(; ng=true)
+Setting for initial peak width (simulator field `τ₀`) after a [`ModuleValve`](@ref) junction.
+
+Either `:inherit` (use upstream `τR`) or `(:fixed, width_s)` with `width_s ≥ 0`.
+For a closed-phase width, set `width_s` to `t_closed` (or a scaled value) from the valve program.
+Use `(:fixed, 0.0)` for an idealised sharp band (TM `refocus=true` analogue).
+"""
+const ValveInitialWidth = Union{Symbol, Tuple{Symbol, Float64}}
+
+"""Normalize `valve_initial_width` to `:inherit` or `(:fixed, width)`."""
+function _normalize_valve_initial_width(valve_initial_width)
+	if valve_initial_width isa Tuple
+		length(valve_initial_width) == 2 ||
+			throw(ArgumentError("valve_initial_width tuple must be `(:fixed, width_s)`."))
+		valve_initial_width[1] == :fixed ||
+			throw(ArgumentError("valve_initial_width tuple mode must be `:fixed`, got $(valve_initial_width[1])."))
+		w = Float64(valve_initial_width[2])
+		isfinite(w) && w >= 0 || throw(ArgumentError("valve_initial_width fixed width must be finite and >= 0."))
+		return (:fixed, w)
+	elseif valve_initial_width === :inherit
+		return :inherit
+	else
+		throw(ArgumentError("valve_initial_width must be `:inherit` or `(:fixed, width_s)`."))
+	end
+end
+
+"""
+	ModuleValveOptions(; ng=true, valve_initial_width=:inherit)
 
 Structure describing the options for a valve module.
 
 # Arguments
 * `ng`: Option to calculate without a gradient (`ng = true`) or with a gradient (`ng = false`).
+* `valve_initial_width`: [`ValveInitialWidth`](@ref) — `:inherit` (default) or `(:fixed, width_s)`.
 
 For valve modules, `ng=true` is the typical setting.
 
 A default module options is available:
-* `ModuleValveOptions()`: `ng = true`.
+* `ModuleValveOptions()`: `ng = true`, `valve_initial_width = :inherit`.
 """
 struct ModuleValveOptions
-    ng::Bool  
+    ng::Bool
+    valve_initial_width::ValveInitialWidth
 end
 
-function ModuleValveOptions(; ng=true)
-    ModuleValveOptions(ng)
+function ModuleValveOptions(; ng=true, valve_initial_width=:inherit)
+	ModuleValveOptions(ng, _normalize_valve_initial_width(valve_initial_width))
 end
 
 """
@@ -542,14 +570,29 @@ function ModuleValve(name, L, d_open, d_closed, T, state, opt::ModuleValveOption
 	return valve
 end
 
-function ModuleValve(name, L, d_open, d_closed, T, state; ng=true)
-	opt = ModuleValveOptions(; ng=ng)
+function ModuleValve(
+	name,
+	L,
+	d_open,
+	d_closed,
+	T,
+	state;
+	ng=true,
+	valve_initial_width=:inherit,
+)
+	opt = ModuleValveOptions(; ng=ng, valve_initial_width=valve_initial_width)
 	valve = ModuleValve(name, L, d_open, d_closed, T, state, NaN, opt)
 	return valve
 end
 
-function ModuleValve(name, T, state; ng=true)
-	opt = ModuleValveOptions(; ng=ng)
+function ModuleValve(
+	name,
+	T,
+	state;
+	ng=true,
+	valve_initial_width=:inherit,
+)
+	opt = ModuleValveOptions(; ng=ng, valve_initial_width=valve_initial_width)
 	valve = ModuleValve(name, 0.01, 0.001, eps(Float64), T, state, NaN, opt)
 	return valve
 end

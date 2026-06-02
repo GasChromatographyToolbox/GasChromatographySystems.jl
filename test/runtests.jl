@@ -304,6 +304,74 @@ end
     )
     @test length(GCS.incident_valve_modules(sys, 2)) == 1
     @test GCS.edges_along_path_in_order(sys.g, collect(edges(g))[1:2]) == [1, 2]
+
+    # Regression checks for junction slicing quality:
+    # 1) area conservation, 2) monotonic downstream tR, 3) slice annotation/count.
+    db_file = string(@__DIR__, "/data/Database_test.csv")
+    db_dataframe = DataFrame(CSV.File(db_file, header=1, silencewarnings=true))
+    insertcols!(db_dataframe, 1, :No => collect(1:length(db_dataframe.Name)))
+    selected = [String(db_dataframe.Name[1])]
+    sys_col = GCS.SeriesSystem([2.0], [0.25], [0.25], ["SLB5ms"], [GCS.default_TP()], 1.0, NaN, 0.0; name="SeriesSystem", opt=GCS.Options())
+    sol_col = GCS.solve_balance(sys_col)
+    p2fun_col = GCS.build_pressure_squared_functions(sys_col, sol_col)
+    par_col = GCS.graph_to_parameters(sys_col, p2fun_col, db_dataframe, selected)[1]
+    cas = par_col.sub[1].CAS
+    pl_wide = DataFrame(
+        Name=[selected[1]],
+        CAS=[cas],
+        tR=[12.5],
+        τR=[2.0],         # wide enough to span multiple valve periods with nτ=6
+        Annotations=["src_"],
+        A=[1.0],
+    )
+
+    new_par, pl_out, _ = GCS.simulate_valve_junction(par_col, sys.modules[3], pl_wide; nτ=6)
+    @test length(new_par.sub) == 3
+    @test length(pl_out.tR) == 3
+    @test all(ann -> startswith(ann, "v"), pl_out.Annotations)
+    @test issorted(pl_out.tR)
+    @test all(diff(pl_out.tR) .>= 0.0)
+    @test isapprox(sum(pl_out.A), sum(pl_wide.A); rtol=1e-8, atol=1e-10)
+end
+
+@testset "change_initial finite-row guard" begin
+    GCS = GasChromatographySystems
+    db_file = string(@__DIR__, "/data/Database_test.csv")
+    db_dataframe = DataFrame(CSV.File(db_file, header=1, silencewarnings=true))
+    insertcols!(db_dataframe, 1, :No => collect(1:length(db_dataframe.Name)))
+    selected_solutes = ["5-Nonanol"]
+
+    sys = GCS.SeriesSystem([2.0], [0.25], [0.25], ["SLB5ms"], [GCS.default_TP()], 1.0, NaN, 0.0; name="SeriesSystem", opt=GCS.Options())
+    sol = GCS.solve_balance(sys)
+    p2fun = GCS.build_pressure_squared_functions(sys, sol)
+    par = GCS.graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes)[1]
+
+    cas = par.sub[1].CAS
+    pl_mixed = DataFrame(
+        CAS=[cas, cas],
+        tR=[1.23, NaN],
+        τR=[0.11, NaN],
+        Annotations=["ok", "bad"],
+    )
+    new_par = GCS.change_initial(par, pl_mixed)
+    @test length(new_par.sub) == 1
+    @test isfinite(new_par.sub[1].t₀)
+    @test isfinite(new_par.sub[1].τ₀)
+
+    pl_bad = DataFrame(
+        CAS=[cas],
+        tR=[NaN],
+        τR=[NaN],
+        Annotations=["bad"],
+    )
+    err = try
+        GCS.change_initial(par, pl_bad)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("no finite peaks to pass downstream", sprint(showerror, err))
 end
 
 @testset "Chromatographic paths (exclude ModuleValve)" begin

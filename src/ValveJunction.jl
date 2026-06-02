@@ -225,12 +225,30 @@ function simulate_valve_junction(
 	sched === nothing && return segment_par, prev_peaklist, nothing
 	@assert sched isa ValveSlicingSchedule
 	(; mp, t_closed, phase_shift) = sched
-	τ₀ = prev_peaklist.τR
+	τ₀ = select_valve_initial_width(valve, prev_peaklist)
 	new_segment_par, df_A = slice_peaks_by_valve(
 		prev_peaklist, mp, t_closed, phase_shift, segment_par; nτ=nτ, τ₀=τ₀,
 	)
 	peaklist, solutions = simplified_valve_junction(prev_peaklist, df_A, mp, t_closed, phase_shift)
 	return new_segment_par, peaklist, solutions
+end
+
+"""
+    select_valve_initial_width(valve::ModuleValve, prev_peaklist)
+
+Select initial peak widths `τ₀` for valve-generated slices based on `valve.opt.valve_initial_width`
+(`:inherit` or `(:fixed, width_s)`; see [`ValveInitialWidth`](@ref)).
+"""
+function select_valve_initial_width(valve::ModuleValve, prev_peaklist)
+	spec = valve.opt.valve_initial_width
+	n = length(prev_peaklist.τR)
+	if spec === :inherit
+		return Float64.(prev_peaklist.τR)
+	elseif spec isa Tuple && spec[1] === :fixed
+		return fill(Float64(spec[2]), n)
+	else
+		throw(ArgumentError("Invalid valve_initial_width setting: $(spec)"))
+	end
 end
 
 """

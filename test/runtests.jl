@@ -111,8 +111,13 @@ end
     @testset "ModuleValveOptions" begin
         opt_def = GCS.ModuleValveOptions()
         @test opt_def.ng == true
+        @test opt_def.valve_initial_width == :inherit
         opt_ng = GCS.ModuleValveOptions(; ng=false)
         @test opt_ng.ng == false
+        opt_fixed = GCS.ModuleValveOptions(; valve_initial_width=(:fixed, 0.25))
+        @test opt_fixed.valve_initial_width == (:fixed, 0.25)
+        @test_throws ArgumentError GCS.ModuleValveOptions(; valve_initial_width=:unknown_mode)
+        @test_throws ArgumentError GCS.ModuleValveOptions(; valve_initial_width=:fixed)
     end
 
     @testset "ModuleValve" begin
@@ -144,6 +149,17 @@ end
         @test v_short.d_closed == eps(Float64)
         @test isnan(v_short.F)
         @test v_short.opt.ng == true
+
+        v_tau = GCS.ModuleValve(
+            "v_tau",
+            0.05,
+            1e-3,
+            eps(),
+            T,
+            vp;
+            valve_initial_width=(:fixed, 1.5),
+        )
+        @test v_tau.opt.valve_initial_width == (:fixed, 1.5)
 
         sys_empty = GCS.System("", Graphs.SimpleDiGraph(0), GCS.PressurePoint[], GCS.AbstractModule[], GCS.Options())
         _, temp_steps_const, _, _, _ = GCS.module_temperature(v_short, sys_empty)
@@ -332,6 +348,37 @@ end
     @test issorted(pl_out.tR)
     @test all(diff(pl_out.tR) .>= 0.0)
     @test isapprox(sum(pl_out.A), sum(pl_wide.A); rtol=1e-8, atol=1e-10)
+
+    v_inherit = GCS.ModuleValve("v_inherit", 0.01, 1e-3, eps(), 25.0, VP; valve_initial_width=:inherit)
+    v_sharp = GCS.ModuleValve("v_sharp", 0.01, 1e-3, eps(), 25.0, VP; valve_initial_width=(:fixed, 0.0))
+    v_fixed = GCS.ModuleValve("v_fixed", 0.01, 1e-3, eps(), 25.0, VP; valve_initial_width=(:fixed, 0.12))
+    v_tclosed = GCS.ModuleValve("v_tclosed", 0.01, 1e-3, eps(), 25.0, VP; valve_initial_width=(:fixed, 1.0))
+
+    @test GCS.select_valve_initial_width(v_inherit, pl_wide) == pl_wide.τR
+    @test GCS.select_valve_initial_width(v_sharp, pl_wide) == [0.0]
+    @test GCS.select_valve_initial_width(v_fixed, pl_wide) == [0.12]
+    @test GCS.select_valve_initial_width(v_tclosed, pl_wide) == [1.0]
+
+    # Downstream column must use τ₀ from sliced `par.sub`, not peaklist τR (still upstream width).
+    v_sharp = GCS.ModuleValve("v_sharp2", 0.01, 1e-3, eps(), 25.0, VP; valve_initial_width=(:fixed, 0.0))
+    par_sharp, pl_sharp, _ = GCS.simulate_valve_junction(par_col, v_sharp, pl_wide; nτ=6)
+    @test all(==(0.0), (s.τ₀ for s in par_sharp.sub))
+    @test all(pl_sharp.τR .> 0.0)
+    par_down = GCS.change_initial(par_sharp, pl_sharp)
+    @test length(par_down.sub) == length(pl_sharp.tR)
+    @test all(==(0.0), (s.τ₀ for s in par_down.sub))
+
+    # Column→column / TM→column: template `par` without matching slice annotations → keep upstream τR.
+    pl_col = DataFrame(
+        Name=[selected[1]],
+        CAS=[cas],
+        tR=[5.0],
+        τR=[0.33],
+        Annotations=["upstream"],
+        A=[1.0],
+    )
+    par_down_col = GCS.change_initial(par_col, pl_col)
+    @test par_down_col.sub[1].τ₀ == 0.33
 end
 
 @testset "change_initial finite-row guard" begin

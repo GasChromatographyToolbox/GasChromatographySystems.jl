@@ -106,10 +106,13 @@ Return `true` if [`valve_state`](@ref) is not constant on `[t_lo, t_hi]`.
 function valve_state_varies(vp::AbstractValveProgram, t_lo::Real, t_hi::Real)
 	t_lo = Float64(t_lo)
 	t_hi = Float64(t_hi)
-	if t_hi <= t_lo
+	if !isfinite(t_lo) || !isfinite(t_hi) || t_hi <= t_lo
 		return false
 	end
 	period = vp isa PeriodicValveProgram ? vp.mp : sum(vp.time_steps)
+	if !isfinite(period) || period <= eps(Float64)
+		return false
+	end
 	n = max(3, ceil(Int, (t_hi - t_lo) / max(period / 4, eps(Float64))))
 	ts = range(t_lo, t_hi; length=n)
 	states = [valve_state(vp, t) for t in ts]
@@ -117,9 +120,15 @@ function valve_state_varies(vp::AbstractValveProgram, t_lo::Real, t_hi::Real)
 end
 
 function valve_state_varies_for_peaklist(vp::AbstractValveProgram, pl; nτ::Integer=6)
-	τmax = isempty(pl.τR) ? 0.0 : maximum(pl.τR)
-	t_lo = minimum(pl.tR) - nτ * τmax
-	t_hi = maximum(pl.tR) + nτ * τmax
+	# Ignore failed/non-physical rows (NaN/Inf) to avoid crashes in
+	# window construction for modulation checks.
+	finite_rows = findall(isfinite.(pl.tR) .&& isfinite.(pl.τR))
+	isempty(finite_rows) && return false
+	tR_f = pl.tR[finite_rows]
+	τR_f = pl.τR[finite_rows]
+	τmax = maximum(τR_f)
+	t_lo = minimum(tR_f) - nτ * τmax
+	t_hi = maximum(tR_f) + nτ * τmax
 	return valve_state_varies(vp, t_lo, t_hi)
 end
 

@@ -207,6 +207,19 @@ function change_initial(par::GasChromatographySimulator.Parameters, init_t, init
 	return newpar
 end
 
+"""Index in `par.sub` for a peaklist row (match CAS + annotation when present)."""
+function _sub_index_for_peaklist_row(par::GasChromatographySimulator.Parameters, cas, ann)
+	ann_str = ann isa AbstractString ? ann : string(ann)
+	if !isempty(ann_str)
+		for k in eachindex(par.sub)
+			if par.sub[k].CAS == cas && par.sub[k].ann == ann_str
+				return k
+			end
+		end
+	end
+	return findfirst(==(cas), (s.CAS for s in par.sub))
+end
+
 function change_initial(par::GasChromatographySimulator.Parameters, prev_pl)
 	# Drop non-finite carry-over peaks (failed upstream rows) so Substance construction
 	# does not throw on t₀/τ₀ = NaN/Inf. This keeps simulate_along_paths running and
@@ -216,12 +229,19 @@ function change_initial(par::GasChromatographySimulator.Parameters, prev_pl)
 		@warn "change_initial: dropping $(nrow(prev_pl) - length(finite_rows)) non-finite peak rows before downstream simulation."
 	end
 	isempty(finite_rows) && throw(ArgumentError("change_initial: no finite peaks to pass downstream (all tR/τR are non-finite). Check upstream module simulation and flow/pressure settings."))
-	CAS_par = [par.sub[i].CAS for i in eachindex(par.sub)]
+	has_ann = :Annotations in propertynames(prev_pl)
 	new_sub = GasChromatographySimulator.Substance[]
 	for i in finite_rows
-		# filter for correct CAS and annotation (slice number)
-		i_sub = findfirst(prev_pl.CAS[i] .== CAS_par)
+		ann_i = has_ann ? prev_pl.Annotations[i] : ""
+		i_sub = _sub_index_for_peaklist_row(par, prev_pl.CAS[i], ann_i)
 		i_sub === nothing && continue
+		# Injection time from peaklist. Default τ₀ = upstream simulated width (column→column, TM→column).
+		# Use `par.sub.τ₀` only when this row matches a sliced substance (CAS + annotation),
+		# e.g. after valve junction slicing — not on CAS-only fallback (downstream template `par`).
+		τ_init = prev_pl.τR[i]
+		if !isempty(ann_i) && par.sub[i_sub].ann == ann_i
+			τ_init = par.sub[i_sub].τ₀
+		end
 		push!(new_sub, GasChromatographySimulator.Substance(
 			par.sub[i_sub].name,
 			par.sub[i_sub].CAS,
@@ -232,7 +252,7 @@ function change_initial(par::GasChromatographySimulator.Parameters, prev_pl)
 			prev_pl.Annotations[i],
 			par.sub[i_sub].Cag,
 			prev_pl.tR[i],
-			prev_pl.τR[i],
+			τ_init,
 		))
 	end
 	isempty(new_sub) && throw(ArgumentError("change_initial: no matching CAS entries found between previous peak list and downstream parameters."))
@@ -280,6 +300,9 @@ widths, and other chromatographic parameters.
 - Second variant is used for subsequent column segments
 - Peak areas are preserved between segments
 - Initial areas are set to 1.0 for the first segment
+- For valve-sliced peaks, pass the `Parameters` returned from
+  [`apply_valve_junctions_at_vertex`](@ref): `t₀` from peaklist `tR`, `τ₀` from matching
+  `par.sub` when CAS and annotation match (not peaklist `τR`). Otherwise upstream `τR` is used.
 """
 function simulate_ModuleColumn(segment_par, t₀, τ₀)
 	new_segment_par = GasChromatographySystems.change_initial(segment_par, t₀, τ₀)
@@ -433,11 +456,12 @@ function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_
 						# valve state varies in time, split peaks by period before the downstream
 						# segment (analogous to TM slicing, see ValveJunction.jl).
 						p_pos = findfirst(==(i_par[j]), path_edge_idx)
+						par_in = par_sys[i_par[j]]
 						if p_pos !== nothing && p_pos > 1
 							# Junction vertex = destination of upstream path edge
 							v_junc = dst(paths[i][p_pos - 1])
-							_, pl_in, _ = GasChromatographySystems.apply_valve_junctions_at_vertex(
-								sys, v_junc, par_sys[i_par[j]], pl_in; nτ=nτ,
+							par_in, pl_in, _ = GasChromatographySystems.apply_valve_junctions_at_vertex(
+								sys, v_junc, par_in, pl_in; nτ=nτ,
 							)
 						end
 
@@ -454,7 +478,7 @@ function simulate_along_paths(sys, p2fun, paths, par_sys; t₀=zeros(length(par_
 							# Ordinary column: continue with (possibly valve-sliced) peak list.
 							try
 								new_par_sys[i_par[j]], peaklists_[j], solutions_[j] =
-									simulate_ModuleColumn(par_sys[i_par[j]], pl_in)
+									simulate_ModuleColumn(par_in, pl_in)
 							catch err
 								if err isa ArgumentError && occursin("no finite peaks to pass downstream", sprint(showerror, err))
 									mod_name = sys.modules[i_par[j]].name

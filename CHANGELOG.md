@@ -22,6 +22,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - `slicing` optional `ann_prefix` keyword (default `"s"`; valve slices use `"v"`).
 
 ### Changed
+- `graph_to_parameters` now enforces `GasChromatographySimulator.Options(control="Pressure")` (with warning when `sys.options.control != "Pressure"`), to match pressure-balanced network simulations (`solve_balance`/`build_pressure_squared_functions`) and avoid accidental over-driving with flow-control.
 - Valve junction API: `valve_slicing_schedule` returns `(mp, t_closed, phase_shift)` instead of TM-style `(PM, ratio, shift)`; `slice_peaks_by_valve` / `simplified_valve_junction` use valve phase names; added `t_start_next_open_window`.
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
 - README: fixed CI and Codecov badge links (`GasChromatographyToolbox` org name).

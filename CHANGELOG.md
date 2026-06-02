@@ -18,8 +18,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Phase 5.3 (partial): `is_simulation_segment`, `path_is_chromatographic`, chromatographic `all_paths(g, modules)` / `all_paths(sys)` (exclude paths through `ModuleValve`); tests in `Chromatographic paths (exclude ModuleValve)`.
 - `graph_to_parameters` placeholder `Parameters` on valve edges (`sp = ""`, `d_open`, default solver options); `all_stationary_phases` skips modules without `sp`.
 - Docstrings and typed signatures for `index_parameter`, `common_edges`, `positive_flow`, and `path_possible` in `SolvingSystems.jl`.
-- Valve junction transport (`ValveJunction.jl`): `incident_valve_modules`, `slice_peaks_by_valve`, `simulate_valve_junction`, `apply_valve_junctions_at_vertex`; `simulate_along_paths` splits peaks at path vertices with time-varying incident valves (before downstream column/TM).
+- Valve junction transport (`ValveJunction.jl`): `incident_valve_modules`, `slice_peaks_by_valve`, `simulate_valve_junction`, `apply_valve_junctions_at_vertex`, `select_valve_initial_width`; `simulate_along_paths` splits peaks at path vertices with time-varying incident valves (before downstream column/TM).
+- `ValveInitialWidth` type alias and `ModuleValveOptions.valve_initial_width` — `:inherit` (default) or `(:fixed, width_s)` for per-slice initial peak width after the junction (simulator `τ₀`; `0.0` = sharp band, TM `refocus` analogue).
 - `slicing` optional `ann_prefix` keyword (default `"s"`; valve slices use `"v"`).
+- Tests: `Valve junction slicing` (area conservation, slice ordering, `valve_initial_width` / `select_valve_initial_width`, sharp-band `change_initial`); `change_initial finite-row guard`.
 
 ### Changed
 - `graph_to_parameters` now enforces `GasChromatographySimulator.Options(control="Pressure")` (with warning when `sys.options.control != "Pressure"`), to match pressure-balanced network simulations (`solve_balance`/`build_pressure_squared_functions`) and avoid accidental over-driving with flow-control.
@@ -37,6 +39,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Removed valve program synchronization: `ValveProgram` / `PeriodicValveProgram` are no longer merged or resampled in `common_timesteps` / `update_system` (fixes large grids and slow `pressure_functions` on periodic DPM systems).
 
 ### Fixed
+- `simulate_along_paths`: downstream column after a valve junction uses sliced `Parameters` from `apply_valve_junctions_at_vertex` (`par_in`), not the path template `par_sys`.
+- `change_initial`: when peak-list annotations match valve slice rows (`"v…"`), downstream `τ₀` is taken from `par.sub` (honours `valve_initial_width=(:fixed, 0.0)`); otherwise keeps upstream `τR` (TM → column and column → column handoffs unchanged).
 - `ValveProgram(time_steps, state_steps)` now validates matching vector lengths in the inner constructor (prevents inconsistent instances from the default typed constructor path).
 - Implemented valve hydraulics in permeability/restriction evaluation using `σ(t) = valve_state(...)` with open/closed restrictions (`d_open`/`d_closed`), enabling `ModuleValve` edges in flow solves.
 - `update_system` no longer mis-handles `ModuleValve` inside the column/TM temperature branch (constant-`T` valves unchanged; valves with `TemperatureProgram` `T` resample `T` only).

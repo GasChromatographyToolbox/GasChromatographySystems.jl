@@ -12,6 +12,8 @@ Structure describing general options for the simulation of the system.
 * `vis`: Used model of viscosity. `HP` is a second-order polynomial taken from the HP flow calculator. `Blumberg` is an emperical formula according to the book
     `Temperature-programmed Gas Chromatography` by Leonid M. Blumberg (2010, Wiley-VCH).
 * `control`: Control of the "Flow" or of the "Pressure" (at column inlet) during the program.
+  Note: graph-based workflows that use `solve_balance` + `build_pressure_squared_functions` +
+  `graph_to_parameters` use pressure-defined programs and therefore run with `control="Pressure"`.
 * `k_th`: Threshold for the maximum of the retention factor. If the calculated retention factor is bigger than `k_th` than the retention factor is set to the value `k_th`.
     This is done to avoid to small step widths in the solver for highly retained soultes at the beginning of a GC program. 
 """
@@ -433,7 +435,9 @@ end
 Piecewise-constant valve state at time `t` (s): `true` = open, `false` = closed.
 """
 function valve_state(vp::PeriodicValveProgram, t)
-    t = Float64(t)
+    # Keep valve evaluation compatible with AD numbers (e.g. ForwardDiff.Dual)
+    # by unwrapping to the primal scalar time when needed.
+    t = (hasfield(typeof(t), :value) ? Float64(getfield(t, :value)) : Float64(t))
     tol = eps(Float64) * 100
     closed_state, open_state = _periodic_closed_open_states(vp.inverted)
     mp, t_closed = vp.mp, vp.t_closed
@@ -454,7 +458,9 @@ function valve_state(vp::PeriodicValveProgram, t)
 end
 
 function valve_state(vp::ValveProgram, t)
-    t = Float64(t)
+    # Keep valve evaluation compatible with AD numbers (e.g. ForwardDiff.Dual)
+    # by unwrapping to the primal scalar time when needed.
+    t = (hasfield(typeof(t), :value) ? Float64(getfield(t, :value)) : Float64(t))
     τ_prev = 0.0
     for i in eachindex(vp.time_steps)
         τ_end = τ_prev + vp.time_steps[i]

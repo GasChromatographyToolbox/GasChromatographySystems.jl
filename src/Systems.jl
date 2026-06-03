@@ -367,14 +367,14 @@ function GCxGC_TM(; L1 = 30.0, d1 = 0.25, df1 = 0.25, sp1 = "ZB1ms", TP1 = defau
 end
 
 """
-	GCxGC_DPM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, pin, pout, L_valve, d_open, d_closed, TP_valve, VP, pmod; name="GCxGC_DPM", opt=GasChromatographySystems.Options(), kwargs...)
+	GCxGC_DPM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, pin, pout, L_valve, d_open, d_closed, TP_valve, VP, pmod; name="GCxGC_DPM", opt=GasChromatographySystems.Options(), opt_valve=ModuleValveOptions(ng=true, valve_initial_width=(:fixed, 0.0)), alg=Vern9(), abstol=1e-10, reltol=1e-8, kwargs...)
 
 Create a GC×GC system with dynamic pressure modulation (DPM) valve.
 
 This function constructs a GC×GC system consisting of:
-- First dimension GC column
-- Second dimension GC column  
-- Dynamic pressure modulation valve placed between the two columns
+- First dimension GC column (outlet at modulator tee, `p₂` from flow balance)
+- Second dimension GC column
+- [`ModuleValve`](@ref) on edge 4→2 (hydraulics + junction slicing in `simulate_along_paths`)
 
 # Arguments
 
@@ -394,33 +394,58 @@ This function constructs a GC×GC system consisting of:
 - `L_valve`: Length of pressure modulation valve (m)
 - `d_open`: Diameter of open pressure modulation valve (mm)
 - `d_closed`: Diameter of closed pressure modulation valve (mm)
-- `TP_valve`: Temperature program for pressure modulation valve
-- `VP`: Valve program for pressure modulation valve
-- `pmod`: Pressure modulation point (Pa)
+- `TP_valve`: Temperature of the valve module (°C) or a `TemperatureProgram`
+- `VP`: Valve program ([`PeriodicValveProgram`](@ref) recommended for FastGC×GC)
+- `pmod`: Programmed modulator supply pressure at `p₄` (Pa)
 
 ## Flow and Pressure Parameters
-- `pin`: Inlet pressure of the first dimension column (Pa)
-- `pout`: Outlet pressure of the second dimension column (Pa)
+- `pin`: Inlet pressure at `p₁` (Pa)
+- `pout`: Outlet pressure at `p₃` (Pa); use `0.0` for vacuum (stored as `eps`)
 
 ## Optional Parameters
-- `name`: System name (default: "GCxGC_DPM")
-- `opt`: System options
+- `name`: System name (default: `"GCxGC_DPM"`)
+- `opt`: [`Options`](@ref) for the system
+- `opt_valve`: [`ModuleValveOptions`](@ref) (default sharp slices: `valve_initial_width=(:fixed, 0.0)`)
+- `alg`: ODE solver for both columns (default: `Vern9()`)
+- `abstol`, `reltol`: ODE tolerances passed to both columns (defaults `1e-10`, `1e-8`, as for TM modules)
+- `kwargs...`: Forwarded to [`ModuleValve`](@ref) only (not column options)
 
 # Returns
-- `System`: Configured GC×GC system with dynamic pressure modulation valve
+- `System`: Configured GC×GC system with synchronized programs (`update_system`)
+
+# Simulation notes
+
+After `solve_balance` / `build_pressure_squared_functions`:
+
+1. Build parameters with a **fine pressure grid** on the tee (unknown `p₂`):
+   `graph_to_parameters(sys, p2fun, db, solutes; interp=true, dt=0.001, mode="λ")`.
+   Use `dt ≪ VP.mp` (e.g. `dt ≤ 0.001` for a 0.33 s period). `interp=false` is also fine if `p₂(t)` stays piecewise constant when plotted.
+2. **Verify** `par[1].prog.pout_itp` (i.e. `p₂`) vs valve period before path simulation.
+3. Column defaults use **`Vern9()`** and tight tolerances so the migration ODE resolves **`∂r/∂t`** spikes when `p₂` steps (one τ bump per flow change). `Tsit5()` with loose tolerances can miss modulations on column 1.
+4. Avoid `pmod ≈ pin` if segment `1→2` enters near-zero-flow windows (see workplan §5.6).
 
 # Example
 ```julia
 sys = GCxGC_DPM(
-    L1 = 3.0, d1 = 0.1, df1 = 0.1, sp1 = "ZB1ms", TP1 = default_TP(), 
-    L2 = 2.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(), 
-    pin = 300000.0, pout = 101300.0, 
-    L_valve = 0.01, d_open = 0.001, d_closed = eps(Float64), TP_valve = default_TP(), 
-    VP = default_ValveProgram(), pmod = 300000.0
+    L1 = 3.0, d1 = 0.1, df1 = 0.1, sp1 = "ZB1ms", TP1 = default_TP(),
+    L2 = 1.0, d2 = 0.1, df2 = 0.1, sp2 = "Stabilwax", TP2 = default_TP(),
+    pin = 400000.0, pout = 101300.0,
+    L_valve = 0.01, d_open = 1.0, d_closed = eps(Float64), TP_valve = 250.0,
+    VP = PeriodicValveProgram(1 / 3, 0.1, 1800.0; inverted=true), pmod = 390000.0,
 )
 ```
 """
-function GCxGC_DPM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, pin, pout, L_valve, d_open, d_closed, TP_valve, VP, pmod; name="GCxGC_DPM", opt=GasChromatographySystems.Options(), kwargs...)
+function GCxGC_DPM(
+	L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, pin, pout,
+	L_valve, d_open, d_closed, TP_valve, VP, pmod;
+	name="GCxGC_DPM",
+	opt=GasChromatographySystems.Options(),
+	opt_valve=ModuleValveOptions(ng=true, valve_initial_width=(:fixed, 0.0)),
+	alg=Vern9(),
+	abstol=1e-10,
+	reltol=1e-8,
+	kwargs...,
+)
 	g = SimpleDiGraph(4)
 	add_edge!(g, 1, 2) # Inj -> 1st GC column -> Mod point
 	add_edge!(g, 2, 3) # Mod point -> 2nd GC column -> Det 
@@ -442,9 +467,15 @@ function GCxGC_DPM(L1, d1, df1, sp1, TP1, L2, d2, df2, sp2, TP2, pin, pout, L_va
 	
 	# modules
 	modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
-	modules[1] = GasChromatographySystems.ModuleColumn("1 -> 2", L1, d1*1e-3, df1*1e-6, sp1, TP1, NaN; alg=Tsit5(), ng=true, kwargs...)
-	modules[2] = GasChromatographySystems.ModuleColumn("2 -> 3", L2, d2*1e-3, df2*1e-6, sp2, TP2, NaN; alg=Tsit5(), ng=true, kwargs...)
-	modules[3] = GasChromatographySystems.ModuleValve("4 -> 2", L_valve, d_open*1e-3, d_closed*1e-3, TP_valve, VP; ng=true, kwargs...)
+	col_kw = (; alg=alg, ng=true, abstol=abstol, reltol=reltol)
+	modules[1] = GasChromatographySystems.ModuleColumn("1 -> 2", L1, d1 * 1e-3, df1 * 1e-6, sp1, TP1, NaN; col_kw...)
+	modules[2] = GasChromatographySystems.ModuleColumn("2 -> 3", L2, d2 * 1e-3, df2 * 1e-6, sp2, TP2, NaN; col_kw...)
+	modules[3] = GasChromatographySystems.ModuleValve(
+		"4 -> 2", L_valve, d_open * 1e-3, d_closed * 1e-3, TP_valve, VP;
+		ng=opt_valve.ng,
+		valve_initial_width=opt_valve.valve_initial_width,
+		kwargs...,
+	)
 	# system
 	sys_ = GasChromatographySystems.System(name, g, pp, modules, opt)
 	sys = GasChromatographySystems.update_system(sys_)

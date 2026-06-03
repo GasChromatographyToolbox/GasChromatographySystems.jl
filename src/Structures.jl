@@ -306,6 +306,99 @@ end
 
 default_periodic_ValveProgram() = PeriodicValveProgram(10.0, 2.0, 1800.0)
 
+"""
+    periodic_valve_phase_boundary_times(vp::PeriodicValveProgram, t_lo, t_hi)
+
+Absolute times (s) in `[t_lo, t_hi]` where [`valve_state`](@ref) changes, including
+period starts `t_start + k·mp` and open/closed switches at `t_start + k·mp + t_closed`.
+"""
+function periodic_valve_phase_boundary_times(vp::PeriodicValveProgram, t_lo::Real, t_hi::Real)
+    tol = eps(Float64) * 100
+    t_lo, t_hi = Float64(t_lo), Float64(t_hi)
+    t_hi <= t_lo && return Float64[]
+    mp, tc = vp.mp, vp.t_closed
+    t0, t_end = vp.t_start, vp.t_end
+    times = Float64[]
+    k = max(0, floor(Int, (t_lo - t0) / mp))
+    k_max = ceil(Int, (min(t_hi, t_end) - t0) / mp) + 1
+    while k <= k_max
+        t_phase = t0 + k * mp
+        t_phase >= t_end - tol && break
+        if t_phase > t_lo + tol && t_phase < t_hi - tol
+            push!(times, t_phase)
+        end
+        t_open = t_phase + tc
+        if tc > tol && t_open > t_lo + tol && t_open < t_hi - tol
+            push!(times, t_open)
+        end
+        k += 1
+    end
+    return times
+end
+
+"""
+    valve_program_phase_boundary_times(vp::ValveProgram, t_lo, t_hi)
+
+Cumulative segment end times (s) of an explicit [`ValveProgram`](@ref) that fall in `(t_lo, t_hi)`.
+"""
+function valve_program_phase_boundary_times(vp::ValveProgram, t_lo::Real, t_hi::Real)
+    t_lo, t_hi = Float64(t_lo), Float64(t_hi)
+    t_hi <= t_lo && return Float64[]
+    τ = 0.0
+    times = Float64[]
+    for Δ in vp.time_steps
+        τ += Float64(Δ)
+        if τ > t_lo && τ < t_hi
+            push!(times, τ)
+        end
+    end
+    return times
+end
+
+"""
+    valve_phase_boundary_times(vp::AbstractValveProgram, t_lo, t_hi)
+
+Dispatch to periodic or explicit valve schedule boundary times in `(t_lo, t_hi)`.
+"""
+valve_phase_boundary_times(vp::PeriodicValveProgram, t_lo::Real, t_hi::Real) =
+    periodic_valve_phase_boundary_times(vp, t_lo, t_hi)
+valve_phase_boundary_times(vp::ValveProgram, t_lo::Real, t_hi::Real) =
+    valve_program_phase_boundary_times(vp, t_lo, t_hi)
+
+"""
+    periodic_valve_pressure_time_steps(vp::PeriodicValveProgram, t_lo, t_hi)
+
+Segment durations (s) for one closed and one open phase per period, repeated over
+`[t_lo, min(t_hi, vp.t_end))`, for [`steps_interpolation`](@ref) of resolved pressures.
+"""
+function periodic_valve_pressure_time_steps(vp::PeriodicValveProgram, t_lo::Real, t_hi::Real)
+    tol = eps(Float64) * 100
+    t_lo, t_hi = Float64(t_lo), Float64(t_hi)
+    t_hi <= t_lo && return Float64[]
+    mp, tc = vp.mp, vp.t_closed
+    open_dur = mp - tc
+    t_end = min(vp.t_end, t_hi)
+    segs = Float64[]
+    t = vp.t_start
+    while t < t_end - tol
+        t_phase_end = min(t + mp, t_end)
+        closed_len = min(tc, t_phase_end - t)
+        if closed_len > tol
+            push!(segs, closed_len)
+        end
+        t += tc
+        if t >= t_end - tol
+            break
+        end
+        open_len = min(open_dur, t_phase_end - t)
+        if open_len > tol
+            push!(segs, open_len)
+        end
+        t += open_len
+    end
+    return segs
+end
+
 function _periodic_closed_open_states(inverted::Bool)
     closed_state = inverted ? true : false
     open_state = !closed_state

@@ -667,34 +667,129 @@ end
 =#
 
 """
+    system_has_modulated_valve_pressure(sys)
+
+Return `true` if any [`ModuleValve`](@ref) on `sys` has an [`AbstractValveProgram`](@ref) `state`
+(pressure at tee vertices follows piecewise-constant valve phases).
+"""
+function system_has_modulated_valve_pressure(sys)
+    for i in GasChromatographySystems.index_modules_with_valve_program(sys)
+        sys.modules[i].state isa GasChromatographySystems.AbstractValveProgram || continue
+        return true
+    end
+    return false
+end
+
+"""
+    pressure_time_steps_for_interpolation(sys; dt=1)
+
+Segment durations (s) for [`steps_interpolation`](@ref) of resolved vertex pressures.
+
+On graphs with a tee (`degree ≥ 3`) and a [`ModuleValve`](@ref), returns
+[`periodic_valve_pressure_time_steps`](@ref) (or explicit valve segment durations) so
+`interp=true` holds pressure constant within each open/closed phase. Straight graphs keep
+[`common_timesteps`](@ref) only.
+"""
+function pressure_time_steps_for_interpolation(sys; dt=1)
+    com = GasChromatographySystems.common_timesteps(sys)
+    tend = Float64(sum(com))
+    if all(degree(sys.g) .< 3)
+        return com
+    end
+    valve_seg = Float64[]
+    for i in GasChromatographySystems.index_modules_with_valve_program(sys)
+        vp = sys.modules[i].state
+        if vp isa GasChromatographySystems.PeriodicValveProgram
+            t_hi = min(tend, vp.t_end)
+            append!(
+                valve_seg,
+                GasChromatographySystems.periodic_valve_pressure_time_steps(vp, 0.0, t_hi),
+            )
+        elseif vp isa GasChromatographySystems.ValveProgram
+            append!(valve_seg, Float64.(vp.time_steps))
+        end
+    end
+    if isempty(valve_seg)
+        t_pts = Float64[0.0]
+        for t in 0:dt:tend
+            push!(t_pts, Float64(t))
+        end
+        push!(t_pts, tend)
+        sort!(unique!(t_pts))
+        seg = diff(t_pts)
+        return filter!(Δ -> Δ > eps(Float64), seg)
+    end
+    # Valve-aligned grid only (do not subdivide periods with column/T programs).
+    return valve_seg
+end
+
+"""Scalar time for piecewise schedules (compatible with ForwardDiff in the ODE)."""
+_primal_schedule_time(t) =
+    hasfield(typeof(t), :value) ? Float64(getfield(t, :value)) : Float64(t)
+
+"""Piecewise-constant pressure on valve segment durations (no ramps between phases)."""
+function _piecewise_pressure_itp(p_func, time_steps::AbstractVector{<:Real})
+    seg = Float64.(time_steps)
+    isempty(seg) && return p_func
+    τ_lo = Float64[0.0; cumsum(seg)[1:(end - 1)]]
+    p_steps = Vector{Float64}(undef, length(seg))
+    tcur = 0.0
+    for j in eachindex(seg)
+        p_steps[j] = Float64(p_func(tcur + seg[j] / 2))
+        tcur += seg[j]
+    end
+    τ_end = tcur
+    return t -> begin
+        τ = _primal_schedule_time(t)
+        τ >= τ_end && return p_steps[end]
+        i = searchsortedlast(τ_lo, τ)
+        i = clamp(i, 1, length(p_steps))
+        return p_steps[i]
+    end
+end
+
+"""
 	interpolate_pressure_functions(sys, p2fun; dt=1, mode="λ")
 
-Interpolates (linearly) all pressure funtions at the vertices of the system of capillaries `sys` between the time steps `dt`. For the speed of the simulation these interpolated functions are faster than the pure solution functions of the flow balance equations.
+Interpolates resolved vertex pressures for fast ODE evaluation.
+
+- **Straight graphs** (`all(degree < 3)`): linear interpolation on [`common_timesteps`](@ref) knots.
+- **Tee / modulator graphs** with [`ModuleValve`](@ref): piecewise-constant pressure on
+  [`periodic_valve_pressure_time_steps`](@ref) / explicit [`ValveProgram`](@ref) segments
+  (no ramps across valve switches). Straight graphs still use a uniform `dt` grid when needed.
 
 # Arguments
 * `sys`: System structure of the capillary system for which the flow balance is set up.
 * `p2fun`: Julia function of the solutions of the flow balance equations from `build_pressure_squared_functions(sys; mode="λ")`
-* `dt`: time steps, where the original pressure function is evaluated. Inbetween these time steps the pressure function is linearly interpolated. 
+* `dt`: Spacing (s) of the auxiliary uniform time grid on tee graphs (default `1`). Use `dt ≪ mp` for FastGC×GC; phase boundaries are always included.
 * `mode`: Mode for flow equations to use flow permeabilities λ (`mode = λ`; default) or flow restrictions κ (`mode = κ`)
 """
 function interpolate_pressure_functions(sys, p2fun; dt=1, mode="λ")
 	tsteps = GasChromatographySystems.common_timesteps(sys)
 	tend = sum(tsteps)
-	if all(degree(sys.g).<3) # no split/merge nodes, straight graph -> pressure at nodes is linear
-		trange = cumsum(tsteps)
+	use_valve_steps = GasChromatographySystems.system_has_modulated_valve_pressure(sys) &&
+		!all(degree(sys.g) .< 3)
+	trange = if all(degree(sys.g) .< 3)
+		cumsum(tsteps)
+	elseif use_valve_steps
+		cumsum(pressure_time_steps_for_interpolation(sys; dt=dt))
 	else
-		trange = 0:dt:tend
+		0:dt:tend
 	end
 	i_unknown_p = GasChromatographySystems.unknown_p(sys)
-	p_func = GasChromatographySystems.pressure_functions(sys, p2fun; mode=mode) #!!! mode "λ" "κ" !!!
+	p_func = GasChromatographySystems.pressure_functions(sys, p2fun; mode=mode)
 	p_itp = Array{Any}(undef, length(p_func))
 	for i=1:length(p_func)
-		#if all(isnan.(sys.pressurepoints[i].pressure_steps))
 		if i ∈ i_unknown_p
-			p_itp[i] = linear_interpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
+			if use_valve_steps
+				seg = pressure_time_steps_for_interpolation(sys; dt=dt)
+				p_itp[i] = _piecewise_pressure_itp(p_func[i], seg)
+			else
+				p_itp[i] = linear_interpolation((trange, ), p_func[i].(trange), extrapolation_bc=Flat())
+			end
 		else
 			p_itp[i] = p_func[i]
-		end # no additional interpolation, if the pressure is allready defined by a linear program
+		end
 	end
 	return p_itp
 end

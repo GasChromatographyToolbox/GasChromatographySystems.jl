@@ -381,6 +381,63 @@ end
     @test par_down_col.sub[1].τ₀ == 0.33
 end
 
+@testset "GCxGC_DPM end-to-end path simulation" begin
+    GCS = GasChromatographySystems
+    db_file = string(@__DIR__, "/data/Database_test.csv")
+    db_dataframe = DataFrame(CSV.File(db_file, header=1, silencewarnings=true))
+    insertcols!(db_dataframe, 1, :No => collect(1:length(db_dataframe.Name)))
+    selected = ["Undecane"]
+
+    # Short columns + moderate tR so [tR ± nτ·τR] crosses open/closed phases (valve mp = 10 s).
+    TP = GCS.TemperatureProgram([30.0, 90.0])
+    VP = GCS.PeriodicValveProgram(10.0, 2.0, 90.0; inverted=true)
+    sys = GCS.GCxGC_DPM(
+        0.15, 0.25, 0.25, "SLB5ms", TP,
+        0.3, 0.1, 0.1, "SLB5ms", TP,
+        400_000.0, 101_300.0,
+        0.01, 1.0, eps(Float64), 25.0, VP, 390_000.0,
+    )
+    @test sys.modules[3] isa GCS.ModuleValve
+    @test isnan(sys.pressurepoints[2].P)
+
+    sol = GCS.solve_balance(sys; mode="λ")
+    p2fun = GCS.build_pressure_squared_functions(sys, sol; mode="λ")
+    par = GCS.graph_to_parameters(sys, p2fun, db_dataframe, selected; interp=true, dt=0.01, mode="λ")
+    @test par[1].col.sp == "SLB5ms"
+    @test par[2].col.sp == "SLB5ms"
+    @test par[3].col.sp == ""  # valve edge placeholder
+
+    _, edge_paths = GCS.all_paths(sys)
+    @test length(edge_paths) == 1
+    @test GCS.path_is_chromatographic(sys.g, sys.modules, edge_paths[1])
+    @test GCS.path_possible(sys, p2fun, edge_paths[1]; mode="λ") == true
+
+    path_pos, peaklists, solutions, new_par = GCS.simulate_along_paths(
+        sys, p2fun, edge_paths, par; nτ=6, mode="λ",
+    )
+    @test path_pos[1] == "path is possible"
+    @test length(peaklists[1]) == 2
+    @test length(solutions[1]) == 2
+
+    pl_col1 = peaklists[1][1]
+    pl_col2 = peaklists[1][2]
+    @test nrow(pl_col1) == 1
+    @test all(isfinite, pl_col1.tR)
+    @test all(isfinite, pl_col1.τR)
+    @test GCS.valve_state_varies_for_peaklist(VP, pl_col1; nτ=6)
+
+    @test nrow(pl_col2) >= 2
+    @test all(ann -> startswith(ann, "v"), pl_col2.Annotations)
+    @test issorted(pl_col2.tR)
+    @test all(isfinite, pl_col2.tR)
+    @test all(isfinite, pl_col2.τR)
+    @test isapprox(sum(pl_col2.A), sum(pl_col1.A); rtol=1e-8, atol=1e-10)
+
+    # Default GCxGC_DPM: sharp slices on col 2 (τ₀ = 0), upstream τR preserved in peaklist.
+    @test all(==(0.0), (s.τ₀ for s in new_par[2].sub))
+    @test all(pl_col2.τR .> 0.0)
+end
+
 @testset "change_initial finite-row guard" begin
     GCS = GasChromatographySystems
     db_file = string(@__DIR__, "/data/Database_test.csv")

@@ -22,6 +22,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - `ValveInitialWidth` type alias and `ModuleValveOptions.valve_initial_width` — `:inherit` (default) or `(:fixed, width_s)` for per-slice initial peak width after the junction (simulator `τ₀`; `0.0` = sharp band, TM `refocus` analogue).
 - `slicing` optional `ann_prefix` keyword (default `"s"`; valve slices use `"v"`).
 - Tests: `Valve junction slicing` (area conservation, slice ordering, `valve_initial_width` / `select_valve_initial_width`, sharp-band `change_initial`); `change_initial finite-row guard`.
+- `GCxGC_DPM` builder: default `Vern9()`, `abstol=1e-10`, `reltol=1e-8`, `opt_valve` with `valve_initial_width=(:fixed, 0.0)`; docstring notes on `graph_to_parameters` `dt` and verifying `p₂(t)`.
 
 ### Changed
 - `graph_to_parameters` now enforces `GasChromatographySimulator.Options(control="Pressure")` (with warning when `sys.options.control != "Pressure"`), to match pressure-balanced network simulations (`solve_balance`/`build_pressure_squared_functions`) and avoid accidental over-driving with flow-control.

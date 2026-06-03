@@ -418,8 +418,8 @@ This function constructs a GC×GC system consisting of:
 After `solve_balance` / `build_pressure_squared_functions`:
 
 1. Build parameters with a **fine pressure grid** on the tee (unknown `p₂`):
-   `graph_to_parameters(sys, p2fun, db, solutes; interp=true, dt=0.001, mode="λ")`.
-   Use `dt ≪ VP.mp` (e.g. `dt ≤ 0.001` for a 0.33 s period). `interp=false` is also fine if `p₂(t)` stays piecewise constant when plotted.
+   `graph_to_parameters(sys, p2fun, db, solutes; interp=true, dt=0.01, mode="λ")`.
+   With `interp=true`, tee graphs align pressure steps to [`PeriodicValveProgram`](@ref) phase boundaries (no ramps across valve switches); `dt` is an extra uniform sample spacing (e.g. `dt ≪ VP.mp` for fast periods). `interp=false` uses analytic `p₂(t)` from the balance.
 2. **Verify** `par[1].prog.pout_itp` (i.e. `p₂`) vs valve period before path simulation.
 3. Column defaults use **`Vern9()`** and tight tolerances so the migration ODE resolves **`∂r/∂t`** spikes when `p₂` steps (one τ bump per flow change). `Tsit5()` with loose tolerances can miss modulations on column 1.
 4. Avoid `pmod ≈ pin` if segment `1→2` enters near-zero-flow windows (see workplan §5.6).

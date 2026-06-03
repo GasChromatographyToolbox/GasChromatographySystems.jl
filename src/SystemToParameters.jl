@@ -88,8 +88,8 @@ modulators (ModuleTM), setting up temperature programs, pressure functions, and 
 - `selected_solutes`: List of solutes to include in the simulation
 
 # Keyword Arguments
-- `interp`: Whether to use interpolated pressure functions (default: true)
-- `dt`: Time step for pressure function interpolation (default: 1)
+- `interp`: Whether to use interpolated pressure functions (default: true). On tee graphs with [`ModuleValve`](@ref), uses valve-phase [`steps_interpolation`](@ref) (see [`interpolate_pressure_functions`](@ref)).
+- `dt`: Spacing (s) for the auxiliary uniform pressure grid when `interp=true` (default: 1). [`PeriodicValveProgram`](@ref) phase boundaries are always included; `dt ≪ mp` still recommended for resolving slow column/T programs.
 - `mode`: Mode for flow calculations ("λ" for permeability or "κ" for restriction) (default: "λ")
 
 # Returns

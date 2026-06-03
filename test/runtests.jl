@@ -381,6 +381,121 @@ end
     @test par_down_col.sub[1].τ₀ == 0.33
 end
 
+@testset "GCxGC_DPM hydraulics" begin
+    GCS = GasChromatographySystems
+    db_file = string(@__DIR__, "/data/Database_test.csv")
+    db_dataframe = DataFrame(CSV.File(db_file, header=1, silencewarnings=true))
+    insertcols!(db_dataframe, 1, :No => collect(1:length(db_dataframe.Name)))
+
+    pin = 400_000.0
+    pout = 101_300.0
+    pmod = 390_000.0
+    TP = GCS.TemperatureProgram([30.0, 90.0])
+    L1, d1, df1 = 1.0, 0.25, 0.25
+    L2, d2, df2 = 0.5, 0.1, 0.1
+    sp = "SLB5ms"
+
+    """3-node 1→2→3 reference (no modulator edge 4→2)."""
+    function series_tee_reference()
+        g = SimpleDiGraph(3)
+        add_edge!(g, 1, 2)
+        add_edge!(g, 2, 3)
+        pp = [
+            GCS.PressurePoint("p₁", pin),
+            GCS.PressurePoint("p₂", NaN),
+            GCS.PressurePoint("p₃", pout),
+        ]
+        modules = GCS.AbstractModule[
+            GCS.ModuleColumn("1 -> 2", L1, d1 * 1e-3, df1 * 1e-6, sp, TP, NaN),
+            GCS.ModuleColumn("2 -> 3", L2, d2 * 1e-3, df2 * 1e-6, sp, TP, NaN),
+        ]
+        GCS.update_system(GCS.System("series_tee", g, pp, modules, GCS.Options()))
+    end
+
+    function dpm_sys(VP; d_open=10.0)
+        GCS.GCxGC_DPM(
+            L1, d1, df1, sp, TP,
+            L2, d2, df2, sp, TP,
+            pin, pout,
+            0.01, d_open, eps(Float64), 25.0, VP, pmod,
+        )
+    end
+
+    function p_at_vertex(sys, sol, vertex::Int, t::Real)
+        p2fun = GCS.build_pressure_squared_functions(sys, sol; mode="λ")
+        GCS.pressure_functions(sys, p2fun; mode="λ")[vertex](t)
+    end
+
+    sys = dpm_sys(GCS.PeriodicValveProgram(10.0, 2.0, 90.0; inverted=true))
+    @test length(GCS.unknown_p(sys)) == 1
+    @test GCS.unknown_p(sys) == [2]
+    @test isnan(sys.pressurepoints[2].P)
+    @test sys.pressurepoints[4].P == pmod
+
+    sol = GCS.solve_balance(sys; mode="λ")
+    @test length(sol) == 1
+    p2fun = GCS.build_pressure_squared_functions(sys, sol; mode="λ")
+    p_func = GCS.pressure_functions(sys, p2fun; mode="λ")
+    @test all(isfinite, p_func[2].(0.0:5.0:20.0))
+
+    # Valve closed (σ = false): p₂ matches series tee without 4→2.
+    VP_closed = GCS.ValveProgram([90.0], [false])
+    sys_closed = dpm_sys(VP_closed; d_open=1.0)
+    sys_series = series_tee_reference()
+    sol_closed = GCS.solve_balance(sys_closed; mode="λ")
+    sol_series = GCS.solve_balance(sys_series; mode="λ")
+    for t in (2.0, 5.0, 12.0)
+        p2_closed = p_at_vertex(sys_closed, sol_closed, 2, t)
+        p2_series = p_at_vertex(sys_series, sol_series, 2, t)
+        @test isapprox(p2_closed, p2_series; rtol=1e-6, atol=1.0)
+    end
+
+    # Valve open (σ = true), large d_open: p₂ ≈ programmed p₄.
+    VP_open = GCS.ValveProgram([90.0], [true])
+    sys_open = dpm_sys(VP_open; d_open=10.0)
+    sol_open = GCS.solve_balance(sys_open; mode="λ")
+    for t in (1.0, 7.0, 20.0)
+        @test isapprox(p_at_vertex(sys_open, sol_open, 2, t), pmod; rtol=1e-6, atol=10.0)
+    end
+
+    # Periodic schedule: closed-phase vs open-phase limits.
+    VP = sys.modules[3].state
+    sol_per = GCS.solve_balance(sys; mode="λ")
+    sol_s = GCS.solve_balance(sys_series; mode="λ")
+    for t in (3.0, 13.0)
+        @test !GCS.valve_state(VP, t)
+        @test isapprox(
+            p_at_vertex(sys, sol_per, 2, t),
+            p_at_vertex(sys_series, sol_s, 2, t);
+            rtol=1e-6,
+            atol=1.0,
+        )
+    end
+    for t in (1.0, 11.0)
+        @test GCS.valve_state(VP, t)
+        @test isapprox(p_at_vertex(sys, sol_per, 2, t), pmod; rtol=1e-6, atol=10.0)
+    end
+
+    tM = GCS.holdup_time_functions(sys, p2fun; mode="λ")
+    @test length(tM) == ne(sys.g)
+    for t in (3.0, 13.0, 25.0)
+        @test isfinite(tM[3](t))
+    end
+
+    selected = GCS.common_solutes(db_dataframe, sys).Name[1:1]
+    par = GCS.graph_to_parameters(sys, p2fun, db_dataframe, selected; interp=true, dt=0.01, mode="λ")
+    @test length(par) == 3
+    @test par[3].col.sp == ""
+    @test all(isfinite, par[1].prog.Fpin_steps)
+    @test all(isfinite, par[2].prog.Fpin_steps)
+    @test all(s -> iszero(s.t₀) && iszero(s.τ₀), par[1].sub)
+
+    _, edge_paths = GCS.all_paths(sys)
+    pos = GCS.positive_flow(sys, p2fun; mode="λ")
+    @test pos[1] && pos[2]
+    @test GCS.path_possible(sys, p2fun, edge_paths[1]; mode="λ")
+end
+
 @testset "GCxGC_DPM end-to-end path simulation" begin
     GCS = GasChromatographySystems
     db_file = string(@__DIR__, "/data/Database_test.csv")

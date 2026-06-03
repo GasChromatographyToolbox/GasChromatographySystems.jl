@@ -381,6 +381,38 @@ end
     @test par_down_col.sub[1].τ₀ == 0.33
 end
 
+@testset "PeriodicValveProgram pressure interpolation grid" begin
+    GCS = GasChromatographySystems
+    VP = GCS.PeriodicValveProgram(10.0, 2.0, 90.0; inverted=true)
+    bounds = GCS.periodic_valve_phase_boundary_times(VP, 0.0, 90.0)
+    @test 0.0 in bounds || 10.0 in bounds
+    @test 2.0 in bounds || 12.0 in bounds
+    VP_horizon = GCS.PeriodicValveProgram(10.0, 2.0, 90.0; inverted=true)
+    seg = GCS.periodic_valve_pressure_time_steps(VP_horizon, 0.0, 90.0)
+    @test sum(seg) ≈ 90.0
+    @test count(Δ -> isapprox(Δ, 2.0; atol=1e-9), seg) == 9   # closed phases
+    @test count(Δ -> isapprox(Δ, 8.0; atol=1e-9), seg) == 9   # open phases
+
+    sys = GCS.GCxGC_DPM(
+        1.0, 0.25, 0.25, "SLB5ms", GCS.TemperatureProgram([30.0, 90.0]),
+        0.5, 0.1, 0.1, "SLB5ms", GCS.TemperatureProgram([30.0, 90.0]),
+        400_000.0, 101_300.0,
+        0.01, 10.0, eps(Float64), 25.0, VP_horizon, 390_000.0,
+    )
+    sol = GCS.solve_balance(sys; mode="λ")
+    p2fun = GCS.build_pressure_squared_functions(sys, sol; mode="λ")
+    p_analytic = GCS.pressure_functions(sys, p2fun; mode="λ")[2]
+    p_itp = GCS.interpolate_pressure_functions(sys, p2fun; mode="λ")[2]
+    p_closed = p_analytic(3.0)
+    p_open = p_analytic(1.0)
+    @test isapprox(p_itp(2.9), p_closed; rtol=1e-6, atol=50.0)
+    @test isapprox(p_itp(3.1), p_closed; rtol=1e-6, atol=50.0)
+    @test isapprox(p_itp(0.5), p_open; rtol=1e-6, atol=50.0)
+    # coarse dt=5 must not linearly ramp across the t = 2 s valve switch (inverted VP)
+    @test isapprox(p_itp(1.9), p_open; rtol=1e-6, atol=50.0)
+    @test isapprox(p_itp(2.1), p_closed; rtol=1e-6, atol=50.0)
+end
+
 @testset "GCxGC_DPM hydraulics" begin
     GCS = GasChromatographySystems
     db_file = string(@__DIR__, "/data/Database_test.csv")
@@ -527,8 +559,9 @@ end
     @test GCS.path_is_chromatographic(sys.g, sys.modules, edge_paths[1])
     @test GCS.path_possible(sys, p2fun, edge_paths[1]; mode="λ") == true
 
+    # Wide injection so col-1 elution window spans several valve periods for junction slicing.
     path_pos, peaklists, solutions, new_par = GCS.simulate_along_paths(
-        sys, p2fun, edge_paths, par; nτ=6, mode="λ",
+        sys, p2fun, edge_paths, par; nτ=6, mode="λ", τ₀=[4.0],
     )
     @test path_pos[1] == "path is possible"
     @test length(peaklists[1]) == 2

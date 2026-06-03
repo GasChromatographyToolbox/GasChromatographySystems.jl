@@ -21,7 +21,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Valve junction transport (`ValveJunction.jl`): `incident_valve_modules`, `slice_peaks_by_valve`, `simulate_valve_junction`, `apply_valve_junctions_at_vertex`, `select_valve_initial_width`; `simulate_along_paths` splits peaks at path vertices with time-varying incident valves (before downstream column/TM).
 - `ValveInitialWidth` type alias and `ModuleValveOptions.valve_initial_width` — `:inherit` (default) or `(:fixed, width_s)` for per-slice initial peak width after the junction (simulator `τ₀`; `0.0` = sharp band, TM `refocus` analogue).
 - `slicing` optional `ann_prefix` keyword (default `"s"`; valve slices use `"v"`).
-- Tests: `Valve junction slicing` (area conservation, slice ordering, `valve_initial_width` / `select_valve_initial_width`, sharp-band `change_initial`); `change_initial finite-row guard`.
+- Tests: `Valve junction slicing` (area conservation, slice ordering, `valve_initial_width` / `select_valve_initial_width`, sharp-band `change_initial`); `GCxGC_DPM end-to-end path simulation` (`GCxGC_DPM` + `simulate_along_paths`, multi-period `v*` slices on col 2); `change_initial finite-row guard`.
 - `GCxGC_DPM` builder: default `Vern9()`, `abstol=1e-10`, `reltol=1e-8`, `opt_valve` with `valve_initial_width=(:fixed, 0.0)`; docstring notes on `graph_to_parameters` `dt` and verifying `p₂(t)`.
 
 ### Changed

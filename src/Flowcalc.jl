@@ -1,5 +1,10 @@
 # definition of all functions related to flow calculations
 
+"""Solve ``a x = -b`` from `Symbolics.linear_expansion` (Symbolics 7-safe)."""
+function _linear_expansion_solve(a, b)
+	return Num.(a) \ Num.(-b)
+end
+
 
 # first construct the flow balance equations only using the flows over the edges
 """
@@ -248,7 +253,7 @@ function solve_balance_λ(sys, subst_bal_eq_λ) # should be standard
 	if length(i_unknown_p) == length(subst_bal_eq_λ)
 		a, b, lin = Symbolics.linear_expansion(subst_bal_eq_λ , [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
 		if lin == true
-			sol = (inv(a)*-b)
+			sol = _linear_expansion_solve(a, b)
 		else
 			error("System of flow balance equations is not linear for the unknown parameters.")
 		end
@@ -273,7 +278,7 @@ function solve_balance_λ(sys, subst_bal_eq_λ) # should be standard
 		# a different order of the flow balance equations `subst_bal_eq_λ` (e.g. because balance equations for unknown outer pressures points are appended at the end of the flow balance equation array)
 		a, b, lin = Symbolics.linear_expansion([subst_bal_eq_λ[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
 		if lin == true
-			sol = (inv(a)*-b)
+			sol = _linear_expansion_solve(a, b)
 		else
 			error("System of flow balance equations is not linear for the unknown parameters.")
 		end
@@ -291,7 +296,7 @@ function solve_balance_κ(sys, subst_bal_eq_κ)
 	if length(i_unknown_p) == length(subst_bal_eq_κ)
 		a, b, lin = Symbolics.linear_expansion(subst_bal_eq_κ , [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
 		if lin == true
-			sol = (inv(a)*-b)
+			sol = _linear_expansion_solve(a, b)
 		else
 			error("System of flow balance equations is not linear for the unknown parameters.")
 		end
@@ -316,7 +321,7 @@ function solve_balance_κ(sys, subst_bal_eq_κ)
 		# a different order of the flow balance equations `subst_bal_eq_κ` (e.g. because balance equations for unknown outer pressures points are appended at the end of the flow balance equation array)
 		a, b, lin = Symbolics.linear_expansion([subst_bal_eq_κ[x] for x in bal_eq_i], [P²[i_unknown_p[i]] for i=1:length(i_unknown_p)])
 		if lin == true
-			sol = (inv(a)*-b)
+			sol = _linear_expansion_solve(a, b)
 		else
 			error("System of flow balance equations is not linear for the unknown parameters.")
 		end

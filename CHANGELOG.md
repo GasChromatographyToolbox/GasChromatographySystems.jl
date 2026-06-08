@@ -52,8 +52,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Implemented valve hydraulics in permeability/restriction evaluation using `σ(t) = valve_state(...)` with open/closed restrictions (`d_open`/`d_closed`), enabling `ModuleValve` edges in flow solves.
 - `update_system` no longer mis-handles `ModuleValve` inside the column/TM temperature branch (constant-`T` valves unchanged; valves with `TemperatureProgram` `T` resample `T` only).
 - `edge_restriction` for `ModuleValve`: correct `flow_restriction` arguments (`d_open` / `d_closed`), `module_.state` instead of `mod`, and scalar κ blend at `t`.
-
-### Fixed
 - **`solve_balance` / `Flowcalc.jl`:** Symbolics 7 `linear_expansion` matrices no longer use `LinearAlgebra.inv` (which raised `TypeError` on `BasicSymbolicImpl` entries). Linear solves use `_linear_expansion_solve` (`Num.(a) \\ Num.(-b)`). Tests pass with **Symbolics 7** in the shared GC-Workspace environment.
 
 ### Removed

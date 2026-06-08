@@ -8,8 +8,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 ### Changed
+- **`[compat]` Phase 7 / PDE co-environment:** `Symbolics = "6, 7"` so **ModelingToolkit 11** / **MethodOfLines** can resolve alongside GCSys (shared **`GC-Workspace`** dev env). Stay on **SciMLBase 2** and **OrdinaryDiffEq 6** — not ODE 7 (see Phase 8 workplan).
+- Loosened SciML-related compat pins: `DiffEqBase`, `SciMLBase`, `OrdinaryDiffEq`, `NonlinearSolve`, and `LinearSolve` from tight `~` bounds to major-version ranges (`"6"`, `"2"`, `"4"`, `"3"`).
+- Widened Makie stack compat for joint resolve with **Chromatogram.jl** and newer SciML: `CairoMakie = "0.13, 0.15"`, `GLMakie = "0.11, 0.13"`, `GraphMakie = "0.5, 0.6"`.
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
 - README: fixed CI and Codecov badge links (`GasChromatographyToolbox` org name).
+
+### Fixed
+- **`solve_balance` / `Flowcalc.jl`:** Symbolics 7 `linear_expansion` matrices no longer use `LinearAlgebra.inv` (which raised `TypeError` on `BasicSymbolicImpl` entries). Linear solves use `_linear_expansion_solve` (`Num.(a) \\ Num.(-b)`). Tests pass with **Symbolics 7** in the shared GC-Workspace environment.
 
 ### Removed
 - Unused duplicate GitHub Actions workflows under `data/.github/workflows/` (only `.github/workflows/` at the repo root is used).

@@ -6,7 +6,7 @@ All modules on a path must share the **same absolute program time** so ``T(t)`` 
 
 ## Default: column → column (junction)
 
-This is what `change_initial` / path simulation do for ordinary `ModuleColumn` (and analogous) segments.
+This is what `change_initial` / `simulate_ModuleColumn` / `simulate_along_paths` do for ordinary `ModuleColumn` segments.
 
 From the upstream peak list:
 
@@ -15,7 +15,7 @@ From the upstream peak list:
 
 The next segment starts at **its own inlet**. The next column only sees a temporal injection profile; spatial width is recovered locally if needed via ``\sigma_0 = \tau_0 |u_s|`` at that inlet (time-domain solver). Do **not** copy upstream ``\sigma_R`` across a junction when ``u_s``, diameter, or film differ.
 
-Modulator / valve junctions that **slice** a peak into reinjection windows still follow the temporal picture: each slice gets a ``t_0`` on the open window and a ``\tau_0`` from `valve_initial_width` (`:inherit` from the upstream ``\tau_R``, or a fixed focus width). That is a junction handoff with optional refocus, not a continuous spatial continuation.
+Thermal modulators (`ModuleTM`) still follow the temporal picture. With `refocus=false`, the downstream segment inherits ``\tau_R`` (via `change_initial`). With `refocus=true` (or `change_initial_focussed`), each reinjected band can start with a chosen ``\tau_0`` (often near zero) at the slice time — optional focusing, not a continuous spatial continuation of the upstream ``\sigma``.
 
 ## Same capillary, changing phase
 

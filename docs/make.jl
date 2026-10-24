@@ -8,7 +8,7 @@ makedocs(
     modules = [GasChromatographySystems],
     pages = Any[
                 "Home" => "index.md",
-                "Instalation" => "installation.md",
+                "Installation" => "installation.md",
                 "Definition of a GC system" => "definition_sys.md",
                 "Flow calculation" => "flowcalc.md",
                 "Simulation" => "simulation.md",

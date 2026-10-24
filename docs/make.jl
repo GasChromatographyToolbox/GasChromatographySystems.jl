@@ -12,6 +12,7 @@ makedocs(
                 "Definition of a GC system" => "definition_sys.md",
                 "Flow calculation" => "flowcalc.md",
                 "Simulation" => "simulation.md",
+                "Segment handoff" => "segment_handoff.md",
                 "Examples" => "examples.md",
                 "Docstrings" => "docstrings.md"
             ]

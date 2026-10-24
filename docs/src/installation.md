@@ -1,12 +1,12 @@
 # Installation
 
-To use GasChromatographicystems.jl, you need to install Julia 1.9 or greater first ([official Julia website](https://julialang.org)) and than add the package:
+To use GasChromatographySystems.jl, install [Julia 1.10 or newer](https://julialang.org) (compatible releases: 1.10, 1.11, 1.12), then add the package:
 
 ```julia
-julia> using Pkg; Pkg.add(GasChromatographySystems)
+julia> using Pkg; Pkg.add("GasChromatographySystems")
 ```
 
-To use the package type:
+To use the package:
 
 ```@example ex_3series
 using GasChromatographySystems

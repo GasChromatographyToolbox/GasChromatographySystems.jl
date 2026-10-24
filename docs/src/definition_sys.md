@@ -7,9 +7,9 @@ The structure of a complex GC system consists of four parts:
 1. Representation of the GC system as a simple directional graph.
 2. Pressure points defining the pressures at the vertices of the graph (connections of the capillaries).
 3. Modules defining the features of the capillaries, e.g. dimensions and temperature.
-4. Additional options, e.g. typ of the mobile phase gas.
+4. Additional options, e.g. type of the mobile phase gas.
 
-(ref to GasChromatographySystems.System)
+These parts are collected in `GasChromatographySystems.System(g, pressurepoints, modules, options)`.
 
 ## GC system as a graph
 

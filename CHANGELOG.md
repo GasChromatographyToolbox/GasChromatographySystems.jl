@@ -8,6 +8,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ## [Unreleased]
 
 ### Added
+- **Temporal column edges:** `ModuleColumnOptions(domain=:temporal)` maps to GasChromatographySimulator
+  `Options(domain=:temporal)`; one `simulate` entry point (spatial ``t(z)`` or temporal ``x(t)``).
+  Exit record via GCSim `peaklist_temporal` (`tR`, `τR`, `σR`, `x_end`, `exit_end`).
+  Same-capillary carry: `change_initial_spatial`. `path_possible` allows reverse flow on
+  `:temporal` edges. Vacuum-like `pout/pin < 0.1` stays spatial. Demo:
+  `notebooks/temporal_ModuleColumn.jl`. Trap→column open-end handoff and `ModuleTrap` still later.
 - Docs (`segment_handoff.md`): roadmap for **`ModuleTrap`**, bidirectional / reverse flows,
   same-capillary phase entry ``(x_0,\sigma_0)``, and ongoing GCSim compatibility — needed so
   trap→column→restrictor release pneumatics can live in Systems instead of an external

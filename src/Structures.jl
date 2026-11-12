@@ -30,7 +30,7 @@ function Options(;gas="He", odesys=true, vis="Blumberg", control="Pressure", k_t
 end
 
 """
-    ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-5, ng=false, Tcontrol="inlet")
+    ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet", domain=:spatial)
 
 Structure describing options for column modules. 
 
@@ -40,6 +40,9 @@ Structure describing options for column modules.
 * `reltol`: The relative tolerance for the ODE solver. Recommended value 1e-3 to 1e-5. 
 * `ng`: Option to calculate the simulation without a gradient (`ng = true`, default) or with a gradient (`ng = false`).
 * `Tcontrol`: Option defining at which point of the column the temperature program is calculated. The options are `inlet` (x=0) and `outlet` (x=L).
+* `domain`: Passed to GasChromatographySimulator `Options.domain`. `:spatial` (default) integrates ``t(z)``.
+  `:temporal` integrates ``x(t)`` so the band may reverse when `pin`/`pout` cross (finite pressures at both ends).
+  Vacuum-like outlets (`pout/pin < 0.1`) stay on `:spatial`.
 """
 struct ModuleColumnOptions
 	alg                 # algorithmen for the ODE solver
@@ -47,10 +50,12 @@ struct ModuleColumnOptions
     reltol              # relative tolerance for ODE solver 
 	ng::Bool            # non-gradient calculation, ignores a defined spatial change of d, df or T
 	Tcontrol::String    # temperature control at 'inlet' (top) or 'outlet' (bottom) of the column
+	domain::Symbol      # `:spatial` (default) or `:temporal`
 end
 
-function ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
-	ModuleColumnOptions(alg, abstol, reltol, ng, Tcontrol)
+function ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet", domain=:spatial)
+	domain in (:spatial, :temporal) || throw(ArgumentError("`domain` must be `:spatial` or `:temporal`, got `$domain`."))
+	ModuleColumnOptions(alg, abstol, reltol, ng, Tcontrol, domain)
 end
 
 """
@@ -110,8 +115,8 @@ Structure describing the module of a gas chromatographic column, the basic bulid
 Four methods to construct this structure exist:
 * `ModuleColumn(name, L, d, df, sp, T, opt::ModuleColumnOptions)`: The flow is not defined, uniform `d` and `df`.
 * `ModuleColumn(name, L, d, df, sp, T, F, opt::ModuleColumnOptions)`: The flow is defined by `F` and uniform `d` and `df`.
-* `ModuleColumn(name, L, d, df, sp, T; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")`: The flow is not defined, uniform `d` and `df`. Options according to `ModuleColumnOptions`.
-* `ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")`: The flow is defined by `F` and uniform `d` and `df`. Options according to `ModuleColumnOptions`.
+* `ModuleColumn(name, L, d, df, sp, T; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet", domain=:spatial)`: The flow is not defined, uniform `d` and `df`. Options according to `ModuleColumnOptions`.
+* `ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet", domain=:spatial)`: The flow is defined by `F` and uniform `d` and `df`. Options according to `ModuleColumnOptions`.
 """
 struct ModuleColumn<:GasChromatographySystems.AbstractModule
 	# Module
@@ -143,14 +148,14 @@ function ModuleColumn(name, L, d, df, sp, T, F, opt::ModuleColumnOptions)
 	return col
 end
 
-function ModuleColumn(name, L, d, df, sp, tp; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
-	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol)
+function ModuleColumn(name, L, d, df, sp, tp; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet", domain=:spatial)
+	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol, domain=domain)
 	TM = ModuleColumn(name, L, d, [d], df, [df], sp, tp, NaN, opt)
 	return TM
 end
 
-function ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
-	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol)
+function ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet", domain=:spatial)
+	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol, domain=domain)
 	TM = ModuleColumn(name, L, d, [d], df, [df], sp, tp, flow, opt)
 	return TM
 end

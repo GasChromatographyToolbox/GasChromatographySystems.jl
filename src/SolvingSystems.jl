@@ -61,15 +61,20 @@ function positive_flow(sys, p2fun; mode="λ")
 	return pos_Flow
 end
 
+function allows_reverse_flow(module_)
+	module_ isa ModuleColumn && module_.opt.domain === :temporal
+end
+
 function path_possible(sys, p2fun, paths; mode="λ")
 	#F_func = flow_functions(sys)
 	i_E = index_parameter(sys.g, paths)
-	if length(i_E) == length(findall(positive_flow(sys, p2fun; mode=mode)[i_E]))
-		possible = true
-	else
-		possible = false
+	pos = positive_flow(sys, p2fun; mode=mode)
+	for j in i_E
+		if !pos[j] && !allows_reverse_flow(sys.modules[j])
+			return false
+		end
 	end
-	return possible
+	return true
 end
 
 function change_initial(par::GasChromatographySimulator.Parameters, init_t, init_τ)
@@ -114,9 +119,8 @@ end
 
 Simulate solute transport through a column module in a gas chromatography system.
 
-This function simulates the behavior of solutes in a column module, either starting from initial
-conditions or continuing from a previous module's results. It calculates retention times, peak
-widths, and other chromatographic parameters.
+Solver choice comes from `segment_par.opt.domain` (`:spatial` or `:temporal`), set by
+`graph_to_parameters` from `ModuleColumnOptions.domain`. Both use GasChromatographySimulator `simulate`.
 
 # Arguments
 - `segment_par`: Simulation parameters for the column module
@@ -135,19 +139,42 @@ widths, and other chromatographic parameters.
 - Second variant is used for subsequent column segments
 - Peak areas are preserved between segments
 - Initial areas are set to 1.0 for the first segment
+- Junction handoff still uses `tR`/`τR`; open-end release percentiles are not applied here
 """
 function simulate_ModuleColumn(segment_par, t₀, τ₀)
 	new_segment_par = GasChromatographySystems.change_initial(segment_par, t₀, τ₀)
-	peaklist, solutions = GasChromatographySimulator.simulate(new_segment_par)
+	# `simulate` returns `pl, sol` (odesys=true) or `pl, sol, peak/band` (odesys=false)
+	sim = GasChromatographySimulator.simulate(new_segment_par)
+	peaklist, solutions = sim[1], sim[2]
 	peaklist[!,:A] = ones(length(peaklist.Name))
 	return new_segment_par, peaklist, solutions
 end
 
 function simulate_ModuleColumn(segment_par, prev_peaklist)
 	new_segment_par = GasChromatographySystems.change_initial(segment_par, prev_peaklist)
-	peaklist, solutions = GasChromatographySimulator.simulate(new_segment_par)
+	sim = GasChromatographySimulator.simulate(new_segment_par)
+	peaklist, solutions = sim[1], sim[2]
 	GasChromatographySystems.add_A_to_pl!(peaklist, prev_peaklist)
 	return new_segment_par, peaklist, solutions
+end
+
+"""
+    change_initial_spatial(par, t₀, x₀, σ₀; τ₀=zeros(length(t₀)))
+
+Same-capillary phase carry: set ``(t_0, x_0, \\sigma_0)`` on each substance (``\\tau_0`` optional bookkeeping).
+Used when a `:temporal` edge continues a parked band; not a junction handoff.
+"""
+function change_initial_spatial(par::GasChromatographySimulator.Parameters, t₀, x₀, σ₀; τ₀=zeros(length(t₀)))
+	length(t₀) == length(par.sub) || throw(ArgumentError("t₀ length ($(length(t₀))) must match number of substances ($(length(par.sub)))."))
+	length(x₀) == length(par.sub) || throw(ArgumentError("x₀ length must match number of substances."))
+	length(σ₀) == length(par.sub) || throw(ArgumentError("σ₀ length must match number of substances."))
+	length(τ₀) == length(par.sub) || throw(ArgumentError("τ₀ length must match number of substances."))
+	newsub = Array{GasChromatographySimulator.Substance}(undef, length(par.sub))
+	for i = 1:length(par.sub)
+		s = par.sub[i]
+		newsub[i] = GasChromatographySimulator.Substance(s.name, s.CAS, s.Tchar, s.θchar, s.ΔCp, s.φ₀, s.ann, s.Cag, t₀[i], τ₀[i], x₀[i], σ₀[i])
+	end
+	return GasChromatographySimulator.Parameters(par.col, par.prog, newsub, par.opt)
 end
 
 function simulate_along_paths(sys, p2fun, paths, db_dataframe, selected_solutes; t₀=zeros(length(selected_solutes)), τ₀=zeros(length(selected_solutes)), mode="λ")

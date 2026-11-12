@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- Docs (`segment_handoff.md`): roadmap for **`ModuleTrap`**, bidirectional / reverse flows,
+  same-capillary phase entry ``(x_0,\sigma_0)``, and ongoing GCSim compatibility — needed so
+  trap→column→restrictor release pneumatics can live in Systems instead of an external
+  series-balance stand-in.
+
 ### Changed
 - **`[compat]` Phase 7 / PDE co-environment:** `Symbolics = "6, 7"` so **ModelingToolkit 11** / **MethodOfLines** can resolve alongside GCSys (shared **`GC-Workspace`** dev env). Stay on **SciMLBase 2** and **OrdinaryDiffEq 6** — not ODE 7 (see Phase 8 workplan).
 - Loosened SciML-related compat pins: `DiffEqBase`, `SciMLBase`, `OrdinaryDiffEq`, `NonlinearSolve`, and `LinearSolve` from tight `~` bounds to major-version ranges (`"6"`, `"2"`, `"4"`, `"3"`).

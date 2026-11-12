@@ -35,3 +35,31 @@ Treat as a **junction**: estimate the temporal release window (e.g. ``t_{50}`` a
 The choice of what to transfer is fixed by the connection; only the representation of that transfer changes with the solver.
 
 Canonical write-up with equations: [GasChromatographySimulator — Segment handoff](https://GasChromatographyToolbox.github.io/GasChromatographySimulator.jl/dev/segment_handoff/) (once published on `dev`/`stable`; source: `docs/src/segment_handoff.md` in that repository).
+
+## Future: trap module & bidirectional flow
+
+Capillary-trap workflows (load → hold → reverse flush → GC column → restrictor) are only
+partly covered by today’s graph path simulation. Tracked needs before a first-class
+**`ModuleTrap`** (and before Experiments can drop its stand-in series balance):
+
+1. **GasChromatographySimulator compatibility** — stay aligned with current GCSim APIs
+   (time-domain solvers, `Program` / `Substance` validation, segment-handoff conventions).
+   Flow calculator and `graph_to_parameters` must keep working on the GCSim line used by
+   the toolbox shared environment.
+2. **Bidirectional / reverse flows** — load and reverse flush reverse the preferred flow on
+   the same physical capillary. Directed graph edges and ``F = A\lambda(p_i^2-p_j^2)`` need an
+   explicit reverse-flow story (negative ``F``, flipped edge, or phase-dependent orientation)
+   without forcing a spatial remapping of ``T(x)`` / ``d(x)`` for every phase.
+3. **Entry point beyond the inlet** — Systems currently assumes each edge is entered at
+   ``x=0`` with ``(t_0,\tau_0)``. Trap phases that never leave the tube must carry
+   ``(x_0,\sigma_0)`` (and absolute program time) between phases. Define a handoff mode for
+   “same capillary, new phase” in the Systems API, not only junction reinjection.
+4. **`ModuleTrap`** — package heated zones / body programs, open-end release metrics
+   (``t_{05}``–``t_{95}``, mass left), and multi-phase scheduling so trap → column is a
+   supported path, with pneumatics from the flow calculator staying coupled as ``κ(t)``
+   changes (series balance, not a one-shot set-point).
+
+Until that lands, [GasChromatographyExperiments](https://github.com/JanLeppert/GasChromatographyExperiments)
+rebalances trap→column→restrictor pressures over the release clock in
+`HotInletTrapSystem` (`release_series=:coupled`); see that repo’s
+`docs/coupled_release_pneumatics.md`.

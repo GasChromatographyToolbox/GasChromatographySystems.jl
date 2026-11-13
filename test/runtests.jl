@@ -139,6 +139,31 @@ end
     @test sol_rel[1].u[end][1] ≈ 0.0 atol=1e-5
 end
 
+@testset "path_possible spatial vs temporal reverse" begin
+    g = SimpleDiGraph(2)
+    add_edge!(g, 1, 2)
+    TP = GasChromatographySystems.TemperatureProgram([0.0, 60.0], [100.0, 100.0])
+    # Reverse pressures: pin < pout
+    pp = [
+        GasChromatographySystems.PressurePoint("pin", 101300.0),
+        GasChromatographySystems.PressurePoint("pout", 150000.0),
+    ]
+    paths = collect(edges(g))
+    opt = GasChromatographySystems.Options(control="Pressure")
+
+    mod_sp = GasChromatographySystems.ModuleColumn("c", 1.0, 0.25e-3, 0.25e-6, "SLB5ms", TP,
+        GasChromatographySystems.ModuleColumnOptions(domain=:spatial))
+    sys_sp = GasChromatographySystems.update_system(GasChromatographySystems.System("sp", g, pp, [mod_sp], opt))
+    p2_sp = GasChromatographySystems.build_pressure_squared_functions(sys_sp, GasChromatographySystems.solve_balance(sys_sp))
+    @test GasChromatographySystems.path_possible(sys_sp, p2_sp, paths) == false
+
+    mod_td = GasChromatographySystems.ModuleColumn("c", 1.0, 0.25e-3, 0.25e-6, "SLB5ms", TP,
+        GasChromatographySystems.ModuleColumnOptions(domain=:temporal))
+    sys_td = GasChromatographySystems.update_system(GasChromatographySystems.System("td", g, pp, [mod_td], opt))
+    p2_td = GasChromatographySystems.build_pressure_squared_functions(sys_td, GasChromatographySystems.solve_balance(sys_td))
+    @test GasChromatographySystems.path_possible(sys_td, p2_td, paths) == true
+end
+
 @testset "ModuleColumn functional d and df" begin
     db_file = string(@__DIR__, "/data/Database_test.csv")
     db_dataframe = DataFrame(CSV.File(db_file, header=1, silencewarnings=true))

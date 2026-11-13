@@ -73,5 +73,67 @@ An array of type `GasChromatographySystems.PressurePoint` with the length of num
 
 ## Modules
 
+Edges of the graph are **modules** — typically a chromatographic capillary (`ModuleColumn`) or a thermal modulator segment (`ModuleTM`). Arrays of modules must match `ne(g)`.
+
+### `ModuleColumn`
+
+A column edge stores length ``L``, diameter ``d``, film thickness ``df``, stationary phase name ``sp``, temperature ``T`` (constant or `TemperatureProgram`), optional flow ``F``, and `ModuleColumnOptions`.
+
+**Uniform vs profiled ``d`` / ``df``.** Pass a `Number` for a constant value, or a function of position ``x`` (m) for a non-uniform profile. Convenience constructors set `a_d` / `a_df` to `[value]` for numbers and to empty vectors for callables. Evaluate either form with [`GasChromatographySimulator.profile`](https://GasChromatographyToolbox.github.io/GasChromatographySimulator.jl/stable/). Variable diameter needs `ng=false` so flow restriction integrates along ``x``.
+
+```@example ex_3series
+    # Uniform film
+    col_u = GasChromatographySystems.ModuleColumn(
+        "1 → 2", 10.0, 0.25e-3, 0.25e-6, "Rxi5ms",
+        GasChromatographySystems.default_TP(),
+    )
+    # Non-uniform film (example linear taper)
+    df_fun(x) = 0.25e-6 * (1 + 0.5 * x / 10.0)
+    col_df = GasChromatographySystems.ModuleColumn(
+        "trap body", 10.0, 0.25e-3, df_fun, "Rxi5ms",
+        GasChromatographySystems.default_TP();
+        ng=false,
+    )
+    nothing # hide
+```
+
+**Migration domain.** `ModuleColumnOptions(domain=:spatial)` (default) integrates ``t(z)``. Set `domain=:temporal` to integrate ``x(t)`` via GasChromatographySimulator (reversal / stop / trap-style edges). Vacuum-like outlets (`pout/pin < 0.1`) stay spatial. See [Simulation](@ref) and [Segment handoff](@ref).
+
+```@example ex_3series
+    opt_td = GasChromatographySystems.ModuleColumnOptions(domain=:temporal)
+    col_td = GasChromatographySystems.ModuleColumn(
+        "trap", 0.5, 0.25e-3, 0.25e-6, "Rxi5ms",
+        GasChromatographySystems.TemperatureProgram([0.0, 60.0], [40.0, 40.0]),
+        opt_td,
+    )
+    nothing # hide
+```
+
+For the three-capillary series graph, one typical assignment is:
+
+```@example ex_3series
+    modules = Array{GasChromatographySystems.AbstractModule}(undef, ne(g))
+    modules[1] = GasChromatographySystems.ModuleColumn("1 → 2", 10.0, 0.25e-3, 0.25e-6, "Rxi5ms", GasChromatographySystems.default_TP())
+    modules[2] = GasChromatographySystems.ModuleColumn("2 → 3", 5.0, 0.25e-3, 0.25e-6, "Rxi5ms", GasChromatographySystems.default_TP())
+    modules[3] = GasChromatographySystems.ModuleColumn("3 → 4", 2.0, 0.25e-3, 0.1e-6, "Wax", GasChromatographySystems.default_TP())
+    nothing # hide
+```
+
+Helper constructors such as `SeriesSystem`, `SplitSystem`, and `GCxGC_TM` build common graphs for you (see [Examples](@ref)).
+
+### `ModuleTM`
+
+Thermal modulator edges add modulation period ``PM``, cold/hot duty, and jet temperatures on top of a short column segment. Options live in `ModuleTMOptions`. Path simulation uses the modulator path in `simulate_along_paths` (slicing / simplified TM), not `domain=:temporal`.
+
 ## Additional options
+
+System-wide defaults are stored in `GasChromatographySystems.Options` (mobile-phase gas, viscosity model, pressure vs flow control, ODE system flag, retention-factor threshold, …). Module-level solver tolerances and `domain` stay on `ModuleColumnOptions` / `ModuleTMOptions`.
+
+```@example ex_3series
+    opt = GasChromatographySystems.Options(gas="He", control="Pressure")
+    sys = GasChromatographySystems.System("series3", g, pp, modules, opt)
+    nothing # hide
+```
+
+After construction, `update_system(sys)` synchronizes temperature and pressure programs onto common time steps when any module or pressure point uses a program.
 

@@ -211,7 +211,9 @@ Extract the index of the edges of the graph of system `sys` for which the flow p
 function unknown_λ(sys)
 	i_unknown_permeability = Int[]
 	for i=1:ne(sys.g)
-		if isnan(sys.modules[i].L) || isnan(sys.modules[i].d)
+		d = sys.modules[i].d
+		d_unknown = d isa Number && isnan(d)
+		if isnan(sys.modules[i].L) || d_unknown
 			push!(i_unknown_permeability, i)
 		end
 	end

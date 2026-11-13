@@ -84,8 +84,8 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 	end
 	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
-		# column parameters
-		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
+		# column parameters (d/df may be Number or Function; a_d/a_df from the module)
+		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, sys.modules[i].a_d, sys.modules[i].df, sys.modules[i].a_df, sys.modules[i].sp, sys.options.gas)
 
 		# program parameters
 		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)

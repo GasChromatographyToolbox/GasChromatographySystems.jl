@@ -139,4 +139,62 @@ end
     @test sol_rel[1].u[end][1] ≈ 0.0 atol=1e-5
 end
 
+@testset "ModuleColumn functional d and df" begin
+    db_file = string(@__DIR__, "/data/Database_test.csv")
+    db_dataframe = DataFrame(CSV.File(db_file, header=1, silencewarnings=true))
+    insertcols!(db_dataframe, 1, :No => collect(1:length(db_dataframe.Name)))
+    selected = ["Undecane"]
+
+    L = 5.0
+    d0 = 0.25e-3
+    df0 = 0.25e-6
+    df_fun(x) = df0 * (1.0 + 0.5 * x / L)
+    d_fun(x) = d0 * (1.0 - 0.1 * x / L)
+    TP = GasChromatographySystems.TemperatureProgram([0.0, 300.0], [80.0, 200.0])
+    opt = GasChromatographySystems.ModuleColumnOptions(ng=false)  # variable d needs integrated κ
+
+    # Construction: Number keeps a_d=[d]; Function keeps empty a_d/a_df
+    m_num = GasChromatographySystems.ModuleColumn("c", L, d0, df0, "SLB5ms", TP, opt)
+    @test m_num.a_d == [d0]
+    @test m_num.a_df == [df0]
+    @test GasChromatographySystems.GasChromatographySimulator.profile(m_num.df, L / 2) == df0
+
+    m_df = GasChromatographySystems.ModuleColumn("c", L, d0, df_fun, "SLB5ms", TP, opt)
+    @test isempty(m_df.a_df)
+    @test GasChromatographySystems.GasChromatographySimulator.profile(m_df.df, L / 2) ≈ df_fun(L / 2)
+    @test GasChromatographySystems.GasChromatographySimulator.profile(m_df.d, L / 2) == d0
+
+    m_d = GasChromatographySystems.ModuleColumn("c", L, d_fun, df0, "SLB5ms", TP, opt)
+    @test isempty(m_d.a_d)
+    @test GasChromatographySystems.GasChromatographySimulator.profile(m_d.d, L / 2) ≈ d_fun(L / 2)
+
+    # graph_to_parameters passes profiles through; simulate finishes
+    g = SimpleDiGraph(2)
+    add_edge!(g, 1, 2)
+    pp = [
+        GasChromatographySystems.PressurePoint("pin", 150000.0),
+        GasChromatographySystems.PressurePoint("pout", 101300.0),
+    ]
+    sys = GasChromatographySystems.update_system(
+        GasChromatographySystems.System("df_fun", g, pp, [m_df], GasChromatographySystems.Options(control="Pressure")),
+    )
+    @test sys.modules[1].df === m_df.df  # update_system preserves the callable
+    @test isempty(GasChromatographySystems.unknown_λ(sys))
+    p2 = GasChromatographySystems.build_pressure_squared_functions(sys, GasChromatographySystems.solve_balance(sys))
+    par = GasChromatographySystems.graph_to_parameters(sys, p2, db_dataframe, selected)[1]
+    @test par.col.df === m_df.df
+    @test isempty(par.col.a_df)
+    _, pl, _ = GasChromatographySystems.simulate_ModuleColumn(par, [0.0], [0.0])
+    @test isfinite(pl.tR[1])
+
+    sys_d = GasChromatographySystems.update_system(
+        GasChromatographySystems.System("d_fun", g, pp, [m_d], GasChromatographySystems.Options(control="Pressure")),
+    )
+    p2_d = GasChromatographySystems.build_pressure_squared_functions(sys_d, GasChromatographySystems.solve_balance(sys_d))
+    par_d = GasChromatographySystems.graph_to_parameters(sys_d, p2_d, db_dataframe, selected)[1]
+    @test par_d.col.d === m_d.d
+    _, pl_d, _ = GasChromatographySystems.simulate_ModuleColumn(par_d, [0.0], [0.0])
+    @test isfinite(pl_d.tR[1])
+end
+
     println("Test run successful.")

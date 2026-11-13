@@ -147,10 +147,13 @@ function update_system(sys)
 				# without gradient
 				new_tp = GasChromatographySystems.TemperatureProgram(new_timesteps, new_temperaturesteps[ii])
 			end
+			# Keep a_d/a_df (and Number|Function d/df) via the full positional constructor
 			if typeof(sys.modules[i]) == GasChromatographySystems.ModuleColumn
-				new_modules[i] = GasChromatographySystems.ModuleColumn(sys.modules[i].name, sys.modules[i].L, sys.modules[i].d, sys.modules[i].df, sys.modules[i].sp, new_tp, sys.modules[i].F, sys.modules[i].opt)
+				m = sys.modules[i]
+				new_modules[i] = GasChromatographySystems.ModuleColumn(m.name, m.L, m.d, m.a_d, m.df, m.a_df, m.sp, new_tp, m.F, m.opt)
 			elseif typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM
-				new_modules[i] = GasChromatographySystems.ModuleTM(sys.modules[i].name, sys.modules[i].L, sys.modules[i].d, sys.modules[i].df, sys.modules[i].sp, new_tp, sys.modules[i].shift, sys.modules[i].PM, sys.modules[i].ratio, sys.modules[i].Thot, sys.modules[i].Tcold, sys.modules[i].F, sys.modules[i].opt)
+				m = sys.modules[i]
+				new_modules[i] = GasChromatographySystems.ModuleTM(m.name, m.L, m.d, m.a_d, m.df, m.a_df, m.sp, new_tp, m.shift, m.PM, m.ratio, m.Thot, m.Tcold, m.F, m.opt)
 			end
 		end
 	end

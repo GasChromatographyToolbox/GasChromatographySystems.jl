@@ -924,3 +924,202 @@ function holdup_time_path(sys, p2fun, num_paths; mode="λ")
 	end
 	return tMp
 end
+# graph helpers and module temperature / restriction helpers
+
+function inlet_vertices(g)
+	v = vertices(g)
+	inlet = Int[]
+	for i=1:length(v)
+		if isempty(inneighbors(g, v[i]))
+			push!(inlet, i)
+		end
+	end
+	return inlet
+end
+
+function outlet_vertices(g)
+	v = vertices(g)
+	outlet = Int[]
+	for i=1:length(v)
+		if isempty(outneighbors(g, v[i]))
+			push!(outlet, i)
+		end
+	end
+	return outlet
+end
+
+function inner_vertices(g)
+	v = vertices(g)
+	inner = Int[]
+	for i=1:length(v)
+		if !isempty(outneighbors(g, v[i])) && !isempty(inneighbors(g, v[i]))
+			push!(inner, i)
+		end
+	end
+	return inner
+end
+
+"""
+    module_temperature(module_::ModuleColumn, sys)
+
+Calculate temperature parameters for a column module in a gas chromatography system.
+
+This function handles temperature calculations for a standard column module, supporting both
+constant temperature and temperature programs. It returns the necessary parameters for
+temperature interpolation along the column.
+
+# Arguments
+- `module_`: A ModuleColumn instance containing column parameters
+- `sys`: The GC system structure containing the network of modules
+
+# Returns
+- `time_steps`: Array of time points for the temperature program
+- `temp_steps`: Array of temperature values at each time point
+- `gf`: Gradient function for temperature program
+- `a_gf`: Gradient coefficients
+- `T_itp`: Temperature interpolation function that takes position and time as arguments
+
+# Notes
+- For constant temperature, uses system's common timesteps or default [0.0, 36000.0]
+- Handles NaN column length by defaulting to 1.0
+- Supports both constant temperature and temperature program modes
+"""
+function module_temperature(module_::ModuleColumn, sys)
+	L = if isnan(module_.L)
+		1.0
+	else
+		module_.L
+	end
+	if typeof(module_.T) <: TemperatureProgram # temperature is a TemperatureProgram
+		time_steps = module_.T.time_steps
+		temp_steps = module_.T.temp_steps	
+		gf = module_.T.gf
+		a_gf = module_.T.a_gf
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L; ng=module_.opt.ng)
+	elseif typeof(module_.T) <: Number # temperature is a constant value
+		time_steps = if isempty(GasChromatographySystems.common_timesteps(sys))
+			[0.0, 36000.0]
+		else
+			GasChromatographySystems.common_timesteps(sys)
+		end
+		temp_steps = module_.T.*ones(length(time_steps))
+		gf(x) = zero(x).*ones(length(time_steps))
+		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
+		T_itp = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, L; ng=module_.opt.ng)
+	end
+	return time_steps, temp_steps, gf, a_gf, T_itp
+end
+
+"""
+    module_temperature(module_::ModuleTM, sys)
+
+Calculate temperature parameters for a thermal modulator module in a gas chromatography system.
+
+This function handles temperature calculations for a thermal modulator, combining a base
+temperature program with periodic modulation between hot and cold phases. It supports both
+absolute and relative temperature modes for the cold jet.
+
+# Arguments
+- `module_`: A ModuleTM instance containing thermal modulator parameters
+- `sys`: The GC system structure containing the network of modules
+
+# Returns
+- `time_steps`: Array of time points for the temperature program
+- `temp_steps`: Array of temperature values at each time point
+- `gf`: Gradient function for temperature program
+- `a_gf`: Gradient coefficients
+- `spot`: Temperature function that combines base temperature with modulation
+
+# Notes
+- Supports both constant temperature and temperature program modes
+- Cold jet temperature can be either absolute (Tcold_abs=true) or relative to base temperature
+- Includes spatial temperature distribution (spot function) when ng=false
+- Temperature values are converted between °C and K as needed
+"""
+function module_temperature(module_::GasChromatographySystems.ModuleTM, sys)
+	if typeof(module_.T) <: GasChromatographySystems.TemperatureProgram # temperature is a TemperatureProgram
+		time_steps = module_.T.time_steps
+		temp_steps = module_.T.temp_steps
+		gf = module_.T.gf
+		a_gf = module_.T.a_gf
+		T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.L)
+	elseif typeof(module_.T) <: Number # temperature is a constant value
+		time_steps = if isempty(GasChromatographySystems.common_timesteps(sys))
+			[0.0, 36000.0]
+		else
+			GasChromatographySystems.common_timesteps(sys)
+		end
+		temp_steps = module_.T.*ones(length(time_steps))
+		gf(x) = zero(x).*ones(length(time_steps))
+		a_gf = [zeros(length(time_steps)) zeros(length(time_steps)) ones(length(time_steps)) zeros(length(time_steps))]
+		T_itp_ = GasChromatographySimulator.temperature_interpolation(time_steps, temp_steps, gf, module_.L)
+	end
+	T_itp(x,t) = if module_.opt.Tcold_abs == true # cool jet always at Tcold
+		therm_mod(t, module_.shift, module_.PM, module_.ratio, module_.Tcold, T_itp_(x, t) .+ module_.Thot .- 273.15; flank=module_.opt.tflank) .+ 273.15 
+	else # cool jet always at T_itp_ + Tcold
+		therm_mod(t, module_.shift, module_.PM, module_.ratio, T_itp_(x, t) .+ module_.Tcold .- 273.15, T_itp_(x, t) .+ module_.Thot .- 273.15; flank=module_.opt.tflank) .+ 273.15 
+	end
+	
+	# for what is 'spot' used?
+	spot(x,t) = if module_.opt.ng == false
+		GasChromatographySystems.smooth_rectangle(x, 0.0, sys.modules[5].L, T_itp_(x, t), T_itp(x,t); flank=module_.opt.sflank)
+	else
+		T_itp(x,t)
+	end
+	return time_steps, temp_steps, gf, a_gf, spot
+end
+
+"""
+    flow_restrictions(sys)
+
+Calculates the flow restrictions κ of all edges (capliaries) of a system of capillaries.
+
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+"""
+function flow_restrictions(sys)
+	kappas = Array{Function}(undef, ne(sys.g))
+	for i=1:ne(sys.g)
+		T_itp = module_temperature(sys.modules[i], sys)[5]
+		κ(t) = GasChromatographySimulator.flow_restriction(sys.modules[i].L, t, T_itp, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis)
+		kappas[i] = κ
+	end
+	return kappas
+end
+
+"""
+    flow_permeabilities(sys)
+
+Calculates the flow permeabilities λ of all edges (capliaries) of a system of capillaries.
+
+# Arguments
+* `sys`: System structure of the capillary system for which the flow balance is set up.
+"""
+function flow_permeabilities(sys)
+	lambdas = Array{Function}(undef, ne(sys.g))
+	for i=1:ne(sys.g)
+		T_itp = module_temperature(sys.modules[i], sys)[5]
+		λ(t) = 1/GasChromatographySimulator.flow_restriction(sys.modules[i].L, t, T_itp, sys.modules[i].d, sys.options.gas; ng=sys.modules[i].opt.ng, vis=sys.options.vis)
+		lambdas[i] = λ
+	end
+	return lambdas
+end
+
+function pressures_squared(sys)
+	#p² = Array{Interpolations.Extrapolation}(undef, nv(sys.g))
+	p² = Array{Any}(undef, nv(sys.g))
+	for i=1:nv(sys.g)
+		g = if typeof(sys.pressurepoints[i].P) <: Number
+				GasChromatographySimulator.steps_interpolation([0.0, 36000.0], fill(sys.pressurepoints[i].P, 2))
+		elseif typeof(sys.pressurepoints[i].P) <: GasChromatographySystems.PressureProgram
+			#if isnan(sys.pressurepoints[i].P.pressure_steps[1])
+			#	GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, NaN.*ones(length(sys.pressurepoints[i].P.time_steps)))
+			#else
+				GasChromatographySimulator.steps_interpolation(sys.pressurepoints[i].P.time_steps, identity.(sys.pressurepoints[i].P.pressure_steps))
+			#end
+		end
+		f(t) = g(t).^2 
+		p²[i] = f
+	end
+	return p²
+end

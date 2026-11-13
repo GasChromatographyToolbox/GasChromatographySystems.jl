@@ -30,7 +30,7 @@ function Options(;gas="He", odesys=true, vis="Blumberg", control="Pressure", k_t
 end
 
 """
-    ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-5, ng=false, Tcontrol="inlet")
+    ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet", domain=:spatial)
 
 Structure describing options for column modules. 
 
@@ -40,6 +40,9 @@ Structure describing options for column modules.
 * `reltol`: The relative tolerance for the ODE solver. Recommended value 1e-3 to 1e-5. 
 * `ng`: Option to calculate the simulation without a gradient (`ng = true`, default) or with a gradient (`ng = false`).
 * `Tcontrol`: Option defining at which point of the column the temperature program is calculated. The options are `inlet` (x=0) and `outlet` (x=L).
+* `domain`: Passed to GasChromatographySimulator `Options.domain`. `:spatial` (default) integrates ``t(z)``.
+  `:temporal` integrates ``x(t)`` so the band may reverse when `pin`/`pout` cross (finite pressures at both ends).
+  Vacuum-like outlets (`pout/pin < 0.1`) stay on `:spatial`.
 """
 struct ModuleColumnOptions
 	alg                 # algorithmen for the ODE solver
@@ -47,10 +50,12 @@ struct ModuleColumnOptions
     reltol              # relative tolerance for ODE solver 
 	ng::Bool            # non-gradient calculation, ignores a defined spatial change of d, df or T
 	Tcontrol::String    # temperature control at 'inlet' (top) or 'outlet' (bottom) of the column
+	domain::Symbol      # `:spatial` (default) or `:temporal`
 end
 
-function ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
-	ModuleColumnOptions(alg, abstol, reltol, ng, Tcontrol)
+function ModuleColumnOptions(; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet", domain=:spatial)
+	domain in (:spatial, :temporal) || throw(ArgumentError("`domain` must be `:spatial` or `:temporal`, got `$domain`."))
+	ModuleColumnOptions(alg, abstol, reltol, ng, Tcontrol, domain)
 end
 
 """
@@ -107,20 +112,26 @@ Structure describing the module of a gas chromatographic column, the basic bulid
 * `F`: Flow of the mobile phase through the column in mL/min. This can be an number, a fuction or a NaN (if it is not defined yet an should be calculated based on values from other modules or pressure points in the system).
 * `opt`: Options for this module. This is a structure of the form `ModuleColumnOptions`.
 
+Convenience constructors accept `d` / `df` as a `Number` (uniform) or a function of position `x`
+(non-uniform). Numbers store `a_d = [d]` / `a_df = [df]`; callables store empty parameter vectors.
+Evaluate either form with `GasChromatographySimulator.profile`. Variable diameter needs
+`opt.ng = false` so flow restriction integrates along `x`. Pass parameterized profiles via the
+full positional constructor (`d`, `a_d`, `df`, `a_df`, …).
+
 Four methods to construct this structure exist:
-* `ModuleColumn(name, L, d, df, sp, T, opt::ModuleColumnOptions)`: The flow is not defined, uniform `d` and `df`.
-* `ModuleColumn(name, L, d, df, sp, T, F, opt::ModuleColumnOptions)`: The flow is defined by `F` and uniform `d` and `df`.
-* `ModuleColumn(name, L, d, df, sp, T; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")`: The flow is not defined, uniform `d` and `df`. Options according to `ModuleColumnOptions`.
-* `ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet")`: The flow is defined by `F` and uniform `d` and `df`. Options according to `ModuleColumnOptions`.
+* `ModuleColumn(name, L, d, df, sp, T, opt::ModuleColumnOptions)`: The flow is not defined.
+* `ModuleColumn(name, L, d, df, sp, T, F, opt::ModuleColumnOptions)`: The flow is defined by `F`.
+* `ModuleColumn(name, L, d, df, sp, T; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet", domain=:spatial)`: The flow is not defined. Options according to `ModuleColumnOptions`.
+* `ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=false, Tcontrol="inlet", domain=:spatial)`: The flow is defined by `F`. Options according to `ModuleColumnOptions`.
 """
 struct ModuleColumn<:GasChromatographySystems.AbstractModule
 	# Module
 	# GC column, gradients are possible
 	name#::String
 	L#::Float64
-	d#::Fd # Function
+	d#::Fd # Number or Function of x
 	a_d#::Array{Float64,1} # Parameters of diameter function, just for information
-	df#::Fdf # Function
+	df#::Fdf # Number or Function of x
 	a_df#::Array{Float64,1} # Parameters of film_thickness function, just for information
 	sp#::String
 	T # a number (constant temperature) or a TemperatureProgram structure
@@ -128,31 +139,51 @@ struct ModuleColumn<:GasChromatographySystems.AbstractModule
 	opt::ModuleColumnOptions
 end
 
+"""
+    _column_profile(g)
+
+Normalize a column diameter or film-thickness argument for module construction.
+A `Number` is stored as-is with parameter vector `[g]`. Any other callable is stored
+as the profile function with an empty parameter vector (evaluate via
+`GasChromatographySimulator.profile`).
+"""
+function _column_profile(g)
+	if g isa Number
+		return g, [float(g)]
+	else
+		return g, Float64[]
+	end
+end
+
+function _warn_variable_diameter_ng(d, opt)
+	if !(d isa Number) && opt.ng
+		@warn "Variable diameter with opt.ng=true uses d at a single x in flow restriction; set ng=false for a correct integral along the column."
+	end
+	return nothing
+end
+
 function ModuleColumn(name, L, d, df, sp, T, opt::ModuleColumnOptions)
-	# function to construct the Column structure
-	# for the case of constant diameter and constant film thickness
-	# and undefined flow
-	col = ModuleColumn(name, L, d, [d], df, [df], sp, T, NaN, opt)
-	return col
+	_warn_variable_diameter_ng(d, opt)
+	d_, a_d = _column_profile(d)
+	df_, a_df = _column_profile(df)
+	return ModuleColumn(name, L, d_, a_d, df_, a_df, sp, T, NaN, opt)
 end
 
 function ModuleColumn(name, L, d, df, sp, T, F, opt::ModuleColumnOptions)
-	# function to construct the Column structure
-	# for the case of constant diameter and constant film thickness
-	col = ModuleColumn(name, L, d, [d], df, [df], sp, T, F, opt)
-	return col
+	_warn_variable_diameter_ng(d, opt)
+	d_, a_d = _column_profile(d)
+	df_, a_df = _column_profile(df)
+	return ModuleColumn(name, L, d_, a_d, df_, a_df, sp, T, F, opt)
 end
 
-function ModuleColumn(name, L, d, df, sp, tp; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
-	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol)
-	TM = ModuleColumn(name, L, d, [d], df, [df], sp, tp, NaN, opt)
-	return TM
+function ModuleColumn(name, L, d, df, sp, tp; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet", domain=:spatial)
+	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol, domain=domain)
+	return ModuleColumn(name, L, d, df, sp, tp, opt)
 end
 
-function ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet")
-	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol)
-	TM = ModuleColumn(name, L, d, [d], df, [df], sp, tp, flow, opt)
-	return TM
+function ModuleColumn(name, L, d, df, sp, tp, flow; alg=OwrenZen5(), abstol=1e-8, reltol=1e-6, ng=true, Tcontrol="inlet", domain=:spatial)
+	opt = ModuleColumnOptions(; alg=alg, abstol=abstol, reltol=reltol, ng=ng, Tcontrol=Tcontrol, domain=domain)
+	return ModuleColumn(name, L, d, df, sp, tp, flow, opt)
 end
 
 """
@@ -204,25 +235,27 @@ struct ModuleTM<:GasChromatographySystems.AbstractModule
 end
 
 function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, opt::ModuleTMOptions)
-	TM = ModuleTM(name, L, d, [d], df, [df], sp, T, shift, PM, ratio, Thot, Tcold, NaN, opt)
-	return TM
+	_warn_variable_diameter_ng(d, opt)
+	d_, a_d = _column_profile(d)
+	df_, a_df = _column_profile(df)
+	return ModuleTM(name, L, d_, a_d, df_, a_df, sp, T, shift, PM, ratio, Thot, Tcold, NaN, opt)
 end
 
 function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, F, opt::ModuleTMOptions)
-	TM = ModuleTM(name, L, d, [d], df, [df], sp, T, shift, PM, ratio, Thot, Tcold, F, opt)
-	return TM
+	_warn_variable_diameter_ng(d, opt)
+	d_, a_d = _column_profile(d)
+	df_, a_df = _column_profile(df)
+	return ModuleTM(name, L, d_, a_d, df_, a_df, sp, T, shift, PM, ratio, Thot, Tcold, F, opt)
 end
 
 function ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 	opt = ModuleTMOptions(; Tcold_abs=Tcold_abs, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit, ng=ng, Tcontrol=Tcontrol)
-	TM = ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, NaN, opt)
-	return TM
+	return ModuleTM(name, L, d, df, sp, T, shift, PM, ratio, Thot, Tcold, opt)
 end
 
 function ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F; Tcold_abs=true, sflank=40, tflank=20, alg=OwrenZen5(), abstol=1e-10, reltol=1e-8, dtinit=1e-6, ng=true, Tcontrol="inlet")
 	opt = ModuleTMOptions(; Tcold_abs=Tcold_abs, sflank=sflank, tflank=tflank, alg=alg, abstol=abstol, reltol=reltol, dtinit=dtinit, ng=ng, Tcontrol=Tcontrol)
-	TM = ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F, opt)
-	return TM
+	return ModuleTM(name, L, d, df, sp, tp, shift, pm, ratio, Thot, Tcold, F, opt)
 end
 
 # add a flow modulator module

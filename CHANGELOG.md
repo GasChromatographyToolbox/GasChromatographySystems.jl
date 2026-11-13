@@ -7,8 +7,31 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-11-13
+
+### Added
+- **Temporal column edges (Phase 9):** `ModuleColumnOptions(domain=:temporal)` maps to GasChromatographySimulator
+  `Options(domain=:temporal)`; one `simulate` entry point (spatial ``t(z)`` or temporal ``x(t)``).
+  Exit record via GCSim `peaklist_temporal` (`tR`, `τR`, `σR`, `x_end`, `exit_end`).
+  Same-capillary carry: `change_initial_spatial`. `path_possible` allows reverse flow on
+  `:temporal` edges. Vacuum-like `pout/pin < 0.1` stays spatial. Demo:
+  `notebooks/temporal_ModuleColumn.jl`. Trap→column open-end handoff and `ModuleTrap` still later.
+- **Functional ``d`` / ``df``:** `ModuleColumn` / `ModuleTM` accept a `Number` or a function of ``x``.
+  Constructors use `_column_profile` (`a_d`/`a_df` empty for callables). `graph_to_parameters`
+  forwards module profiles; `update_system` preserves them. Evaluate with GCSim `profile`.
+  Variable diameter needs `ng=false`.
+- Docs: filled [Definition of a GC system](docs/src/definition_sys.md) modules/options;
+  temporal domain and profiles in [Simulation](docs/src/simulation.md);
+  Phase 9 vs `ModuleTrap` roadmap in [Segment handoff](docs/src/segment_handoff.md);
+  [Examples](docs/src/examples.md) pointers.
+
 ### Changed
-- **`[compat]` Phase 7 / PDE co-environment:** `Symbolics = "6, 7"` so **ModelingToolkit 11** / **MethodOfLines** can resolve alongside GCSys (shared **`GC-Workspace`** dev env). Stay on **SciMLBase 2** and **OrdinaryDiffEq 6** — not ODE 7 (see Phase 8 workplan).
+- **Source layout:** main module is `using` + constants + `include` only. Topic files:
+  `Structures`, `Flowcalc`, `Systems`, `SystemToParameters`, `SolvingSystems`,
+  `ThermalModulator`, plus new `Misc`, `Plot`, `GCxGC`. Removed unused `_Old` module file.
+- **`[compat]`:** `GasChromatographySimulator = "0.6.2"` (requires `domain` / temporal APIs).
+  `Symbolics = "6, 7"` (Symbolics 7 works in the shared GC-Workspace env; optional tighten to `"7"` later).
+  Stay on **SciMLBase 2** / **OrdinaryDiffEq 6**.
 - Loosened SciML-related compat pins: `DiffEqBase`, `SciMLBase`, `OrdinaryDiffEq`, `NonlinearSolve`, and `LinearSolve` from tight `~` bounds to major-version ranges (`"6"`, `"2"`, `"4"`, `"3"`).
 - Widened Makie stack compat for joint resolve with **Chromatogram.jl** and newer SciML: `CairoMakie = "0.13, 0.15"`, `GLMakie = "0.11, 0.13"`, `GraphMakie = "0.5, 0.6"`.
 - CI: upgraded Codecov upload to `codecov/codecov-action@v5` with `files: lcov.info` and `CODECOV_TOKEN` (replaces deprecated v1 uploader and `CODECOV_SECRET`).
@@ -16,9 +39,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 - **`solve_balance` / `Flowcalc.jl`:** Symbolics 7 `linear_expansion` matrices no longer use `LinearAlgebra.inv` (which raised `TypeError` on `BasicSymbolicImpl` entries). Linear solves use `_linear_expansion_solve` (`Num.(a) \\ Num.(-b)`). Tests pass with **Symbolics 7** in the shared GC-Workspace environment.
+- **`unknown_λ`:** treat Function diameter as defined geometry (do not call `isnan` on a callable).
 
 ### Removed
 - Unused duplicate GitHub Actions workflows under `data/.github/workflows/` (only `.github/workflows/` at the repo root is used).
+- `src/GasChromatographySystems_Old.jl` (legacy, unused).
 
 ## [0.2.7] - 2026-05-25
 

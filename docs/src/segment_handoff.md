@@ -19,19 +19,25 @@ Thermal modulators (`ModuleTM`) still follow the temporal picture. With `refocus
 
 ## Same capillary, changing phase
 
-If one physical tube is solved in several program phases (e.g. trap load → hold → reverse flush) **without** leaving the capillary, carry position and spatial band width ``(x, \sigma)`` between phases. That pattern lives mainly in GasChromatographySimulator time-domain workflows; Systems path simulation assumes each graph edge is entered at the inlet with ``(t_0, \tau_0)``.
+If one physical tube is solved in several program phases (e.g. trap load → hold → reverse flush) **without** leaving the capillary, carry position and spatial band width ``(x, \sigma)`` between phases with `change_initial_spatial` on a `:temporal` `ModuleColumn`. Ordinary `simulate_along_paths` still assumes each **graph edge** is entered at the inlet with ``(t_0, \tau_0)``.
 
 ## Trap or open-end → analytical column
 
-Treat as a **junction**: estimate the temporal release window (e.g. ``t_{50}`` and ``\tau_0`` from ``t_{05}``–``t_{95}`` of mass past the open end), then set the first analytical segment’s ``t_0`` and ``\tau_0``. Outlet spatial ``\sigma`` while the band is still exiting is not the column ``\sigma_0``.
+Treat as a **junction**: estimate the temporal release window (e.g. ``t_{50}`` and ``\tau_0`` from ``t_{05}``–``t_{95}`` of mass past the open end), then set the first analytical segment’s ``t_0`` and ``\tau_0``. Outlet spatial ``\sigma`` while the band is still exiting is not the column ``\sigma_0``. Percentile extractors for open-end release currently live in [GasChromatographyExperiments](https://github.com/JanLeppert/GasChromatographyExperiments).
 
 ## Solver independence
 
 | Next segment solver | After a junction, set |
 |---|---|
-| Position-domain (`simulate`, …) | ``t_0``, ``\tau_0`` |
-| Time-domain (`solving_odesystem_time`, …) | ``t_0``, ``x_0 = 0``, ``\sigma_0 = \tau_0\|u_s(0,t_0)\|`` |
+| Position-domain (`domain=:spatial`) | ``t_0``, ``\tau_0`` |
+| Time-domain (`domain=:temporal`) | ``t_0``, ``x_0 = 0``, ``\sigma_0 = \tau_0\|u_s(0,t_0)\|`` |
 
 The choice of what to transfer is fixed by the connection; only the representation of that transfer changes with the solver.
 
-Canonical write-up with equations: [GasChromatographySimulator — Segment handoff](https://GasChromatographyToolbox.github.io/GasChromatographySimulator.jl/dev/segment_handoff/) (once published on `dev`/`stable`; source: `docs/src/segment_handoff.md` in that repository).
+Canonical write-up with equations: [GasChromatographySimulator — Segment handoff](https://GasChromatographyToolbox.github.io/GasChromatographySimulator.jl/stable/segment_handoff/).
+
+## Available now vs later
+
+**Available (Phase 9):** opt-in `ModuleColumnOptions(domain=:temporal)`; reverse flow when `pin`/`pout` cross on that edge; same-capillary carry via `change_initial_spatial`; functional ``d``/``df`` profiles. Demo: `notebooks/temporal_ModuleColumn.jl`.
+
+**Later (`ModuleTrap` and packaging):** multi-phase scheduling / heated zones as a first-class module; open-end release metrics in Systems; series ``κ(t)`` trap→column→restrictor driven only by the Systems flow calculator (today Experiments still offers `release_series=:coupled` — see that repo’s `docs/coupled_release_pneumatics.md`).

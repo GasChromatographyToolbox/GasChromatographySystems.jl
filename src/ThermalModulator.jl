@@ -635,3 +635,136 @@ function simulate_ModuleTM(segment_par, segment_module, prev_peaklist; nτ=6, τ
 	end
 	return new_segment_par, peaklist, solutions
 end
+
+# waveform / period helpers
+# begin - thermal modulator specific functions
+# general smooth rectangle function
+function smooth_rectangle(x, a, b, m)
+	# a ... mid-position of rising flank
+	# b ... mid-position of falling flank
+	# m ... width of the flank
+	if x.>a-3*m && x.<=a+3*m
+		f = 1/2 .*(1 .+erf.((x.-a)./sqrt.(2 .*m.^2)))
+	elseif x.>a+3*m && x.<=b-3*m
+		f = 1
+	elseif x.>b-3*m && x<=b+3*m
+		f = 1 .- 1/2 .*(1 .+erf.((x.-b)./sqrt.(2 .*m.^2)))
+	else
+		f = 0
+	end
+	return f
+end
+
+
+# smooth rectangle with mitpoint of the rising flank at 'xstart', after 'width' the falling flank, minimum values 'min' and maximum values 'max'. 
+function smooth_rectangle(x, xstart, width, min, max; flank=20)
+	m = width/flank
+	a = xstart + 3*m
+	b = xstart + width - 3*m
+	val = (max-min)*smooth_rectangle(x, a, b, m) + min
+	return val
+end
+
+# periodic repeated smoothed rectangle function with period 'PM', a shift by 'shift', 'ratio' of time of Tcold to time of Thot. A small shift is incorporated to move the falling flank from the beginning to the end
+"""
+    therm_mod(t, shift, PM, ratio, Tcold, Thot; flank=20)
+
+Generate a periodic temperature modulation pattern for thermal modulation in gas chromatography.
+
+The function creates a temperature profile that alternates between cold (Tcold) and hot (Thot) phases
+with a specified period (PM). The pattern can be either a sharp rectangular function or a smoothed
+version with controlled transition flanks.
+
+# Arguments
+- `t`: Time point(s) at which to evaluate the temperature
+- `shift`: Time shift of the modulation pattern (in seconds)
+- `PM`: Modulation period (in seconds)
+- `ratio`: Ratio of cold phase duration to total period (0 < ratio < 1)
+- `Tcold`: Temperature during the cold phase (in °C)
+- `Thot`: Temperature during the hot phase (in °C)
+
+# Keyword Arguments
+- `flank`: Controls the smoothness of temperature transitions. Use `Inf` for sharp transitions,
+          or a positive number for smoothed transitions (default: 20)
+
+# Returns
+- Temperature value(s) at the specified time point(s)
+
+# Notes
+- on modulation consists of a cold phase and a hot phase in this order
+- The cold phase duration is `ratio * PM`
+- The hot phase duration is `(1 - ratio) * PM`
+- When `shift = 0`, the pattern starts with the hot phase
+- The `flank` parameter controls the width of the temperature transition regions
+"""
+function therm_mod(t, shift, PM, ratio, Tcold, Thot; flank=20) 
+	# add warning, if flank value is to low -> jumps in the function
+	tcold = ratio*PM
+	thot = (1-ratio)*PM
+	width = thot
+	totalshift = tcold - shift
+	tmod = mod(t + totalshift, PM)
+	tstart = tcold
+	if flank == Inf # rectangle function
+		# ceil() with 4 digits precision ensures consistent switching between cold and hot phases
+		return ifelse(ceil(tmod, digits=4) < tstart, Tcold, Thot)
+	else # smoothed rectangle
+		return GasChromatographySystems.smooth_rectangle.(tmod, tstart, width, Tcold, Thot; flank=flank) 
+	end
+end
+
+# alternative rectangle function
+# rect(t, (1+ratio)*PM/2, Tcold, Thot, (1-ratio)*PM)
+function rect(x, x0, min, max, width)
+	if abs(x-x0) > width/2
+		min
+	elseif abs(x-x0) == width/2
+		(min+max)/2
+	elseif abs(x-x0) < width/2
+		max
+	end
+end
+
+# periodic repeated smoothed rectangle function with period 'PM', a shift by 'shift', 'ratio' of time of Tcold to time of Thot. A small shift is incorporated to move the falling flank from the beginning to the end
+# mod-functions could/should be moved to Chromatogram.jl
+"""
+    mod_number(t, shift, PM, ratio; digits=6)
+
+Calculate the modulation number for a given time point using the same timing logic as `therm_mod`.
+
+# Arguments
+- `t`: Time point at which to calculate the modulation number
+- `shift`: Time shift of the modulation pattern (in seconds)
+- `PM`: Modulation period (in seconds)
+- `ratio`: Ratio of cold phase duration to total period (0 < ratio < 1)
+- `digits`: Number of digits to use for rounding (default: 6)
+
+# Returns
+- Integer modulation number (1-based)
+
+# Notes
+- Uses the same timing logic as `therm_mod`
+- Returns 1 for the first modulation period
+- Uses 6 digits precision to avoid rounding issues
+- Calculates modulation number directly from time value
+"""
+function mod_number(t, shift, PM, ratio; digits=6)
+    tcold = ratio*PM
+    totalshift = tcold - shift
+    # Calculate modulation number directly: n = (t + totalshift)/PM
+    # Round to 4 digits and add 1 to get 1-based indexing
+    return Int(floor(round((t + totalshift)/PM, digits=digits))) + 1
+end
+
+# use following two functions to replace fld() functions.
+# Helper function to calculate modulation time
+function mod_time(t, PM; digits=6)
+    # Calculate time within modulation period using mod with rounding
+    return round(mod(t, PM), digits=digits)
+end
+
+# Helper function to calculate modulation base time
+function mod_base_time(t, PM; digits=6)
+    # Calculate base time (start of modulation period) using floor division with rounding
+    return round(floor(t/PM) * PM, digits=digits)
+end

@@ -84,8 +84,8 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 	end
 	parameters = Array{GasChromatographySimulator.Parameters}(undef, ne(sys.g))
 	for i=1:ne(sys.g)
-		# column parameters
-		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, [sys.modules[i].d], sys.modules[i].df, [sys.modules[i].df], sys.modules[i].sp, sys.options.gas)
+		# column parameters (d/df may be Number or Function; a_d/a_df from the module)
+		col = GasChromatographySimulator.Column(sys.modules[i].L, sys.modules[i].d, sys.modules[i].a_d, sys.modules[i].df, sys.modules[i].a_df, sys.modules[i].sp, sys.options.gas)
 
 		# program parameters
 		time_steps, temp_steps, gf, a_gf, T_itp = module_temperature(sys.modules[i], sys)
@@ -102,7 +102,8 @@ function graph_to_parameters(sys, p2fun, db_dataframe, selected_solutes; interp=
 
 		# option parameters
 		#opt = if typeof(sys.modules[i]) == GasChromatographySystems.ModuleTM 
-		opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
+		domain = sys.modules[i] isa ModuleColumn ? sys.modules[i].opt.domain : :spatial
+		opt = GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th, domain=domain)
 		#else
 			# put options for ModuleColumn in separat options structure?
 		#	GasChromatographySimulator.Options(alg=sys.modules[i].opt.alg, abstol=sys.modules[i].opt.abstol, reltol=sys.modules[i].opt.reltol, Tcontrol=sys.modules[i].opt.Tcontrol, odesys=sys.options.odesys, ng=sys.modules[i].opt.ng, vis=sys.options.vis, control=sys.options.control, k_th=sys.options.k_th)
